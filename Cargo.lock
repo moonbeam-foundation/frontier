@@ -1207,7 +1207,7 @@ checksum = "f7531096570974c3a9dcf9e4b8e1cede1ec26cf5046219fb3b9d897503b9be59"
 [[package]]
 name = "evm"
 version = "0.26.0"
-source = "git+https://github.com/PureStake/evm?branch=jeremy-environmental-hook#5dfb3bdaad8bff2e1242bb7a4a47a17fef30b095"
+source = "git+https://github.com/PureStake/evm?branch=jeremy-environmental-hook#e3695a1c8ff6443ede36c4f3bfe80b9c7fb0ed22"
 dependencies = [
  "environmental",
  "ethereum",
@@ -1225,7 +1225,7 @@ dependencies = [
 [[package]]
 name = "evm-core"
 version = "0.26.1"
-source = "git+https://github.com/PureStake/evm?branch=jeremy-environmental-hook#5dfb3bdaad8bff2e1242bb7a4a47a17fef30b095"
+source = "git+https://github.com/PureStake/evm?branch=jeremy-environmental-hook#e3695a1c8ff6443ede36c4f3bfe80b9c7fb0ed22"
 dependencies = [
  "funty",
  "parity-scale-codec",
@@ -1236,7 +1236,7 @@ dependencies = [
 [[package]]
 name = "evm-gasometer"
 version = "0.26.0"
-source = "git+https://github.com/PureStake/evm?branch=jeremy-environmental-hook#5dfb3bdaad8bff2e1242bb7a4a47a17fef30b095"
+source = "git+https://github.com/PureStake/evm?branch=jeremy-environmental-hook#e3695a1c8ff6443ede36c4f3bfe80b9c7fb0ed22"
 dependencies = [
  "environmental",
  "evm-core",
@@ -1247,7 +1247,7 @@ dependencies = [
 [[package]]
 name = "evm-runtime"
 version = "0.26.0"
-source = "git+https://github.com/PureStake/evm?branch=jeremy-environmental-hook#5dfb3bdaad8bff2e1242bb7a4a47a17fef30b095"
+source = "git+https://github.com/PureStake/evm?branch=jeremy-environmental-hook#e3695a1c8ff6443ede36c4f3bfe80b9c7fb0ed22"
 dependencies = [
  "environmental",
  "evm-core",
