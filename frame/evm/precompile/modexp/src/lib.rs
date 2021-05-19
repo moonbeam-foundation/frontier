@@ -21,7 +21,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use fp_evm::Precompile;
-use evm::{ExitSucceed, ExitError, Context};
+use evm::{Context, ExitError, ExitSucceed, executor::PrecompileOutput};
 use num::{BigUint, Zero, One, ToPrimitive, FromPrimitive};
 
 use core::ops::BitAnd;
@@ -102,7 +102,7 @@ impl Precompile for Modexp {
 		input: &[u8],
 		target_gas: Option<u64>,
 		context: &Context,
-	) -> core::result::Result<(ExitSucceed, Vec<u8>, u64), ExitError> {
+	) -> core::result::Result<PrecompileOutput, ExitError> {
 		if input.len() < 96 {
 			return Err(ExitError::Other("input must contain at least 96 bytes".into()));
 		};
@@ -175,12 +175,22 @@ impl Precompile for Modexp {
 		// always true except in the case of zero-length modulus, which leads to
 		// output of length and value 1.
 		if bytes.len() == mod_len {
-			Ok((ExitSucceed::Returned, bytes.to_vec(), 0))
+			Ok(PrecompileOutput {
+				exit_status: ExitSucceed::Returned,
+				cost: 0,
+				output: bytes.to_vec(),
+				logs: Default::default(),
+			})
 		} else if bytes.len() < mod_len {
 			let mut ret = Vec::with_capacity(mod_len);
 			ret.extend(core::iter::repeat(0).take(mod_len - bytes.len()));
 			ret.extend_from_slice(&bytes[..]);
-			Ok((ExitSucceed::Returned, ret.to_vec(), 0))
+			Ok(PrecompileOutput {
+				exit_status: ExitSucceed::Returned,
+				cost: 0,
+				output: ret.to_vec(),
+				logs: Default::default(),
+			})
 		} else {
 			Err(ExitError::Other("failed".into()))
 		}
