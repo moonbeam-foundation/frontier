@@ -22,6 +22,8 @@ mod net;
 mod overrides;
 mod web3;
 
+pub mod format;
+
 pub use self::{
 	eth::{EthApi, EthBlockDataCache, EthFilterApi, EthTask},
 	eth_pubsub::{EthPubSubApi, HexEncodedIdProvider},
