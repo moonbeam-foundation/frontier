@@ -1323,7 +1323,11 @@ where
 					.map_err(|err| internal_err(format!("execution fatal: {:?}", err)))?;
 
 					error_on_execution_failure(&info.exit_reason, &[])?;
-					Ok(Bytes(info.value[..].to_vec()))
+
+					let code = api
+						.account_code_at(&id, info.value)
+						.map_err(|err| internal_err(format!("runtime error: {:?}", err)))?;
+					Ok(Bytes(code))
 				} else if api_version >= 2 && api_version < 4 {
 					// Post-london
 					#[allow(deprecated)]
@@ -1342,7 +1346,11 @@ where
 					.map_err(|err| internal_err(format!("execution fatal: {:?}", err)))?;
 
 					error_on_execution_failure(&info.exit_reason, &[])?;
-					Ok(Bytes(info.value[..].to_vec()))
+
+					let code = api
+						.account_code_at(&id, info.value)
+						.map_err(|err| internal_err(format!("runtime error: {:?}", err)))?;
+					Ok(Bytes(code))
 				} else if api_version == 4 {
 					// Post-london + access list support
 					let access_list = access_list.unwrap_or_default();
@@ -1368,7 +1376,11 @@ where
 						.map_err(|err| internal_err(format!("execution fatal: {:?}", err)))?;
 
 					error_on_execution_failure(&info.exit_reason, &[])?;
-					Ok(Bytes(info.value[..].to_vec()))
+
+					let code = api
+						.account_code_at(&id, info.value)
+						.map_err(|err| internal_err(format!("runtime error: {:?}", err)))?;
+					Ok(Bytes(code))
 				} else {
 					return Err(internal_err(format!(
 						"failed to retrieve Runtime Api version"
