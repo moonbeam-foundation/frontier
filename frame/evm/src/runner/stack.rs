@@ -66,16 +66,21 @@ impl<T: Config> Runner<T> {
 	{
 		let base_fee = T::FeeCalculator::min_gas_price();
 		// Gas price check is skipped when performing a gas estimation.
-		let max_fee_per_gas = match max_fee_per_gas {
-			Some(max_fee_per_gas) => {
-				ensure!(max_fee_per_gas >= base_fee, Error::<T>::GasPriceTooLow);
-				max_fee_per_gas
+		let (max_fee_per_gas, max_base_fee) = match (max_fee_per_gas, max_priority_fee_per_gas) {
+			(Some(max_fee_per_gas), Some(max_priority_fee_per_gas)) => {
+				let max_base_fee = max_fee_per_gas.saturating_sub(max_priority_fee_per_gas);
+				ensure!(max_base_fee >= base_fee, Error::<T>::GasPriceTooLow);
+				(max_fee_per_gas, max_base_fee)
 			}
-			None => Default::default(),
+			(Some(max_fee_per_gas), None) => {
+				ensure!(max_fee_per_gas >= base_fee, Error::<T>::GasPriceTooLow);
+				(max_fee_per_gas, max_fee_per_gas)
+			}
+			_ => Default::default(),
 		};
 
 		let vicinity = Vicinity {
-			gas_price: max_fee_per_gas,
+			gas_price: max_base_fee,
 			origin: source,
 		};
 
@@ -84,19 +89,9 @@ impl<T: Config> Runner<T> {
 		let mut executor = StackExecutor::new_with_precompiles(state, config, precompiles);
 
 		// After eip-1559 we make sure the account can pay both the evm execution and priority fees.
-		let max_base_fee = max_fee_per_gas
+		// max_fee_per_gas >= base_fee + max_priority_fee_per_gas
+		let total_fee = max_fee_per_gas
 			.checked_mul(U256::from(gas_limit))
-			.ok_or(Error::<T>::FeeOverflow)?;
-		let max_priority_fee = if let Some(max_priority_fee) = max_priority_fee_per_gas {
-			max_priority_fee
-				.checked_mul(U256::from(gas_limit))
-				.ok_or(Error::<T>::FeeOverflow)?
-		} else {
-			U256::zero()
-		};
-
-		let total_fee = max_base_fee
-			.checked_add(max_priority_fee)
 			.ok_or(Error::<T>::FeeOverflow)?;
 
 		let total_payment = value

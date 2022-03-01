@@ -534,32 +534,36 @@ impl<T: Config> Pallet<T> {
 		let base_fee = T::FeeCalculator::min_gas_price();
 		let mut priority = 0;
 
-		let gas_price = if let Some(gas_price) = transaction_data.gas_price {
-			// Legacy and EIP-2930 transactions.
+		let (max_fee_per_gas, max_base_fee) = match (
+			transaction_data.gas_price,
+			transaction_data.max_fee_per_gas,
+			transaction_data.max_priority_fee_per_gas,
+		) {
+			// Legacy or EIP-2930 transaction.
 			// Handle priority here. On legacy transaction everything in gas_price except
 			// the current base_fee is considered a tip to the miner and thus the priority.
-			priority = gas_price.saturating_sub(base_fee).unique_saturated_into();
-			gas_price
-		} else if let Some(max_fee_per_gas) = transaction_data.max_fee_per_gas {
-			// EIP-1559 transactions.
-			max_fee_per_gas
-		} else {
-			return Err(InvalidTransaction::Payment.into());
+			(Some(gas_price), None, None) => {
+				priority = gas_price.saturating_sub(base_fee).unique_saturated_into();
+				(gas_price, gas_price)
+			}
+			// EIP-1559 transaction without tip.
+			(None, Some(max_fee_per_gas), None) => (max_fee_per_gas, max_fee_per_gas),
+			// EIP-1559 transaction with tip.
+			(None, Some(max_fee_per_gas), Some(max_priority_fee_per_gas)) => {
+				// EIP-1559 transaction priority is determined by `max_priority_fee_per_gas`.
+				// If the transaction do not include this optional parameter, priority is now considered zero.
+				priority = max_priority_fee_per_gas.unique_saturated_into();
+				let max_base_fee = max_fee_per_gas.saturating_sub(max_priority_fee_per_gas);
+				(max_fee_per_gas, max_base_fee)
+			}
+			_ => return Err(InvalidTransaction::Payment.into()),
 		};
 
-		if gas_price < base_fee {
+		if max_base_fee < base_fee {
 			return Err(InvalidTransaction::Payment.into());
 		}
 
-		let mut fee = gas_price.saturating_mul(gas_limit);
-		if let Some(max_priority_fee_per_gas) = transaction_data.max_priority_fee_per_gas {
-			// EIP-1559 transaction priority is determined by `max_priority_fee_per_gas`.
-			// If the transaction do not include this optional parameter, priority is now considered zero.
-			priority = max_priority_fee_per_gas.unique_saturated_into();
-			// Add the priority tip to the payable fee.
-			fee = fee.saturating_add(max_priority_fee_per_gas.saturating_mul(gas_limit));
-		}
-
+		let fee = max_fee_per_gas.saturating_mul(gas_limit);
 		let account_data = pallet_evm::Pallet::<T>::account_basic(&origin);
 		let total_payment = transaction_data.value.saturating_add(fee);
 		if account_data.balance < total_payment {

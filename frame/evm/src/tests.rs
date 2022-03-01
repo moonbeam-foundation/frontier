@@ -231,18 +231,19 @@ fn author_should_get_tip() {
 	new_test_ext().execute_with(|| {
 		let author = EVM::find_author();
 		let before_tip = EVM::account_basic(&author).balance;
-		let _ = EVM::call(
+		let result = EVM::call(
 			Origin::root(),
 			H160::default(),
 			H160::from_str("1000000000000000000000000000000000000001").unwrap(),
 			Vec::new(),
 			U256::from(1),
 			1000000,
-			U256::from(1_000_000_000),
+			U256::from(2_000_000_000),
 			Some(U256::from(1)),
 			None,
 			Vec::new(),
 		);
+		result.expect("EVM can be called");
 		let after_tip = EVM::account_basic(&author).balance;
 		assert_eq!(after_tip, (before_tip + 21000));
 	});
