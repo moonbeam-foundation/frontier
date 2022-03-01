@@ -2328,7 +2328,7 @@ where
 			let highest = UniqueSaturatedInto::<u64>::unique_saturated_into(
 				self.client.number(header.hash()).unwrap().unwrap(),
 			);
-			let lowest = highest.saturating_sub(block_count);
+			let lowest = highest.saturating_sub(block_count - 1);
 			// Tip of the chain.
 			let best_number =
 				UniqueSaturatedInto::<u64>::unique_saturated_into(self.client.info().best_number);
@@ -2367,14 +2367,20 @@ where
 								};
 								block_rewards.push(reward);
 							}
-							// Push block rewards.
-							rewards.push(block_rewards);
+							if !block_rewards.is_empty() {
+								// Push block rewards.
+								rewards.push(block_rewards);
+							}
 						}
 					}
 				}
 				if rewards.len() > 0 {
 					response.reward = Some(rewards);
 				}
+				// else {
+				// 	let rewards = response.gas_used_ratio.iter().map(|_| vec![U256::zero()]).collect();
+				// 	response.reward = Some(rewards);
+				// }
 				// Calculate next base fee.
 				if let (Some(last_gas_used), Some(last_fee_per_gas)) = (
 					response.gas_used_ratio.last(),
