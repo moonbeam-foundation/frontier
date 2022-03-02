@@ -534,7 +534,7 @@ impl<T: Config> Pallet<T> {
 		let base_fee = T::FeeCalculator::min_gas_price();
 		let mut priority = 0;
 
-		let (max_fee_per_gas, max_base_fee) = match (
+		let max_fee_per_gas = match (
 			transaction_data.gas_price,
 			transaction_data.max_fee_per_gas,
 			transaction_data.max_priority_fee_per_gas,
@@ -544,22 +544,22 @@ impl<T: Config> Pallet<T> {
 			// the current base_fee is considered a tip to the miner and thus the priority.
 			(Some(gas_price), None, None) => {
 				priority = gas_price.saturating_sub(base_fee).unique_saturated_into();
-				(gas_price, gas_price)
-			}
+				gas_price
+			},
 			// EIP-1559 transaction without tip.
-			(None, Some(max_fee_per_gas), None) => (max_fee_per_gas, max_fee_per_gas),
+			(None, Some(max_fee_per_gas), None) => max_fee_per_gas,
 			// EIP-1559 transaction with tip.
 			(None, Some(max_fee_per_gas), Some(max_priority_fee_per_gas)) => {
-				// EIP-1559 transaction priority is determined by `max_priority_fee_per_gas`.
-				// If the transaction do not include this optional parameter, priority is now considered zero.
-				priority = max_priority_fee_per_gas.unique_saturated_into();
-				let max_base_fee = max_fee_per_gas.saturating_sub(max_priority_fee_per_gas);
-				(max_fee_per_gas, max_base_fee)
-			}
+				priority = max_fee_per_gas
+					.saturating_sub(base_fee)
+					.min(max_priority_fee_per_gas)
+					.unique_saturated_into();
+				max_fee_per_gas
+			},
 			_ => return Err(InvalidTransaction::Payment.into()),
 		};
 
-		if max_base_fee < base_fee {
+		if max_fee_per_gas < base_fee {
 			return Err(InvalidTransaction::Payment.into());
 		}
 
