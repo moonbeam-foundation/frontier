@@ -323,7 +323,8 @@ pub mod pallet {
 			})
 		}
 
-		#[pallet::weight(0)] // TODO: define a weight
+		/// Increment `sufficients` for existing accounts having a nonzero `nonce` but zero `sufficients` value.
+		#[pallet::weight(T::DbWeight::get().reads_writes(addresses.len() as Weight, addresses.len() as Weight) + 0)] // TODO: define an overweight
 		pub fn hotfix_inc_account_sufficients(
 			origin: OriginFor<T>,
 			addresses: Vec<H160>,
