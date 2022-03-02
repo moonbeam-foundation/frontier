@@ -356,6 +356,18 @@ fn handle_sufficient_reference() {
 }
 
 #[test]
+fn test_hotfix_inc_account_sufficients_requires_signed_origin() {
+	new_test_ext().execute_with(|| {
+		let addr = H160::from_str("1230000000000000000000000000000000000001").unwrap();
+		<crate::AccountCodes<Test>>::insert(addr, &vec![0]);
+
+		let result = EVM::hotfix_inc_account_sufficients(Origin::root(), vec![addr]);
+
+		assert!(result.is_err(), "");
+	});
+}
+
+#[test]
 fn test_hotfix_inc_account_sufficients_increments_if_nonce_nonzero() {
 	new_test_ext().execute_with(|| {
 		let addr_1 = H160::from_str("1230000000000000000000000000000000000001").unwrap();
@@ -393,7 +405,7 @@ fn test_hotfix_inc_account_sufficients_increments_with_saturation_if_nonce_nonze
 		let addr = H160::from_str("1230000000000000000000000000000000000001").unwrap();
 		let substrate_addr = <Test as Config>::AddressMapping::into_account_id(addr);
 
-		<crate::AccountCodes<Test>>::insert(addr, &vec![1]);
+		<crate::AccountCodes<Test>>::insert(addr, &vec![0]);
 		frame_system::Account::<Test>::mutate(substrate_addr, |x| {
 			x.nonce = 1;
 			x.sufficients = u32::MAX;
