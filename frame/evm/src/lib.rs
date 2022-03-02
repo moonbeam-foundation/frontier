@@ -322,6 +322,26 @@ pub mod pallet {
 				pays_fee: Pays::No,
 			})
 		}
+
+		#[pallet::weight(0)] // TODO: define a weight
+		pub fn hotfix_inc_account_sufficients(
+			origin: OriginFor<T>,
+			addresses: Vec<H160>,
+		) -> DispatchResultWithPostInfo {
+			frame_system::ensure_signed(origin)?;
+			for address in addresses {
+				let account_id = T::AddressMapping::into_account_id(address);
+				let nonce = frame_system::Pallet::<T>::account_nonce(&account_id);
+				if !nonce.is_zero() {
+					frame_system::Pallet::<T>::inc_sufficients(&account_id);
+				}
+			}
+
+			Ok(PostDispatchInfo {
+				actual_weight: None, // TODO: return actual weight
+				pays_fee: Pays::No,
+			})
+		}
 	}
 
 	#[pallet::event]
