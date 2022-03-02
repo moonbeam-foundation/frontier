@@ -2377,11 +2377,6 @@ where
 				if rewards.len() > 0 {
 					response.reward = Some(rewards);
 				}
-				// else {
-				// 	let rewards = response.gas_used_ratio.iter().map(|_| vec![U256::zero()]).collect();
-				// 	response.reward = Some(rewards);
-				// }
-				// Calculate next base fee.
 				if let (Some(last_gas_used), Some(last_fee_per_gas)) = (
 					response.gas_used_ratio.last(),
 					response.base_fee_per_gas.last(),
