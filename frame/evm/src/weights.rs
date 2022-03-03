@@ -46,12 +46,15 @@
 #![allow(unused_parens)]
 #![allow(unused_imports)]
 
-use frame_support::{traits::Get, weights::{Weight, constants::RocksDbWeight}};
+use frame_support::{
+	traits::Get,
+	weights::{constants::RocksDbWeight, Weight},
+};
 use sp_std::marker::PhantomData;
 
 /// Weight functions needed for pallet_evm.
 pub trait WeightInfo {
-	fn hotfix_inc_account_sufficients(n: u32, ) -> Weight;
+	fn hotfix_inc_account_sufficients(n: u32) -> Weight;
 }
 
 /// Weights for pallet_evm using the Substrate node and recommended hardware.
@@ -62,7 +65,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	// Storage: System ExecutionPhase (r:1 w:0)
 	// Storage: System EventCount (r:1 w:1)
 	// Storage: System Events (r:1 w:1)
-	fn hotfix_inc_account_sufficients(n: u32, ) -> Weight {
+	fn hotfix_inc_account_sufficients(n: u32) -> Weight {
 		(0 as Weight)
 			// Standard Error: 2_000
 			.saturating_add((11_298_000 as Weight).saturating_mul(n as Weight))
@@ -80,7 +83,7 @@ impl WeightInfo for () {
 	// Storage: System ExecutionPhase (r:1 w:0)
 	// Storage: System EventCount (r:1 w:1)
 	// Storage: System Events (r:1 w:1)
-	fn hotfix_inc_account_sufficients(n: u32, ) -> Weight {
+	fn hotfix_inc_account_sufficients(n: u32) -> Weight {
 		(0 as Weight)
 			// Standard Error: 2_000
 			.saturating_add((11_298_000 as Weight).saturating_mul(n as Weight))
