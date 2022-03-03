@@ -55,11 +55,11 @@
 
 #[cfg(any(test, feature = "runtime-benchmarks"))]
 pub mod benchmarking;
+pub mod weights;
+pub use weights::WeightInfo;
 
-// #[cfg(any(test, feature = "runtime-benchmarks"))]
-// pub mod benchmarks;
-// #[cfg(any(test, feature = "runtime-benchmarks"))]
-// mod mock;
+#[cfg(test)]
+mod mock;
 pub mod runner;
 #[cfg(test)]
 mod tests;
@@ -144,6 +144,9 @@ pub mod pallet {
 
 		/// Find author for the current block.
 		type FindAuthor: FindAuthor<H160>;
+
+		/// Weight information for extrinsics in this pallet.
+		type WeightInfo: WeightInfo;
 
 		/// EVM config used in the module.
 		fn config() -> &'static EvmConfig {
@@ -327,12 +330,21 @@ pub mod pallet {
 		}
 
 		/// Increment `sufficients` for existing accounts having a nonzero `nonce` but zero `sufficients` value.
-		#[pallet::weight(T::DbWeight::get().reads_writes(addresses.len() as Weight, addresses.len() as Weight) + 0)] // TODO: define an overweight
+		#[pallet::weight(
+			<T as pallet::Config>::WeightInfo::hotfix_inc_account_sufficients(addresses.len().try_into().unwrap_or(u32::MAX))
+		)]
 		pub fn hotfix_inc_account_sufficients(
 			origin: OriginFor<T>,
 			addresses: Vec<H160>,
 		) -> DispatchResultWithPostInfo {
+			const MAX_ADDRESS_COUNT: usize = 1000;
+
 			frame_system::ensure_signed(origin)?;
+			ensure!(
+				addresses.len() <= MAX_ADDRESS_COUNT,
+				Error::<T>::MaxAddressCountExceeded
+			);
+
 			for address in addresses {
 				let account_id = T::AddressMapping::into_account_id(address);
 				let nonce = frame_system::Pallet::<T>::account_nonce(&account_id);
@@ -342,7 +354,7 @@ pub mod pallet {
 			}
 
 			Ok(PostDispatchInfo {
-				actual_weight: None, // TODO: return actual weight
+				actual_weight: None,
 				pays_fee: Pays::No,
 			})
 		}
@@ -381,6 +393,8 @@ pub mod pallet {
 		GasPriceTooLow,
 		/// Nonce is invalid
 		InvalidNonce,
+		/// Maximum address count exceeded
+		MaxAddressCountExceeded,
 	}
 
 	#[pallet::genesis_config]

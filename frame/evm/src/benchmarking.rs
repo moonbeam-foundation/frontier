@@ -109,7 +109,7 @@ benchmarks! {
 		// This benchmark tests the resource utilization by hotfixing N number of accounts
 		// by incrementing their `sufficients` if `nonce` is > 0.
 
-		let n in 200 .. 1000;
+		let n in 0 .. 1000;
 
 		use frame_benchmarking::{vec, whitelisted_caller};
 		use sp_core::H160;

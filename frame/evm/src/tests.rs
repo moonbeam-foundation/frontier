@@ -356,6 +356,21 @@ fn handle_sufficient_reference() {
 }
 
 #[test]
+fn test_hotfix_inc_account_sufficients_returns_error_if_max_addresses_exceeded() {
+	new_test_ext().execute_with(|| {
+		let max_address_count = 1000;
+		let addresses = (0..max_address_count + 1 as u64)
+			.map(H160::from_low_u64_le)
+			.collect::<Vec<H160>>();
+
+		let result =
+			EVM::hotfix_inc_account_sufficients(Origin::signed(H160::default()), addresses);
+
+		assert!(result.is_err(), "expected error");
+	});
+}
+
+#[test]
 fn test_hotfix_inc_account_sufficients_requires_signed_origin() {
 	new_test_ext().execute_with(|| {
 		let addr = H160::from_str("1230000000000000000000000000000000000001").unwrap();
@@ -363,7 +378,7 @@ fn test_hotfix_inc_account_sufficients_requires_signed_origin() {
 
 		let result = EVM::hotfix_inc_account_sufficients(Origin::root(), vec![addr]);
 
-		assert!(result.is_err(), "");
+		assert!(result.is_err(), "expected error");
 	});
 }
 
