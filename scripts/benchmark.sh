@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 
-# This script is an example for running frontier's benchmarks.
-# It requires frontier to be compiled with --features=runtime-benchmarks in release mode.
+# This script can be used for running frontier's benchmarks.
+#
+# The frontier binary is required to be compiled with --features=runtime-benchmarks
+# in release mode.
 
 set -e
 
+BINARY="./target/release/frontier-template-node"
+
 function choose_and_bench {
-    readarray -t options < <(./target/release/frontier-template-node benchmark --list | sed 1d)
+    readarray -t options < <(${BINARY} benchmark --list | sed 1d)
     options+=('EXIT')
 
     select opt in "${options[@]}"; do
@@ -21,7 +25,7 @@ function choose_and_bench {
 
 function bench {
     echo "benchmarking ${1}::${2}"
-    WASMTIME_BACKTRACE_DETAILS=1 ./target/release/frontier-template-node benchmark \
+    WASMTIME_BACKTRACE_DETAILS=1 ${BINARY} benchmark \
         --chain dev \
         --execution=wasm \
         --wasm-execution=compiled \
