@@ -54,9 +54,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(any(test, feature = "runtime-benchmarks"))]
-pub mod benchmarks;
-#[cfg(any(test, feature = "runtime-benchmarks"))]
-mod mock;
+pub mod benchmarking;
+
+// #[cfg(any(test, feature = "runtime-benchmarks"))]
+// pub mod benchmarks;
+// #[cfg(any(test, feature = "runtime-benchmarks"))]
+// mod mock;
 pub mod runner;
 #[cfg(test)]
 mod tests;
