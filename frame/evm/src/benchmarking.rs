@@ -152,7 +152,6 @@ benchmarks! {
 
 	}: _(RawOrigin::Signed(caller), addresses)
 	verify {
-		// something
 		accounts
 			.iter()
 			.for_each(|id| {
