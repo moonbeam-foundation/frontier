@@ -376,7 +376,8 @@ fn test_hotfix_inc_account_sufficients_requires_signed_origin() {
 		let addr = H160::from_str("1230000000000000000000000000000000000001").unwrap();
 		<crate::AccountCodes<Test>>::insert(addr, &vec![0]);
 
-		let result = EVM::hotfix_inc_account_sufficients(Origin::root(), vec![addr]);
+		let unsigned_origin = Origin::root();
+		let result = EVM::hotfix_inc_account_sufficients(unsigned_origin, vec![addr]);
 
 		assert!(result.is_err(), "expected error");
 	});
