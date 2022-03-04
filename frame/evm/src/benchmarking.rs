@@ -17,33 +17,25 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
-//! Benchmarking
-use frame_benchmarking::benchmarks;
-use rlp::RlpStream;
-use sha3::{Digest, Keccak256};
-use sp_core::{H160, U256};
-use sp_std::prelude::*;
+use frame_benchmarking::{benchmarks, impl_benchmark_test_suite};
 
-use crate::{runner::Runner, Config, Pallet};
-
-#[cfg(test)]
-fn new_test_ext() -> sp_io::TestExternalities {
-	let t = frame_system::GenesisConfig::default()
-		.build_storage::<crate::mock::Test>()
-		.unwrap();
-	sp_io::TestExternalities::new(t)
-}
+use super::*;
 
 benchmarks! {
 
-	// This benchmark tests the relationship between gas and weight. It deploys a contract which
-	// has an infinite loop in a public function. We then call this function with varying amounts
-	// of gas, expecting it to OOG. The benchmarking framework measures the amount of time (aka
-	// weight) it takes before OOGing and relates that to the amount of gas provided, leaving us
-	// with an estimate for gas-to-weight mapping.
 	runner_execute {
+		// This benchmark tests the relationship between gas and weight. It deploys a contract which
+		// has an infinite loop in a public function. We then call this function with varying amounts
+		// of gas, expecting it to OOG. The benchmarking framework measures the amount of time (aka
+		// weight) it takes before OOGing and relates that to the amount of gas provided, leaving us
+		// with an estimate for gas-to-weight mapping.
 
 		let x in 1..10000000;
+
+		use frame_benchmarking::vec;
+		use rlp::RlpStream;
+		use sha3::{Digest, Keccak256};
+		use sp_core::{H160, U256};
 
 		// contract bytecode below is for:
 		//
@@ -128,5 +120,44 @@ benchmarks! {
 		);
 		assert_eq!(call_runner_results.is_ok(), true, "call() failed");
 	}
-	impl_benchmark_test_suite!(Pallet, self::new_test_ext(), crate::mock::Test);
+
+
+	hotfix_inc_account_sufficients {
+		// This benchmark tests the resource utilization by hotfixing N number of accounts
+		// by incrementing their `sufficients` if `nonce` is > 0.
+
+		let n in 0 .. 1000;
+
+		use frame_benchmarking::{vec, whitelisted_caller};
+		use sp_core::H160;
+		use frame_system::RawOrigin;
+
+		// The caller account is whitelisted for DB reads/write by the benchmarking macro.
+		let caller: T::AccountId = whitelisted_caller();
+		let addresses = (0..n as u64)
+							.map(H160::from_low_u64_le)
+							.collect::<Vec<H160>>();
+		let accounts = addresses
+			.iter()
+			.cloned()
+			.map(|addr| {
+				<crate::AccountCodes<T>>::insert(addr, &vec![0]);
+				let account_id = T::AddressMapping::into_account_id(addr);
+				frame_system::Pallet::<T>::inc_account_nonce(&account_id);
+				assert_eq!(frame_system::Pallet::<T>::sufficients(&account_id), 0);
+
+				account_id
+			})
+			.collect::<Vec<_>>();
+
+	}: _(RawOrigin::Signed(caller), addresses)
+	verify {
+		accounts
+			.iter()
+			.for_each(|id| {
+				assert_eq!(frame_system::Pallet::<T>::sufficients(&id), 1);
+			});
+	}
 }
+
+impl_benchmark_test_suite!(Pallet, crate::tests::new_test_ext(), crate::tests::Test);
