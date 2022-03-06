@@ -349,7 +349,7 @@ impl<T: Config> Pallet<T> {
 				access_list: t
 					.access_list
 					.iter()
-					.map(|d| (d.address, d.storage_keys.clone()))
+					.map(|d| (d.address, d.slots.clone()))
 					.collect(),
 			},
 			Transaction::EIP1559(t) => TransactionData {
@@ -365,7 +365,7 @@ impl<T: Config> Pallet<T> {
 				access_list: t
 					.access_list
 					.iter()
-					.map(|d| (d.address, d.storage_keys.clone()))
+					.map(|d| (d.address, d.slots.clone()))
 					.collect(),
 			},
 		}
@@ -769,7 +769,7 @@ impl<T: Config> Pallet<T> {
 					let access_list: Vec<(H160, Vec<H256>)> = t
 						.access_list
 						.iter()
-						.map(|item| (item.address, item.storage_keys.clone()))
+						.map(|item| (item.address, item.slots.clone()))
 						.collect();
 					(
 						t.input.clone(),
@@ -786,7 +786,7 @@ impl<T: Config> Pallet<T> {
 					let access_list: Vec<(H160, Vec<H256>)> = t
 						.access_list
 						.iter()
-						.map(|item| (item.address, item.storage_keys.clone()))
+						.map(|item| (item.address, item.slots.clone()))
 						.collect();
 					(
 						t.input.clone(),
