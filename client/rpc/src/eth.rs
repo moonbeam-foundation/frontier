@@ -2323,6 +2323,14 @@ where
 			block_count.as_u64()
 		};
 
+		let requested_block: u64 = newest_block.to_min_block_num().unwrap_or_default();
+		let best_block =
+				UniqueSaturatedInto::<u64>::unique_saturated_into(self.client.info().best_number);
+
+		if requested_block > best_block {
+			return Err(internal_err(format!("Requested block does not exist.")));
+		}
+
 		if let Ok(Some(id)) = frontier_backend_client::native_block_id::<B, C>(
 			self.client.as_ref(),
 			self.backend.as_ref(),
