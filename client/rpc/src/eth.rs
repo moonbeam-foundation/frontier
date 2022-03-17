@@ -2324,25 +2324,28 @@ where
 		} else {
 			block_count.as_u64()
 		};
-
-		let requested_block: u64 = newest_block.to_min_block_num().unwrap_or_default();
-		let best_block =
-			UniqueSaturatedInto::<u64>::unique_saturated_into(self.client.info().best_number);
-
-		if requested_block > best_block {
-			return Err(internal_err(format!("Requested block does not exist.")));
-		}
-
 		if let Ok(Some(id)) = frontier_backend_client::native_block_id::<B, C>(
 			self.client.as_ref(),
 			self.backend.as_ref(),
 			Some(newest_block),
 		) {
-			let header = self.client.header(id).unwrap().unwrap();
+			let header = match self.client.header(id) {
+				Ok(Some(h)) => h,
+				_ => {
+					return Err(internal_err(format!("Failed to retrieve header at {}", id)));
+				}
+			};
+			let number = match self.client.number(header.hash()) {
+				Ok(Some(n)) => n,
+				_ => {
+					return Err(internal_err(format!(
+						"Failed to retrieve block number at {}",
+						id
+					)));
+				}
+			};
 			// Highest and lowest block number within the requested range.
-			let highest = UniqueSaturatedInto::<u64>::unique_saturated_into(
-				self.client.number(header.hash()).unwrap().unwrap(),
-			);
+			let highest = UniqueSaturatedInto::<u64>::unique_saturated_into(number);
 			let lowest = highest.saturating_sub(block_count);
 			// Tip of the chain.
 			let best_number =
