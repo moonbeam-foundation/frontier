@@ -55,15 +55,13 @@ impl<K: Eq + core::hash::Hash, V: Encode> LRUCacheByteLimited<K, V> {
 		// Handle size limit
 		self.size += v.encoded_size() as u64;
 		if self.size > self.max_size {
-			let mut diff = self.size - self.max_size;
 			let keys_to_remove = self
 				.cache
 				.iter()
 				.rev()
 				.take_while(|(_k, v)| {
-					let v_size = v.encoded_size() as u64;
-					if diff > v_size {
-						diff -= v_size;
+					if self.size > self.max_size {
+						let v_size = v.encoded_size() as u64;
 						self.size -= v_size;
 						true
 					} else {
