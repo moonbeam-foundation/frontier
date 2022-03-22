@@ -10,8 +10,8 @@ license = "Apache-2.0"
 async-trait = "0.1"
 serde = { version = "1.0.101", optional = true }
 
-codec = { package = "parity-scale-codec", version = "2.0.0", default-features = false }
-scale-info = { version = "1.0.0", default-features = false, features = ["derive"] }
+codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false }
+scale-info = { version = "2.0.0", default-features = false, features = ["derive"] }
 sp-core = { version = "5.0.0", git = "https://github.com/paritytech/substrate", branch = "master", default-features = false }
 sp-std = { version = "4.0.0", git = "https://github.com/paritytech/substrate", branch = "master", default-features = false }
 sp-inherents = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "master", default-features = false }
