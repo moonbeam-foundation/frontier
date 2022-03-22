@@ -23,7 +23,7 @@ fn eip1559_erc20_creation_unsigned_transaction() -> EIP1559UnsignedTransaction {
 	EIP1559UnsignedTransaction {
 		nonce: U256::zero(),
 		max_priority_fee_per_gas: U256::from(1),
-		max_fee_per_gas: U256::from(2),
+		max_fee_per_gas: U256::from(1),
 		gas_limit: U256::from(0x100000),
 		action: ethereum::TransactionAction::Create,
 		value: U256::zero(),
@@ -88,7 +88,7 @@ fn transaction_with_to_low_nonce_should_not_work() {
 			call.validate_self_contained(&source).unwrap(),
 			ValidTransactionBuilder::default()
 				.and_provides((alice.address, U256::from(1)))
-				.priority(1u64)
+				.priority(0u64)
 				.and_requires((alice.address, U256::from(0)))
 				.build()
 		);
@@ -263,7 +263,7 @@ fn call_should_handle_errors() {
 		let t = EIP1559UnsignedTransaction {
 			nonce: U256::zero(),
 			max_priority_fee_per_gas: U256::from(1),
-			max_fee_per_gas: U256::from(2),
+			max_fee_per_gas: U256::from(1),
 			gas_limit: U256::from(0x100000),
 			action: ethereum::TransactionAction::Create,
 			value: U256::zero(),
@@ -280,7 +280,7 @@ fn call_should_handle_errors() {
 		let t2 = EIP1559UnsignedTransaction {
 			nonce: U256::from(1),
 			max_priority_fee_per_gas: U256::from(1),
-			max_fee_per_gas: U256::from(2),
+			max_fee_per_gas: U256::from(1),
 			gas_limit: U256::from(0x100000),
 			action: TransactionAction::Call(H160::from_slice(&contract_address)),
 			value: U256::zero(),
@@ -304,7 +304,7 @@ fn call_should_handle_errors() {
 		let t3 = EIP1559UnsignedTransaction {
 			nonce: U256::from(2),
 			max_priority_fee_per_gas: U256::from(1),
-			max_fee_per_gas: U256::from(2),
+			max_fee_per_gas: U256::from(1),
 			gas_limit: U256::from(0x100000),
 			action: TransactionAction::Call(H160::from_slice(&contract_address)),
 			value: U256::zero(),
