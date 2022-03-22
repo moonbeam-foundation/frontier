@@ -7,14 +7,14 @@ description = "Ethereum RPC (web3) compatibility layer for Substrate."
 license = "GPL-3.0-or-later WITH Classpath-exception-2.0"
 
 [dependencies]
-ethereum = { version = "0.11.1", features = ["with-codec"] }
-ethereum-types = "0.12"
+ethereum = { version = "0.12.0", features = ["with-codec"] }
+ethereum-types = "0.13"
 evm = "0.33.1"
 futures = { version = "0.3.1", features = ["compat"] }
 hex = "0.4"
 libsecp256k1 = "0.7"
 log = "0.4.8"
-lru = "0.6.6"
+lru = "0.7.0"
 jsonrpc-core = "18.0"
 jsonrpc-core-client = "18.0"
 jsonrpc-pubsub = "18.0"
@@ -22,7 +22,7 @@ rand = "0.8"
 rlp = "0.5"
 tokio = { version = "1.14", features = [ "sync" ] }
 
-codec = { package = "parity-scale-codec", version = "2.0.0" }
+codec = { package = "parity-scale-codec", version = "3.0.0" }
 sp-api = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "master" }
 sp-blockchain = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "master" }
 sp-block-builder = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "master" }
