@@ -2835,11 +2835,11 @@ where
 			Some(&[StorageKey(PALLET_ETHEREUM_SCHEMA.to_vec())]),
 			None,
 		) {
-			while let Some((hash, changes)) = stream.next().await {
+			while let Some(notification) = stream.next().await {
 				// Make sure only block hashes marked as best are referencing cache checkpoints.
-				if hash == client.info().best_hash {
+				if notification.block == client.info().best_hash {
 					// Just map the change set to the actual data.
-					let storage: Vec<Option<StorageData>> = changes
+					let storage: Vec<Option<StorageData>> = notification.changes
 						.iter()
 						.filter_map(|(o_sk, _k, v)| {
 							if o_sk.is_none() {
@@ -2867,7 +2867,7 @@ where
 										);
 									}
 									_ => {
-										new_cache.push((new_schema, hash));
+										new_cache.push((new_schema, notification.block));
 										let _ = frontier_backend_client::write_cached_schema::<B>(
 											backend.as_ref(),
 											new_cache,
