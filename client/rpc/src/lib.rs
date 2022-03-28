@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+mod cache;
 mod eth;
 mod eth_pubsub;
 mod overrides;
@@ -24,8 +25,8 @@ pub mod format;
 
 pub use self::{
 	eth::{
-		EthApi, EthApiServer, EthBlockDataCache, EthFilterApi, EthFilterApiServer, EthTask, NetApi,
-		NetApiServer, Web3Api, Web3ApiServer,
+		EthApi, EthApiServer, EthBlockDataCacheTask, EthFilterApi, EthFilterApiServer, EthTask,
+		NetApi, NetApiServer, Web3Api, Web3ApiServer,
 	},
 	eth_pubsub::{EthPubSubApi, EthPubSubApiServer, HexEncodedIdProvider},
 	overrides::{
@@ -33,8 +34,8 @@ pub use self::{
 		SchemaV3Override, StorageOverride,
 	},
 };
-
 pub use ethereum::TransactionV2 as EthereumTransaction;
+
 use ethereum_types::{H160, H256};
 use evm::{ExitError, ExitReason};
 pub use fc_rpc_core::types::TransactionMessage;
