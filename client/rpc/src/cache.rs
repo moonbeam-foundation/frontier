@@ -133,3 +133,24 @@ impl LRUCacheByteLimitedMetrics {
 		})
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_size_limit() {
+		let mut cache = LRUCacheByteLimited::new("name", 10, None);
+		cache.put(0, "abcd");
+		assert!(cache.get(&0).is_some());
+		cache.put(1, "efghij");
+		assert!(cache.get(&1).is_some());
+		cache.put(2, "k");
+		assert!(cache.get(&2).is_some());
+		// Entry (0,  "abcd") should be deleted
+		assert!(cache.get(&0).is_none());
+		// Size should be 7 now, so we should be able to add a value of size 3
+		cache.put(3, "lmn");
+		assert!(cache.get(&3).is_some());
+	}
+}
