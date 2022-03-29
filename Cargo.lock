@@ -1637,6 +1637,7 @@ dependencies = [
  "log",
  "lru 0.7.3",
  "parity-scale-codec 3.1.2",
+ "prometheus",
  "rand 0.8.5",
  "rlp",
  "sc-client-api",
@@ -1652,6 +1653,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-storage",
+ "substrate-prometheus-endpoint",
  "tokio",
 ]
 

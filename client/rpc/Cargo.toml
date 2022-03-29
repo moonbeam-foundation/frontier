@@ -7,6 +7,7 @@ description = "Ethereum RPC (web3) compatibility layer for Substrate."
 license = "GPL-3.0-or-later WITH Classpath-exception-2.0"
 
 [dependencies]
+codec = { package = "parity-scale-codec", version = "3.0.0" }
 ethereum = { version = "0.12.0", features = ["with-codec"] }
 ethereum-types = "0.13"
 evm = "0.33.1"
@@ -18,11 +19,12 @@ lru = "0.7.0"
 jsonrpc-core = "18.0"
 jsonrpc-core-client = "18.0"
 jsonrpc-pubsub = "18.0"
+prometheus = { version = "0.13.0", default-features = false }
 rand = "0.8"
 rlp = "0.5"
 tokio = { version = "1.14", features = [ "sync" ] }
 
-codec = { package = "parity-scale-codec", version = "3.0.0" }
+prometheus-endpoint = { package = "substrate-prometheus-endpoint",  git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.18" }
 sp-api = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.18" }
 sp-blockchain = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.18" }
 sp-block-builder = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.18" }
