@@ -167,6 +167,7 @@ where
 		is_authority,
 		max_past_logs,
 		block_data_cache.clone(),
+		fc_rpc::format::Legacy,
 		fee_history_limit,
 		fee_history_cache,
 	)));
