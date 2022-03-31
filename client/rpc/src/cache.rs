@@ -24,7 +24,7 @@ pub struct LRUCacheByteLimited<K, V> {
 	size: u64,
 }
 
-impl<K: Eq + core::hash::Hash, V: Encode> LRUCacheByteLimited<K, V> {
+impl<K: Eq + Copy + core::hash::Hash, V: Encode> LRUCacheByteLimited<K, V> {
 	pub fn new(
 		cache_name: &'static str,
 		max_size: u64,
@@ -80,10 +80,10 @@ impl<K: Eq + core::hash::Hash, V: Encode> LRUCacheByteLimited<K, V> {
 						false
 					}
 				})
-				.map(|(k, _v)| k)
+				.map(|(k, _v)| *k)
 				.collect::<Vec<_>>();
 			for key in keys_to_remove {
-				self.cache.pop(key);
+				self.cache.pop(&key);
 			}
 		}
 		// Add entry in cache
