@@ -1603,6 +1603,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-storage",
+ "substrate-prometheus-endpoint",
  "tokio",
 ]
 

@@ -399,6 +399,7 @@ pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, Ser
 		overrides.clone(),
 		50,
 		50,
+		prometheus_registry.clone(),
 	));
 
 	let rpc_extensions_builder = {
