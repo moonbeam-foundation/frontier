@@ -1441,9 +1441,9 @@ dependencies = [
  "auto_impl",
  "environmental",
  "ethereum",
- "evm-core",
- "evm-gasometer",
- "evm-runtime",
+ "evm-core 0.34.0",
+ "evm-gasometer 0.34.0",
+ "evm-runtime 0.34.0",
  "log",
  "parity-scale-codec 2.3.1",
  "primitive-types",
@@ -1451,6 +1451,26 @@ dependencies = [
  "scale-info 1.0.0",
  "serde",
  "sha3 0.8.2",
+]
+
+[[package]]
+name = "evm"
+version = "0.35.0"
+source = "git+https://github.com/purestake/evm?branch=moonbeam-polkadot-v0.9.18#4867214b5da618650beb78e0c1bf55745a4ea4ec"
+dependencies = [
+ "auto_impl",
+ "environmental",
+ "ethereum",
+ "evm-core 0.35.0",
+ "evm-gasometer 0.35.0",
+ "evm-runtime 0.35.0",
+ "log",
+ "parity-scale-codec 3.1.2",
+ "primitive-types",
+ "rlp",
+ "scale-info 2.0.1",
+ "serde",
+ "sha3 0.10.1",
 ]
 
 [[package]]
@@ -1467,14 +1487,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "evm-core"
+version = "0.35.0"
+source = "git+https://github.com/purestake/evm?branch=moonbeam-polkadot-v0.9.18#4867214b5da618650beb78e0c1bf55745a4ea4ec"
+dependencies = [
+ "parity-scale-codec 3.1.2",
+ "primitive-types",
+ "scale-info 2.0.1",
+ "serde",
+]
+
+[[package]]
 name = "evm-gasometer"
 version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38cdffa2c3f272d1387adcf9096ce03e95885aabc8fe43a76ca5369eb7c30887"
 dependencies = [
  "environmental",
- "evm-core",
- "evm-runtime",
+ "evm-core 0.34.0",
+ "evm-runtime 0.34.0",
+ "primitive-types",
+]
+
+[[package]]
+name = "evm-gasometer"
+version = "0.35.0"
+source = "git+https://github.com/purestake/evm?branch=moonbeam-polkadot-v0.9.18#4867214b5da618650beb78e0c1bf55745a4ea4ec"
+dependencies = [
+ "environmental",
+ "evm-core 0.35.0",
+ "evm-runtime 0.35.0",
  "primitive-types",
 ]
 
@@ -1486,9 +1528,21 @@ checksum = "c709269d4e20b0e20b610f799d59eca77e461a6fc041fdb79ec617091c96007a"
 dependencies = [
  "auto_impl",
  "environmental",
- "evm-core",
+ "evm-core 0.34.0",
  "primitive-types",
  "sha3 0.8.2",
+]
+
+[[package]]
+name = "evm-runtime"
+version = "0.35.0"
+source = "git+https://github.com/purestake/evm?branch=moonbeam-polkadot-v0.9.18#4867214b5da618650beb78e0c1bf55745a4ea4ec"
+dependencies = [
+ "auto_impl",
+ "environmental",
+ "evm-core 0.35.0",
+ "primitive-types",
+ "sha3 0.10.1",
 ]
 
 [[package]]
@@ -1574,7 +1628,7 @@ version = "2.0.0-dev"
 dependencies = [
  "ethereum",
  "ethereum-types",
- "evm",
+ "evm 0.34.0",
  "fc-db",
  "fc-rpc-core",
  "fp-rpc",
@@ -1587,7 +1641,9 @@ dependencies = [
  "libsecp256k1",
  "log",
  "lru 0.7.3",
+ "pallet-ethereum",
  "parity-scale-codec 3.1.2",
+ "prometheus",
  "rand 0.8.5",
  "rlp",
  "sc-client-api",
@@ -1728,7 +1784,7 @@ dependencies = [
 name = "fp-evm"
 version = "3.0.0-dev"
 dependencies = [
- "evm",
+ "evm 0.35.0",
  "parity-scale-codec 3.1.2",
  "serde",
  "sp-core",
@@ -4157,6 +4213,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "num_enum"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf5395665662ef45796a4ff5486c5d41d29e0c09640af4c5f17fd94ee2c119c9"
+dependencies = [
+ "num_enum_derive",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b0498641e53dd6ac1a4f22547548caa6864cc4933784319cd1775271c5a46ce"
+dependencies = [
+ "proc-macro-crate 1.1.3",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "object"
 version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4318,7 +4395,7 @@ version = "4.0.0-dev"
 dependencies = [
  "ethereum",
  "ethereum-types",
- "evm",
+ "evm 0.35.0",
  "fp-consensus",
  "fp-evm",
  "fp-rpc",
@@ -4327,6 +4404,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "libsecp256k1",
+ "num_enum",
  "pallet-balances",
  "pallet-evm",
  "pallet-timestamp",
@@ -4346,7 +4424,7 @@ dependencies = [
 name = "pallet-evm"
 version = "6.0.0-dev"
 dependencies = [
- "evm",
+ "evm 0.35.0",
  "fp-evm",
  "frame-benchmarking",
  "frame-support",
@@ -4442,7 +4520,7 @@ dependencies = [
 name = "pallet-evm-test-vector-support"
 version = "1.0.0-dev"
 dependencies = [
- "evm",
+ "evm 0.35.0",
  "fp-evm",
  "hex",
  "serde",
