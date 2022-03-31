@@ -45,6 +45,7 @@ use sp_api::{ApiExt, BlockId, Core, HeaderT, ProvideRuntimeApi};
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::HeaderBackend;
 use sp_core::hashing::keccak_256;
+
 use sp_runtime::{
 	traits::{BlakeTwo256, Block as BlockT, NumberFor, One, Saturating, UniqueSaturatedInto, Zero},
 	transaction_validity::TransactionSource,
@@ -1214,6 +1215,13 @@ where
 				(id, api)
 			}
 		};
+
+		if let Ok(BlockStatus::Unknown) = self.client.status(id) {
+			return Err(internal_err(format!(
+				"failed to retrieve {}: not on chain",
+				id
+			)));
+		}
 
 		let api_version =
 			if let Ok(Some(api_version)) = api.api_version::<dyn EthereumRuntimeRPCApi<B>>(&id) {
