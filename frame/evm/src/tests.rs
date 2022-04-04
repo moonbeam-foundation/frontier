@@ -231,18 +231,19 @@ fn author_should_get_tip() {
 	new_test_ext().execute_with(|| {
 		let author = EVM::find_author();
 		let before_tip = EVM::account_basic(&author).balance;
-		let _ = EVM::call(
+		let result = EVM::call(
 			Origin::root(),
 			H160::default(),
 			H160::from_str("1000000000000000000000000000000000000001").unwrap(),
 			Vec::new(),
 			U256::from(1),
 			1000000,
-			U256::from(1_000_000_000),
+			U256::from(2_000_000_000),
 			Some(U256::from(1)),
 			None,
 			Vec::new(),
 		);
+		result.expect("EVM can be called");
 		let after_tip = EVM::account_basic(&author).balance;
 		assert_eq!(after_tip, (before_tip + 21000));
 	});
@@ -303,29 +304,85 @@ fn refunds_and_priority_should_work() {
 		let author = EVM::find_author();
 		let before_tip = EVM::account_basic(&author).balance;
 		let before_call = EVM::account_basic(&H160::default()).balance;
-		let tip = 5;
-		// The tip is deducted but never refunded to the caller.
-		let _ = EVM::call(
+		// We deliberately set a base fee + max tip > max fee.
+		// The effective priority tip will be 1GWEI instead 1.5GWEI:
+		// 		(max_fee_per_gas - base_fee).min(max_priority_fee)
+		//		(2 - 1).min(1.5)
+		let tip = U256::from(1_500_000_000);
+		let max_fee_per_gas = U256::from(2_000_000_000);
+		let used_gas = U256::from(21_000);
+		let result = EVM::call(
 			Origin::root(),
 			H160::default(),
 			H160::from_str("1000000000000000000000000000000000000001").unwrap(),
 			Vec::new(),
 			U256::from(1),
 			1000000,
-			U256::from(2_000_000_000),
+			max_fee_per_gas,
+			Some(tip),
+			None,
+			Vec::new(),
+		);
+		let base_fee = <Test as Config>::FeeCalculator::min_gas_price();
+		let actual_tip = (max_fee_per_gas - base_fee).min(tip) * used_gas;
+		let total_cost = (used_gas * base_fee)
+			+ U256::from(actual_tip)
+			+ U256::from(1);
+		let after_call = EVM::account_basic(&H160::default()).balance;
+		// The tip is deducted but never refunded to the caller.
+		assert_eq!(after_call, before_call - total_cost);
+
+		let after_tip = EVM::account_basic(&author).balance;
+		assert_eq!(after_tip, (before_tip + actual_tip.low_u128()));
+	});
+}
+
+#[test]
+fn call_should_fail_with_priority_greater_than_max_fee() {
+	new_test_ext().execute_with(|| {
+		let author = EVM::find_author();
+		let before_tip = EVM::account_basic(&author).balance;
+		let before_call = EVM::account_basic(&H160::default()).balance;
+		// Max priority greater than max fee should fail.
+		let tip: u128 = 1_100_000_000;
+		let result = EVM::call(
+			Origin::root(),
+			H160::default(),
+			H160::from_str("1000000000000000000000000000000000000001").unwrap(),
+			Vec::new(),
+			U256::from(1),
+			1000000,
+			U256::from(1_000_000_000),
 			Some(U256::from(tip)),
 			None,
 			Vec::new(),
 		);
-		let tip = tip * 21000;
-		let total_cost = (U256::from(21_000) * <Test as Config>::FeeCalculator::min_gas_price())
-			+ U256::from(1)
-			+ U256::from(tip);
-		let after_call = EVM::account_basic(&H160::default()).balance;
-		assert_eq!(after_call, before_call - total_cost);
+		assert!(result.is_err());
+	});
+}
 
-		let after_tip = EVM::account_basic(&author).balance;
-		assert_eq!(after_tip, (before_tip + tip));
+#[test]
+fn call_should_succeed_with_priority_equal_to_max_fee() {
+	new_test_ext().execute_with(|| {
+		let author = EVM::find_author();
+		let before_tip = EVM::account_basic(&author).balance;
+		let before_call = EVM::account_basic(&H160::default()).balance;
+		let tip: u128 = 1_000_000_000;
+		// Mimics the input for pre-eip-1559 transaction types where `gas_price`
+		// is used for both `max_fee_per_gas` and `max_priority_fee_per_gas`.
+		let result = EVM::call(
+			Origin::root(),
+			H160::default(),
+			H160::from_str("1000000000000000000000000000000000000001").unwrap(),
+			Vec::new(),
+			U256::from(1),
+			1000000,
+			U256::from(1_000_000_000),
+			Some(U256::from(tip)),
+			None,
+			Vec::new(),
+		);
+		assert!(result.is_ok());
 	});
 }
 
@@ -352,5 +409,90 @@ fn handle_sufficient_reference() {
 		let account_2 = frame_system::Account::<Test>::get(substrate_addr_2);
 		// We decreased the sufficient reference by 1 on removing the account.
 		assert_eq!(account_2.sufficients, 0);
+	});
+}
+
+#[test]
+fn test_hotfix_inc_account_sufficients_returns_error_if_max_addresses_exceeded() {
+	new_test_ext().execute_with(|| {
+		let max_address_count = 1000;
+		let addresses = (0..max_address_count + 1 as u64)
+			.map(H160::from_low_u64_le)
+			.collect::<Vec<H160>>();
+
+		let result =
+			EVM::hotfix_inc_account_sufficients(Origin::signed(H160::default()), addresses);
+
+		assert!(result.is_err(), "expected error");
+	});
+}
+
+#[test]
+fn test_hotfix_inc_account_sufficients_requires_signed_origin() {
+	new_test_ext().execute_with(|| {
+		let addr = H160::from_str("1230000000000000000000000000000000000001").unwrap();
+		<crate::AccountCodes<Test>>::insert(addr, &vec![0]);
+
+		let unsigned_origin = Origin::root();
+		let result = EVM::hotfix_inc_account_sufficients(unsigned_origin, vec![addr]);
+
+		assert!(result.is_err(), "expected error");
+	});
+}
+
+#[test]
+fn test_hotfix_inc_account_sufficients_increments_if_nonce_nonzero() {
+	new_test_ext().execute_with(|| {
+		let addr_1 = H160::from_str("1230000000000000000000000000000000000001").unwrap();
+		let addr_2 = H160::from_str("1234000000000000000000000000000000000001").unwrap();
+		let substrate_addr_1 = <Test as Config>::AddressMapping::into_account_id(addr_1);
+		let substrate_addr_2 = <Test as Config>::AddressMapping::into_account_id(addr_2);
+
+		<crate::AccountCodes<Test>>::insert(addr_1, &vec![0]);
+		<crate::AccountCodes<Test>>::insert(addr_2, &vec![0]);
+
+		frame_system::Pallet::<Test>::inc_account_nonce(&substrate_addr_1);
+
+		let account_1 = frame_system::Account::<Test>::get(substrate_addr_1);
+		let account_2 = frame_system::Account::<Test>::get(substrate_addr_2);
+		assert_eq!(account_1.nonce, 1);
+		assert_eq!(account_1.sufficients, 0);
+		assert_eq!(account_2.nonce, 0);
+		assert_eq!(account_2.sufficients, 0);
+
+		EVM::hotfix_inc_account_sufficients(Origin::signed(H160::default()), vec![addr_1, addr_2])
+			.unwrap();
+
+		let account_1 = frame_system::Account::<Test>::get(substrate_addr_1);
+		let account_2 = frame_system::Account::<Test>::get(substrate_addr_2);
+		assert_eq!(account_1.nonce, 1);
+		assert_eq!(account_1.sufficients, 1);
+		assert_eq!(account_2.nonce, 0);
+		assert_eq!(account_2.sufficients, 0);
+	});
+}
+
+#[test]
+fn test_hotfix_inc_account_sufficients_increments_with_saturation_if_nonce_nonzero() {
+	new_test_ext().execute_with(|| {
+		let addr = H160::from_str("1230000000000000000000000000000000000001").unwrap();
+		let substrate_addr = <Test as Config>::AddressMapping::into_account_id(addr);
+
+		<crate::AccountCodes<Test>>::insert(addr, &vec![0]);
+		frame_system::Account::<Test>::mutate(substrate_addr, |x| {
+			x.nonce = 1;
+			x.sufficients = u32::MAX;
+		});
+
+		let account = frame_system::Account::<Test>::get(substrate_addr);
+
+		assert_eq!(account.sufficients, u32::MAX);
+		assert_eq!(account.nonce, 1);
+
+		EVM::hotfix_inc_account_sufficients(Origin::signed(H160::default()), vec![addr]).unwrap();
+
+		let account = frame_system::Account::<Test>::get(substrate_addr);
+		assert_eq!(account.sufficients, u32::MAX);
+		assert_eq!(account.nonce, 1);
 	});
 }

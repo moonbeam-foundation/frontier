@@ -349,7 +349,7 @@ impl<T: Config> Pallet<T> {
 				access_list: t
 					.access_list
 					.iter()
-					.map(|d| (d.address, d.slots.clone()))
+					.map(|d| (d.address, d.storage_keys.clone()))
 					.collect(),
 			},
 			Transaction::EIP1559(t) => TransactionData {
@@ -365,7 +365,7 @@ impl<T: Config> Pallet<T> {
 				access_list: t
 					.access_list
 					.iter()
-					.map(|d| (d.address, d.slots.clone()))
+					.map(|d| (d.address, d.storage_keys.clone()))
 					.collect(),
 			},
 		}
@@ -501,7 +501,7 @@ impl<T: Config> Pallet<T> {
 		};
 		if gasometer.record_transaction(transaction_cost).is_err() {
 			return Err(InvalidTransaction::Custom(
-				TransactionValidationError::InvalidGasLimit as u8,
+				TransactionValidationError::GasLimitTooLow as u8,
 			)
 			.into());
 		}
@@ -517,7 +517,16 @@ impl<T: Config> Pallet<T> {
 
 		if gas_limit >= T::BlockGasLimit::get() {
 			return Err(InvalidTransaction::Custom(
-				TransactionValidationError::InvalidGasLimit as u8,
+				TransactionValidationError::GasLimitTooHigh as u8,
+			)
+			.into());
+		}
+
+		let account_data = pallet_evm::Pallet::<T>::account_basic(&origin);
+
+		if account_data.balance < transaction_data.value {
+			return Err(InvalidTransaction::Custom(
+				TransactionValidationError::InsufficientFundsForTransfer as u8,
 			)
 			.into());
 		}
@@ -525,32 +534,36 @@ impl<T: Config> Pallet<T> {
 		let base_fee = T::FeeCalculator::min_gas_price();
 		let mut priority = 0;
 
-		let gas_price = if let Some(gas_price) = transaction_data.gas_price {
-			// Legacy and EIP-2930 transactions.
+		let max_fee_per_gas = match (
+			transaction_data.gas_price,
+			transaction_data.max_fee_per_gas,
+			transaction_data.max_priority_fee_per_gas,
+		) {
+			// Legacy or EIP-2930 transaction.
 			// Handle priority here. On legacy transaction everything in gas_price except
 			// the current base_fee is considered a tip to the miner and thus the priority.
-			priority = gas_price.saturating_sub(base_fee).unique_saturated_into();
-			gas_price
-		} else if let Some(max_fee_per_gas) = transaction_data.max_fee_per_gas {
-			// EIP-1559 transactions.
-			max_fee_per_gas
-		} else {
-			return Err(InvalidTransaction::Payment.into());
+			(Some(gas_price), None, None) => {
+				priority = gas_price.saturating_sub(base_fee).unique_saturated_into();
+				gas_price
+			},
+			// EIP-1559 transaction without tip.
+			(None, Some(max_fee_per_gas), None) => max_fee_per_gas,
+			// EIP-1559 transaction with tip.
+			(None, Some(max_fee_per_gas), Some(max_priority_fee_per_gas)) => {
+				priority = max_fee_per_gas
+					.saturating_sub(base_fee)
+					.min(max_priority_fee_per_gas)
+					.unique_saturated_into();
+				max_fee_per_gas
+			},
+			_ => return Err(InvalidTransaction::Payment.into()),
 		};
 
-		if gas_price < base_fee {
+		if max_fee_per_gas < base_fee {
 			return Err(InvalidTransaction::Payment.into());
 		}
 
-		let mut fee = gas_price.saturating_mul(gas_limit);
-		if let Some(max_priority_fee_per_gas) = transaction_data.max_priority_fee_per_gas {
-			// EIP-1559 transaction priority is determined by `max_priority_fee_per_gas`.
-			// If the transaction do not include this optional parameter, priority is now considered zero.
-			priority = max_priority_fee_per_gas.unique_saturated_into();
-			// Add the priority tip to the payable fee.
-			fee = fee.saturating_add(max_priority_fee_per_gas.saturating_mul(gas_limit));
-		}
-
+		let fee = max_fee_per_gas.saturating_mul(gas_limit);
 		let account_data = pallet_evm::Pallet::<T>::account_basic(&origin);
 		let total_payment = transaction_data.value.saturating_add(fee);
 		if account_data.balance < total_payment {
@@ -735,39 +748,29 @@ impl<T: Config> Pallet<T> {
 				// max_fee_per_gas and max_priority_fee_per_gas in legacy and 2930 transactions is
 				// the provided gas_price.
 				Transaction::Legacy(t) => {
-					let base_fee = T::FeeCalculator::min_gas_price();
-					let priority_fee = t
-						.gas_price
-						.checked_sub(base_fee)
-						.ok_or_else(|| DispatchError::Other("Gas price too low"))?;
 					(
 						t.input.clone(),
 						t.value,
 						t.gas_limit,
-						Some(base_fee),
-						Some(priority_fee),
+						Some(t.gas_price),
+						Some(t.gas_price),
 						Some(t.nonce),
 						t.action,
 						Vec::new(),
 					)
 				}
 				Transaction::EIP2930(t) => {
-					let base_fee = T::FeeCalculator::min_gas_price();
-					let priority_fee = t
-						.gas_price
-						.checked_sub(base_fee)
-						.ok_or_else(|| DispatchError::Other("Gas price too low"))?;
 					let access_list: Vec<(H160, Vec<H256>)> = t
 						.access_list
 						.iter()
-						.map(|item| (item.address, item.slots.clone()))
+						.map(|item| (item.address, item.storage_keys.clone()))
 						.collect();
 					(
 						t.input.clone(),
 						t.value,
 						t.gas_limit,
-						Some(base_fee),
-						Some(priority_fee),
+						Some(t.gas_price),
+						Some(t.gas_price),
 						Some(t.nonce),
 						t.action,
 						access_list,
@@ -777,7 +780,7 @@ impl<T: Config> Pallet<T> {
 					let access_list: Vec<(H160, Vec<H256>)> = t
 						.access_list
 						.iter()
-						.map(|item| (item.address, item.slots.clone()))
+						.map(|item| (item.address, item.storage_keys.clone()))
 						.collect();
 					(
 						t.input.clone(),
@@ -943,10 +946,14 @@ impl<T: Config> BlockHashMapping for EthereumBlockHashMapping<T> {
 }
 
 #[repr(u8)]
-enum TransactionValidationError {
+#[derive(num_enum::FromPrimitive, num_enum::IntoPrimitive)]
+pub enum TransactionValidationError {
 	#[allow(dead_code)]
+	#[num_enum(default)]
 	UnknownError,
 	InvalidChainId,
 	InvalidSignature,
-	InvalidGasLimit,
+	GasLimitTooLow,
+	GasLimitTooHigh,
+	InsufficientFundsForTransfer,
 }

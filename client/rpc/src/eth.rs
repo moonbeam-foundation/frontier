@@ -28,7 +28,7 @@ use ethereum_types::{H160, H256, H512, H64, U256, U64};
 use evm::{ExitError, ExitReason};
 use futures::{future::TryFutureExt, StreamExt};
 use jsonrpc_core::{futures::future, BoxFuture, Error, Result};
-use lru::LruCache;
+use crate::cache::LRUCacheByteLimited;
 use tokio::sync::{mpsc, oneshot};
 
 use codec::{Decode, Encode};
@@ -63,14 +63,16 @@ use fp_rpc::{ConvertTransactionRuntimeApi, EthereumRuntimeRPCApi, TransactionSta
 use fp_storage::EthereumStorageSchema;
 
 use crate::{
-	error_on_execution_failure, frontier_backend_client, internal_err, overrides::OverrideHandle,
+	error_on_execution_failure, format::Formatter, frontier_backend_client, internal_err, overrides::OverrideHandle,
 	public_key, EthSigner, StorageOverride,
 };
 
 /// Default JSONRPC error code return by geth
 pub const JSON_RPC_ERROR_DEFAULT: i64 = -32000;
 
-pub struct EthApi<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi> {
+type WaitList<Hash, T> = HashMap<Hash, Vec<oneshot::Sender<Option<T>>>>;
+
+pub struct EthApi<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, F: Formatter> {
 	pool: Arc<P>,
 	graph: Arc<Pool<A>>,
 	client: Arc<C>,
@@ -81,13 +83,13 @@ pub struct EthApi<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi> {
 	overrides: Arc<OverrideHandle<B>>,
 	backend: Arc<fc_db::Backend<B>>,
 	max_past_logs: u32,
-	block_data_cache: Arc<EthBlockDataCache<B>>,
+	block_data_cache: Arc<EthBlockDataCacheTask<B>>,
 	fee_history_limit: u64,
 	fee_history_cache: FeeHistoryCache,
-	_marker: PhantomData<(B, BE)>,
+	_marker: PhantomData<(B, BE, F)>,
 }
 
-impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi> EthApi<B, C, P, CT, BE, H, A> {
+impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, F: Formatter> EthApi<B, C, P, CT, BE, H, A, F> {
 	pub fn new(
 		client: Arc<C>,
 		pool: Arc<P>,
@@ -99,7 +101,8 @@ impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi> EthApi<B, C, P, CT, BE, H
 		backend: Arc<fc_db::Backend<B>>,
 		is_authority: bool,
 		max_past_logs: u32,
-		block_data_cache: Arc<EthBlockDataCache<B>>,
+		block_data_cache: Arc<EthBlockDataCacheTask<B>>,
+		_formatter: F,
 		fee_history_limit: u64,
 		fee_history_cache: FeeHistoryCache,
 	) -> Self {
@@ -314,8 +317,8 @@ where
 
 async fn filter_range_logs<B: BlockT, C, BE>(
 	client: &C,
-	backend: &fc_db::Backend<B>,
-	block_data_cache: &EthBlockDataCache<B>,
+	_backend: &fc_db::Backend<B>,
+	block_data_cache: &EthBlockDataCacheTask<B>,
 	ret: &mut Vec<Log>,
 	max_past_logs: u32,
 	filter: &Filter,
@@ -346,23 +349,7 @@ where
 	let address_bloom_filter = FilteredParams::adresses_bloom_filter(&filter.address);
 	let topics_bloom_filter = FilteredParams::topics_bloom_filter(&topics_input);
 
-	// Get schema cache. A single read before the block range iteration.
-	// This prevents having to do an extra DB read per block range iteration to getthe actual schema.
-	let mut local_cache: BTreeMap<NumberFor<B>, EthereumStorageSchema> = BTreeMap::new();
-	if let Ok(Some(schema_cache)) = frontier_backend_client::load_cached_schema::<B>(backend) {
-		for (schema, hash) in schema_cache {
-			if let Ok(Some(header)) = client.header(BlockId::Hash(hash)) {
-				let number = *header.number();
-				local_cache.insert(number, schema);
-			}
-		}
-	}
-	let cache_keys: Vec<NumberFor<B>> = local_cache.keys().cloned().collect();
-	let mut default_schema: Option<&EthereumStorageSchema> = None;
-	if cache_keys.len() == 1 {
-		// There is only one schema and that's the one we use.
-		default_schema = local_cache.get(&cache_keys[0]);
-	}
+
 
 	while current_number <= to {
 		let id = BlockId::Number(current_number);
@@ -370,28 +357,10 @@ where
 			.expect_block_hash_from_id(&id)
 			.map_err(|_| internal_err(format!("Expect block number from id: {}", id)))?;
 
-		let schema = match default_schema {
-			// If there is a single schema, we just assign.
-			Some(default_schema) => *default_schema,
-			_ => {
-				// If there are multiple schemas, we iterate over the - hopefully short - list
-				// of keys and assign the one belonging to the current_number.
-				// Because there are more than 1 schema, and current_number cannot be < 0,
-				// (i - 1) will always be >= 0.
-				let mut default_schema: Option<&EthereumStorageSchema> = None;
-				for (i, k) in cache_keys.iter().enumerate() {
-					if &current_number < k {
-						default_schema = local_cache.get(&cache_keys[i - 1]);
-					}
-				}
-				match default_schema {
-					Some(schema) => *schema,
-					// Fallback to DB read. This will happen i.e. when there is no cache
-					// task configured at service level.
-					_ => frontier_backend_client::onchain_storage_schema::<B, C, BE>(client, id),
-				}
-			}
-		};
+		let schema = frontier_backend_client::onchain_storage_schema::<B, C, BE>(
+			client,
+			id,
+		);
 
 		let block = block_data_cache.current_block(schema, substrate_hash).await;
 
@@ -525,7 +494,7 @@ fn fee_details(
 	}
 }
 
-impl<B, C, P, CT, BE, H: ExHashT, A> EthApiT for EthApi<B, C, P, CT, BE, H, A>
+impl<B, C, P, CT, BE, H: ExHashT, A, F> EthApiT for EthApi<B, C, P, CT, BE, H, A, F>
 where
 	B: BlockT<Hash = H256> + Send + Sync + 'static,
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE>,
@@ -536,6 +505,7 @@ where
 	P: TransactionPool<Block = B> + Send + Sync + 'static,
 	A: ChainApi<Block = B> + 'static,
 	CT: fp_rpc::ConvertTransaction<<B as BlockT>::Extrinsic> + Send + Sync + 'static,
+	F: Formatter,
 {
 	fn protocol_version(&self) -> Result<u64> {
 		Ok(1)
@@ -712,14 +682,36 @@ where
 			let is_eip1559 = handler.is_eip1559(&id);
 
 			match (block, statuses) {
-				(Some(block), Some(statuses)) => Ok(Some(rich_block_build(
-					block,
-					statuses.into_iter().map(|s| Some(s)).collect(),
-					Some(hash),
-					full,
-					base_fee,
-					is_eip1559,
-				))),
+				(Some(block), Some(statuses)) => {
+					let mut rich_block = rich_block_build(
+						block,
+						statuses.into_iter().map(|s| Some(s)).collect(),
+						Some(hash),
+						full,
+						base_fee,
+						is_eip1559,
+					);
+					// Indexers heavily rely on the parent hash.
+					// Moonbase client-level patch for inconsistent runtime 1200 state.
+					let number = rich_block.inner.header.number.unwrap_or_default();
+					if rich_block.inner.header.parent_hash == H256::default() 
+						&& number > U256::zero() {
+							let id = BlockId::Hash(substrate_hash);
+							if let Ok(Some(header)) = client.header(id) {
+								let parent_hash = *header.parent_hash();
+	
+								let parent_id = BlockId::Hash(parent_hash);
+								let schema =
+									frontier_backend_client::onchain_storage_schema::<B, C, BE>(client.as_ref(), parent_id);
+								if let Some(block) = block_data_cache.current_block(schema, parent_hash).await {
+									rich_block.inner.header.parent_hash =
+										H256::from_slice(keccak_256(&rlp::encode(&block.header)).as_slice());
+								}
+							}
+					}
+					Ok(Some(rich_block))
+
+				},
 				_ => Ok(None),
 			}
 		})
@@ -767,14 +759,34 @@ where
 				(Some(block), Some(statuses)) => {
 					let hash = H256::from(keccak_256(&rlp::encode(&block.header)));
 
-					Ok(Some(rich_block_build(
+					let mut rich_block = rich_block_build(
 						block,
 						statuses.into_iter().map(|s| Some(s)).collect(),
 						Some(hash),
 						full,
 						base_fee,
 						is_eip1559,
-					)))
+					);
+					// Indexers heavily rely on the parent hash.
+					// Moonbase client-level patch for inconsistent runtime 1200 state.
+					let number = rich_block.inner.header.number.unwrap_or_default();
+					if rich_block.inner.header.parent_hash == H256::default() 
+						&& number > U256::zero() {
+						
+						let id = BlockId::Hash(substrate_hash);
+						if let Ok(Some(header)) = client.header(id) {
+							let parent_hash = *header.parent_hash();
+
+							let parent_id = BlockId::Hash(parent_hash);
+							let schema =
+								frontier_backend_client::onchain_storage_schema::<B, C, BE>(client.as_ref(), parent_id);
+							if let Some(block) = block_data_cache.current_block(schema, parent_hash).await {
+								rich_block.inner.header.parent_hash =
+									H256::from_slice(keccak_256(&rlp::encode(&block.header)).as_slice());
+							}
+						}
+					}
+					Ok(Some(rich_block))
 				}
 				_ => Ok(None),
 			}
@@ -1074,9 +1086,7 @@ where
 			self.pool
 				.submit_one(&block_hash, TransactionSource::Local, extrinsic)
 				.map_ok(move |_| transaction_hash)
-				.map_err(|err| {
-					internal_err(format!("submit transaction to pool failed: {:?}", err))
-				}),
+				.map_err(|err| internal_err(F::pool_error(err))),
 		)
 	}
 
@@ -1166,9 +1176,7 @@ where
 			self.pool
 				.submit_one(&block_hash, TransactionSource::Local, extrinsic)
 				.map_ok(move |_| transaction_hash)
-				.map_err(|err| {
-					internal_err(format!("submit transaction to pool failed: {:?}", err))
-				}),
+				.map_err(|err| internal_err(F::pool_error(err))),
 		)
 	}
 
@@ -1313,7 +1321,7 @@ where
 							Some(
 								access_list
 									.into_iter()
-									.map(|item| (item.address, item.slots))
+									.map(|item| (item.address, item.storage_keys))
 									.collect(),
 							),
 						)
@@ -1391,7 +1399,7 @@ where
 							Some(
 								access_list
 									.into_iter()
-									.map(|item| (item.address, item.slots))
+									.map(|item| (item.address, item.storage_keys))
 									.collect(),
 							),
 						)
@@ -1601,7 +1609,7 @@ where
 								Some(
 									access_list
 										.into_iter()
-										.map(|item| (item.address, item.slots))
+										.map(|item| (item.address, item.storage_keys))
 										.collect(),
 								),
 							)
@@ -1659,7 +1667,7 @@ where
 								Some(
 									access_list
 										.into_iter()
-										.map(|item| (item.address, item.slots))
+										.map(|item| (item.address, item.storage_keys))
 										.collect(),
 								),
 							)
@@ -2158,7 +2166,8 @@ where
 							.base_fee(&id)
 							.unwrap_or_default()
 							.checked_add(t.max_priority_fee_per_gas)
-							.unwrap_or(U256::max_value()),
+							.unwrap_or(U256::max_value())
+							.min(t.max_fee_per_gas),
 					};
 
 					return Ok(Some(Receipt {
@@ -2342,7 +2351,7 @@ where
 			};
 			// Highest and lowest block number within the requested range.
 			let highest = UniqueSaturatedInto::<u64>::unique_saturated_into(number);
-			let lowest = highest.saturating_sub(block_count);
+			let lowest = highest.saturating_sub(block_count - 1);
 			// Tip of the chain.
 			let best_number =
 				UniqueSaturatedInto::<u64>::unique_saturated_into(self.client.info().best_number);
@@ -2381,15 +2390,16 @@ where
 								};
 								block_rewards.push(reward);
 							}
-							// Push block rewards.
-							rewards.push(block_rewards);
+							if !block_rewards.is_empty() {
+								// Push block rewards.
+								rewards.push(block_rewards);
+							}
 						}
 					}
 				}
 				if rewards.len() > 0 {
 					response.reward = Some(rewards);
 				}
-				// Calculate next base fee.
 				if let (Some(last_gas_used), Some(last_fee_per_gas)) = (
 					response.gas_used_ratio.last(),
 					response.base_fee_per_gas.last(),
@@ -2439,6 +2449,35 @@ where
 			newest_block
 		)))
 	}
+
+	fn max_priority_fee_per_gas(&self) -> Result<U256> {
+		// https://github.com/ethereum/go-ethereum/blob/master/eth/ethconfig/config.go#L44-L51
+		let at_percentile = 60;
+		let block_count = 20;
+		let index = (at_percentile * 2) as usize;
+
+		let highest =
+			UniqueSaturatedInto::<u64>::unique_saturated_into(self.client.info().best_number);
+		let lowest = highest.saturating_sub(block_count - 1);
+
+		// https://github.com/ethereum/go-ethereum/blob/master/eth/gasprice/gasprice.go#L149
+		let mut rewards = Vec::new();
+		if let Ok(fee_history_cache) = &self.fee_history_cache.lock() {
+			for n in lowest..highest + 1 {
+				if let Some(block) = fee_history_cache.get(&n) {
+					let reward = if let Some(r) = block.rewards.get(index as usize) {
+						U256::from(*r)
+					} else {
+						U256::zero()
+					};
+					rewards.push(reward);
+				}
+			}
+		} else {
+			return Err(internal_err(format!("Failed to read fee oracle cache.")));
+		}
+		Ok(*rewards.iter().min().unwrap_or(&U256::zero()))
+	}
 }
 
 pub struct EthFilterApi<B: BlockT, C, BE> {
@@ -2447,7 +2486,7 @@ pub struct EthFilterApi<B: BlockT, C, BE> {
 	filter_pool: FilterPool,
 	max_stored_filters: usize,
 	max_past_logs: u32,
-	block_data_cache: Arc<EthBlockDataCache<B>>,
+	block_data_cache: Arc<EthBlockDataCacheTask<B>>,
 	_marker: PhantomData<BE>,
 }
 
@@ -2458,7 +2497,7 @@ impl<B: BlockT, C, BE> EthFilterApi<B, C, BE> {
 		filter_pool: FilterPool,
 		max_stored_filters: usize,
 		max_past_logs: u32,
-		block_data_cache: Arc<EthBlockDataCache<B>>,
+		block_data_cache: Arc<EthBlockDataCacheTask<B>>,
 	) -> Self {
 		Self {
 			client,
@@ -2818,11 +2857,11 @@ where
 			Some(&[StorageKey(PALLET_ETHEREUM_SCHEMA.to_vec())]),
 			None,
 		) {
-			while let Some((hash, changes)) = stream.next().await {
+			while let Some(notification) = stream.next().await {
 				// Make sure only block hashes marked as best are referencing cache checkpoints.
-				if hash == client.info().best_hash {
+				if notification.block == client.info().best_hash {
 					// Just map the change set to the actual data.
-					let storage: Vec<Option<StorageData>> = changes
+					let storage: Vec<Option<StorageData>> = notification.changes
 						.iter()
 						.filter_map(|(o_sk, _k, v)| {
 							if o_sk.is_none() {
@@ -2850,7 +2889,7 @@ where
 										);
 									}
 									_ => {
-										new_cache.push((new_schema, hash));
+										new_cache.push((new_schema, notification.block));
 										let _ = frontier_backend_client::write_cached_schema::<B>(
 											backend.as_ref(),
 											new_cache,
@@ -3120,24 +3159,31 @@ enum EthBlockDataCacheMessage<B: BlockT> {
 /// These are large and take a lot of time to fetch from the database.
 /// Storing them in an LRU cache will allow to reduce database accesses
 /// when many subsequent requests are related to the same blocks.
-pub struct EthBlockDataCache<B: BlockT>(mpsc::Sender<EthBlockDataCacheMessage<B>>);
+pub struct EthBlockDataCacheTask<B: BlockT>(mpsc::Sender<EthBlockDataCacheMessage<B>>);
 
-impl<B: BlockT> EthBlockDataCache<B> {
+impl<B: BlockT> EthBlockDataCacheTask<B> {
 	pub fn new(
 		spawn_handle: SpawnTaskHandle,
 		overrides: Arc<OverrideHandle<B>>,
-		blocks_cache_size: usize,
-		statuses_cache_size: usize,
+		blocks_cache_max_size: u64,
+		statuses_cache_max_size: u64,
+		prometheus_registry: Option<prometheus_endpoint::Registry>,
 	) -> Self {
 		let (task_tx, mut task_rx) = mpsc::channel(100);
 		let outer_task_tx = task_tx.clone();
 		let outer_spawn_handle = spawn_handle.clone();
 
-		outer_spawn_handle.spawn("EthBlockDataCache", None, async move {
-			let mut blocks_cache = LruCache::<B::Hash, EthereumBlock>::new(blocks_cache_size);
-			let mut statuses_cache =
-				LruCache::<B::Hash, Vec<TransactionStatus>>::new(statuses_cache_size);
-
+		outer_spawn_handle.spawn("EthBlockDataCacheTask", None, async move {
+			let mut blocks_cache = LRUCacheByteLimited::<B::Hash, EthereumBlock>::new(
+				"blocks_cache",
+				blocks_cache_max_size,
+				prometheus_registry.clone(),
+			);
+			let mut statuses_cache = LRUCacheByteLimited::<B::Hash, Vec<TransactionStatus>>::new(
+				"statuses_cache",
+				statuses_cache_max_size,
+				prometheus_registry,
+			);
 			let mut awaiting_blocks =
 				HashMap::<B::Hash, Vec<oneshot::Sender<Option<EthereumBlock>>>>::new();
 			let mut awaiting_statuses =
@@ -3222,8 +3268,8 @@ impl<B: BlockT> EthBlockDataCache<B> {
 
 	fn request_current<T, F>(
 		spawn_handle: &SpawnTaskHandle,
-		cache: &mut LruCache<B::Hash, T>,
-		wait_list: &mut HashMap<B::Hash, Vec<oneshot::Sender<Option<T>>>>,
+		cache: &mut LRUCacheByteLimited<B::Hash, T>,
+		wait_list: &mut WaitList<B::Hash, T>,
 		overrides: Arc<OverrideHandle<B>>,
 		block_hash: B::Hash,
 		schema: EthereumStorageSchema,
@@ -3231,9 +3277,10 @@ impl<B: BlockT> EthBlockDataCache<B> {
 		task_tx: mpsc::Sender<EthBlockDataCacheMessage<B>>,
 		handler_call: F,
 	) where
-		T: Clone,
-		F: FnOnce(&Box<dyn StorageOverride<B> + Send + Sync>) -> EthBlockDataCacheMessage<B>,
-		F: Send + 'static,
+		T: Clone + Encode,
+		F: 'static
+			+ Send
+			+ FnOnce(&Box<dyn StorageOverride<B> + Send + Sync>) -> EthBlockDataCacheMessage<B>,
 	{
 		// Data is cached, we respond immediately.
 		if let Some(data) = cache.get(&block_hash).cloned() {
@@ -3253,7 +3300,7 @@ impl<B: BlockT> EthBlockDataCache<B> {
 		// the data.
 		wait_list.insert(block_hash.clone(), vec![response_tx]);
 
-		spawn_handle.spawn("EthBlockDataCache Worker", None, async move {
+		spawn_handle.spawn("EthBlockDataCacheTask Worker", None, async move {
 			let handler = overrides
 				.schemas
 				.get(&schema)
