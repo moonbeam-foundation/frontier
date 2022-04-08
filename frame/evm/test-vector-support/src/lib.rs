@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use evm::{Context, ExitSucceed};
+use evm::{Context, ExitSucceed, executor::stack::PrecompileOutput};
 use fp_evm::Precompile;
 
 #[cfg(feature = "std")]
@@ -54,14 +54,19 @@ pub fn test_precompile_test_vectors<P: Precompile>(filepath: &str) -> Result<(),
 		};
 
 		match P::execute(&input, Some(cost), &context, false) {
-			Ok(result) => {
-				let as_hex: String = hex::encode(result.output);
+			Ok(PrecompileOutput::Exit {
+				output,
+				exit_status,
+				cost,
+				logs: _logs,
+			}) => {
+				let as_hex: String = hex::encode(output);
 				assert_eq!(
-					result.exit_status,
+					exit_status,
 					ExitSucceed::Returned,
 					"test '{}' returned {:?} (expected 'Returned')",
 					test.Name,
-					result.exit_status
+					exit_status
 				);
 				assert_eq!(
 					as_hex, test.Expected,
@@ -70,11 +75,14 @@ pub fn test_precompile_test_vectors<P: Precompile>(filepath: &str) -> Result<(),
 				);
 				if let Some(expected_gas) = test.Gas {
 					assert_eq!(
-						result.cost, expected_gas,
+						cost, expected_gas,
 						"test '{}' failed (different gas cost)",
 						test.Name
 					);
 				}
+			}
+			Ok(_) => {
+				return Err(format!("Test '{}' didn't exited and returned EVM bytecode instead.", test.Name));
 			}
 			Err(err) => {
 				return Err(format!("Test '{}' returned error: {:?}", test.Name, err));

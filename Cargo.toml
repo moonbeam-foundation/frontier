@@ -25,3 +25,9 @@ members = [
 	"template/runtime",
 ]
 resolver = "2"
+
+[patch.crates-io]
+evm = { git = "https://github.com/purestake/evm", branch = "jeremy-tmp-subcalls-and-delegatecall" }
+evm-core = { git = "https://github.com/purestake/evm", branch = "jeremy-tmp-subcalls-and-delegatecall" }
+evm-runtime = { git = "https://github.com/purestake/evm", branch = "jeremy-tmp-subcalls-and-delegatecall" }
+evm-gasometer = { git = "https://github.com/purestake/evm", branch = "jeremy-tmp-subcalls-and-delegatecall" }

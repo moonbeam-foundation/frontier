@@ -72,6 +72,7 @@ pub use evm::{
 pub use fp_evm::{
 	Account, CallInfo, CreateInfo, ExecutionInfo, LinearCostPrecompile, Log, Precompile,
 	PrecompileFailure, PrecompileOutput, PrecompileResult, PrecompileSet, Vicinity,
+	DelegatablePrecompileSet,
 };
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
@@ -91,6 +92,19 @@ use sp_runtime::{
 };
 use sp_std::vec::Vec;
 
+// <<<<<<< HEAD
+// =======
+// pub use evm::{
+// 	Config as EvmConfig, Context, ExitError, ExitFatal, ExitReason, ExitRevert, ExitSucceed,
+// };
+// #[cfg(feature = "std")]
+// use fp_evm::GenesisAccount;
+// pub use fp_evm::{
+// 	Account, CallInfo, CreateInfo, ExecutionInfo, FeeCalculator, LinearCostPrecompile, Log,
+// 	Precompile, PrecompileFailure, PrecompileOutput, PrecompileResult, DelegatablePrecompileSet, Vicinity,
+// };
+
+// >>>>>>> 3c89a7a9 (Add support for delegatable precompile in transactions)
 pub use self::{pallet::*, runner::Runner};
 
 #[frame_support::pallet]
@@ -128,8 +142,7 @@ pub mod pallet {
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		/// Precompiles associated with this EVM engine.
-		type PrecompilesType: PrecompileSet;
-		type PrecompilesValue: Get<Self::PrecompilesType>;
+		type Precompiles: DelegatablePrecompileSet + Default;
 		/// Chain ID of EVM.
 		type ChainId: Get<u64>;
 		/// The block gas limit. Can be a simple constant, or an adjustment algorithm in another pallet.

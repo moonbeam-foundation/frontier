@@ -1,4 +1,4 @@
-use pallet_evm::{Context, Precompile, PrecompileResult, PrecompileSet};
+use pallet_evm::{Context, Precompile, PrecompileResult, PrecompileSet, DelegatablePrecompileSet};
 use sp_core::H160;
 use sp_std::marker::PhantomData;
 
@@ -8,6 +8,12 @@ use pallet_evm_precompile_simple::{ECRecover, ECRecoverPublicKey, Identity, Ripe
 
 pub struct FrontierPrecompiles<R>(PhantomData<R>);
 
+impl<R> Default for FrontierPrecompiles<R> {
+	fn default() -> Self {
+		Self(Default::default())
+	}
+}
+
 impl<R> FrontierPrecompiles<R>
 where
 	R: pallet_evm::Config,
@@ -15,6 +21,7 @@ where
 	pub fn new() -> Self {
 		Self(Default::default())
 	}
+
 	pub fn used_addresses() -> sp_std::vec::Vec<H160> {
 		sp_std::vec![1, 2, 3, 4, 5, 1024, 1025]
 			.into_iter()
@@ -22,6 +29,7 @@ where
 			.collect()
 	}
 }
+
 impl<R> PrecompileSet for FrontierPrecompiles<R>
 where
 	R: pallet_evm::Config,
@@ -54,6 +62,15 @@ where
 
 	fn is_precompile(&self, address: H160) -> bool {
 		Self::used_addresses().contains(&address)
+	}
+}
+
+impl<R> DelegatablePrecompileSet for FrontierPrecompiles<R>
+where
+	R: pallet_evm::Config,
+{
+	fn is_delegatable_precompile(&self, _address: H160) -> bool {
+		false
 	}
 }
 
