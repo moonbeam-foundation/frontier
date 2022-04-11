@@ -51,7 +51,7 @@ impl<T: LinearCostPrecompile> Precompile for T {
 		let cost = ensure_linear_cost(target_gas, input.len() as u64, T::BASE, T::WORD)?;
 
 		let (exit_status, output) = T::execute(input, cost)?;
-		Ok(PrecompileOutput {
+		Ok(PrecompileOutput::Exit {
 			exit_status,
 			cost,
 			output,

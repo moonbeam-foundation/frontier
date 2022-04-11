@@ -201,7 +201,7 @@ impl Precompile for Modexp {
 		// always true except in the case of zero-length modulus, which leads to
 		// output of length and value 1.
 		if bytes.len() == mod_len {
-			Ok(PrecompileOutput {
+			Ok(PrecompileOutput::Exit {
 				exit_status: ExitSucceed::Returned,
 				cost: gas_cost,
 				output: bytes.to_vec(),
@@ -211,7 +211,7 @@ impl Precompile for Modexp {
 			let mut ret = Vec::with_capacity(mod_len);
 			ret.extend(core::iter::repeat(0).take(mod_len - bytes.len()));
 			ret.extend_from_slice(&bytes[..]);
-			Ok(PrecompileOutput {
+			Ok(PrecompileOutput::Exit {
 				exit_status: ExitSucceed::Returned,
 				cost: gas_cost,
 				output: ret.to_vec(),

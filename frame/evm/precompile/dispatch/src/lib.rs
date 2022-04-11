@@ -75,7 +75,7 @@ where
 				let cost = T::GasWeightMapping::weight_to_gas(
 					post_info.actual_weight.unwrap_or(info.weight),
 				);
-				Ok(PrecompileOutput {
+				Ok(PrecompileOutput::Exit {
 					exit_status: ExitSucceed::Stopped,
 					cost,
 					output: Default::default(),

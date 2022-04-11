@@ -106,7 +106,7 @@ impl Precompile for Bn128Add {
 				})?;
 		}
 
-		Ok(PrecompileOutput {
+		Ok(PrecompileOutput::Exit {
 			exit_status: ExitSucceed::Returned,
 			cost: Bn128Add::GAS_COST,
 			output: buf.to_vec(),
@@ -153,7 +153,7 @@ impl Precompile for Bn128Mul {
 				})?;
 		}
 
-		Ok(PrecompileOutput {
+		Ok(PrecompileOutput::Exit {
 			exit_status: ExitSucceed::Returned,
 			cost: Bn128Mul::GAS_COST,
 			output: buf.to_vec(),
@@ -285,7 +285,7 @@ impl Precompile for Bn128Pairing {
 		let mut buf = [0u8; 32];
 		ret_val.to_big_endian(&mut buf);
 
-		Ok(PrecompileOutput {
+		Ok(PrecompileOutput::Exit {
 			exit_status: ExitSucceed::Returned,
 			cost: gas_cost,
 			output: buf.to_vec(),
