@@ -23,12 +23,12 @@ use std::{
 	time,
 };
 
+use crate::cache::LRUCacheByteLimited;
 use ethereum::{BlockV2 as EthereumBlock, TransactionV2 as EthereumTransaction};
 use ethereum_types::{H160, H256, H512, H64, U256, U64};
 use evm::{ExitError, ExitReason};
 use futures::{future::TryFutureExt, StreamExt};
 use jsonrpc_core::{futures::future, BoxFuture, Error, Result};
-use crate::cache::LRUCacheByteLimited;
 use tokio::sync::{mpsc, oneshot};
 
 use codec::{Decode, Encode};
@@ -63,8 +63,8 @@ use fp_rpc::{ConvertTransactionRuntimeApi, EthereumRuntimeRPCApi, TransactionSta
 use fp_storage::EthereumStorageSchema;
 
 use crate::{
-	error_on_execution_failure, format::Formatter, frontier_backend_client, internal_err, overrides::OverrideHandle,
-	public_key, EthSigner, StorageOverride,
+	error_on_execution_failure, format::Formatter, frontier_backend_client, internal_err,
+	overrides::OverrideHandle, public_key, EthSigner, StorageOverride,
 };
 
 /// Default JSONRPC error code return by geth
@@ -89,7 +89,9 @@ pub struct EthApi<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, F: Formatter
 	_marker: PhantomData<(B, BE, F)>,
 }
 
-impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, F: Formatter> EthApi<B, C, P, CT, BE, H, A, F> {
+impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, F: Formatter>
+	EthApi<B, C, P, CT, BE, H, A, F>
+{
 	pub fn new(
 		client: Arc<C>,
 		pool: Arc<P>,
@@ -349,18 +351,13 @@ where
 	let address_bloom_filter = FilteredParams::adresses_bloom_filter(&filter.address);
 	let topics_bloom_filter = FilteredParams::topics_bloom_filter(&topics_input);
 
-
-
 	while current_number <= to {
 		let id = BlockId::Number(current_number);
 		let substrate_hash = client
 			.expect_block_hash_from_id(&id)
 			.map_err(|_| internal_err(format!("Expect block number from id: {}", id)))?;
 
-		let schema = frontier_backend_client::onchain_storage_schema::<B, C, BE>(
-			client,
-			id,
-		);
+		let schema = frontier_backend_client::onchain_storage_schema::<B, C, BE>(client, id);
 
 		let block = block_data_cache.current_block(schema, substrate_hash).await;
 
@@ -694,24 +691,29 @@ where
 					// Indexers heavily rely on the parent hash.
 					// Moonbase client-level patch for inconsistent runtime 1200 state.
 					let number = rich_block.inner.header.number.unwrap_or_default();
-					if rich_block.inner.header.parent_hash == H256::default() 
-						&& number > U256::zero() {
-							let id = BlockId::Hash(substrate_hash);
-							if let Ok(Some(header)) = client.header(id) {
-								let parent_hash = *header.parent_hash();
-	
-								let parent_id = BlockId::Hash(parent_hash);
-								let schema =
-									frontier_backend_client::onchain_storage_schema::<B, C, BE>(client.as_ref(), parent_id);
-								if let Some(block) = block_data_cache.current_block(schema, parent_hash).await {
-									rich_block.inner.header.parent_hash =
-										H256::from_slice(keccak_256(&rlp::encode(&block.header)).as_slice());
-								}
+					if rich_block.inner.header.parent_hash == H256::default()
+						&& number > U256::zero()
+					{
+						let id = BlockId::Hash(substrate_hash);
+						if let Ok(Some(header)) = client.header(id) {
+							let parent_hash = *header.parent_hash();
+
+							let parent_id = BlockId::Hash(parent_hash);
+							let schema = frontier_backend_client::onchain_storage_schema::<B, C, BE>(
+								client.as_ref(),
+								parent_id,
+							);
+							if let Some(block) =
+								block_data_cache.current_block(schema, parent_hash).await
+							{
+								rich_block.inner.header.parent_hash = H256::from_slice(
+									keccak_256(&rlp::encode(&block.header)).as_slice(),
+								);
 							}
+						}
 					}
 					Ok(Some(rich_block))
-
-				},
+				}
 				_ => Ok(None),
 			}
 		})
@@ -770,19 +772,24 @@ where
 					// Indexers heavily rely on the parent hash.
 					// Moonbase client-level patch for inconsistent runtime 1200 state.
 					let number = rich_block.inner.header.number.unwrap_or_default();
-					if rich_block.inner.header.parent_hash == H256::default() 
-						&& number > U256::zero() {
-						
+					if rich_block.inner.header.parent_hash == H256::default()
+						&& number > U256::zero()
+					{
 						let id = BlockId::Hash(substrate_hash);
 						if let Ok(Some(header)) = client.header(id) {
 							let parent_hash = *header.parent_hash();
 
 							let parent_id = BlockId::Hash(parent_hash);
-							let schema =
-								frontier_backend_client::onchain_storage_schema::<B, C, BE>(client.as_ref(), parent_id);
-							if let Some(block) = block_data_cache.current_block(schema, parent_hash).await {
-								rich_block.inner.header.parent_hash =
-									H256::from_slice(keccak_256(&rlp::encode(&block.header)).as_slice());
+							let schema = frontier_backend_client::onchain_storage_schema::<B, C, BE>(
+								client.as_ref(),
+								parent_id,
+							);
+							if let Some(block) =
+								block_data_cache.current_block(schema, parent_hash).await
+							{
+								rich_block.inner.header.parent_hash = H256::from_slice(
+									keccak_256(&rlp::encode(&block.header)).as_slice(),
+								);
 							}
 						}
 					}
@@ -2045,6 +2052,178 @@ where
 		})
 	}
 
+	fn block_receipts(&self, number: BlockNumber) -> BoxFuture<Result<Vec<Receipt>>> {
+		let client = Arc::clone(&self.client);
+		let overrides = Arc::clone(&self.overrides);
+		let block_data_cache = Arc::clone(&self.block_data_cache);
+		let backend = Arc::clone(&self.backend);
+
+		Box::pin(async move {
+			let id = match frontier_backend_client::native_block_id::<B, C>(
+				client.as_ref(),
+				backend.as_ref(),
+				Some(number),
+			)? {
+				Some(id) => id,
+				None => return Ok(vec![]),
+			};
+
+			let substrate_hash = client
+				.expect_block_hash_from_id(&id)
+				.map_err(|_| internal_err(format!("Expect block number from id: {}", id)))?;
+
+			let schema =
+				frontier_backend_client::onchain_storage_schema::<B, C, BE>(client.as_ref(), id);
+			let handler = overrides
+				.schemas
+				.get(&schema)
+				.unwrap_or(&overrides.fallback);
+
+			let block = block_data_cache.current_block(schema, substrate_hash).await;
+			let statuses = block_data_cache
+				.current_transaction_statuses(schema, substrate_hash)
+				.await;
+			let receipts = handler.current_receipts(&id);
+			let is_eip1559 = handler.is_eip1559(&id);
+
+			match (block, statuses, receipts) {
+				(Some(block), Some(statuses), Some(receipts)) => {
+					let block_hash = H256::from(keccak_256(&rlp::encode(&block.header)));
+
+					Ok(receipts
+						.iter()
+						.enumerate()
+						.map(|(index, receipt)| {
+							let (logs, logs_bloom, status_code, cumulative_gas_used, gas_used) =
+								if !is_eip1559 {
+									// Pre-london frontier update stored receipts require cumulative gas calculation.
+									match receipt {
+										ethereum::ReceiptV3::Legacy(d) => {
+											let index = core::cmp::min(receipts.len(), index + 1);
+											let cumulative_gas: u32 = receipts[..index]
+												.iter()
+												.map(|r| match r {
+													ethereum::ReceiptV3::Legacy(d) => {
+														Ok(d.used_gas.as_u32())
+													}
+													_ => Err(internal_err(format!(
+														"Unknown receipt"
+													))),
+												})
+												.sum::<Result<u32>>()?;
+											(
+												d.logs.clone(),
+												d.logs_bloom,
+												d.status_code,
+												U256::from(cumulative_gas),
+												d.used_gas,
+											)
+										}
+										_ => return Err(internal_err(format!("Unknown receipt"))),
+									}
+								} else {
+									match receipt {
+										ethereum::ReceiptV3::Legacy(d)
+										| ethereum::ReceiptV3::EIP2930(d)
+										| ethereum::ReceiptV3::EIP1559(d) => {
+											let cumulative_gas = d.used_gas;
+											let gas_used = if index > 0 {
+												let previous_receipt = receipts[index - 1].clone();
+												let previous_gas_used = match previous_receipt {
+													ethereum::ReceiptV3::Legacy(d)
+													| ethereum::ReceiptV3::EIP2930(d)
+													| ethereum::ReceiptV3::EIP1559(d) => d.used_gas,
+												};
+												cumulative_gas.saturating_sub(previous_gas_used)
+											} else {
+												cumulative_gas
+											};
+											(
+												d.logs.clone(),
+												d.logs_bloom,
+												d.status_code,
+												cumulative_gas,
+												gas_used,
+											)
+										}
+									}
+								};
+
+							let status = statuses[index].clone();
+							let mut cumulative_receipts = receipts.clone();
+							cumulative_receipts.truncate((status.transaction_index + 1) as usize);
+
+							let transaction = block.transactions[index].clone();
+							let effective_gas_price = match transaction {
+								EthereumTransaction::Legacy(t) => t.gas_price,
+								EthereumTransaction::EIP2930(t) => t.gas_price,
+								EthereumTransaction::EIP1559(t) => handler
+									.base_fee(&id)
+									.unwrap_or_default()
+									.checked_add(t.max_priority_fee_per_gas)
+									.unwrap_or(U256::max_value())
+									.min(t.max_fee_per_gas),
+							};
+
+							Ok(Receipt {
+								transaction_hash: Some(status.transaction_hash),
+								transaction_index: Some(status.transaction_index.into()),
+								block_hash: Some(block_hash),
+								from: Some(status.from),
+								to: status.to,
+								block_number: Some(block.header.number),
+								cumulative_gas_used,
+								gas_used: Some(gas_used),
+								contract_address: status.contract_address,
+								logs: {
+									let mut pre_receipts_log_index = None;
+									if cumulative_receipts.len() > 0 {
+										cumulative_receipts.truncate(cumulative_receipts.len() - 1);
+										pre_receipts_log_index = Some(
+											cumulative_receipts
+												.iter()
+												.map(|r| match r {
+													ethereum::ReceiptV3::Legacy(d)
+													| ethereum::ReceiptV3::EIP2930(d)
+													| ethereum::ReceiptV3::EIP1559(d) => d.logs.len() as u32,
+												})
+												.sum::<u32>(),
+										);
+									}
+									logs.iter()
+										.enumerate()
+										.map(|(i, log)| Log {
+											address: log.address,
+											topics: log.topics.clone(),
+											data: Bytes(log.data.clone()),
+											block_hash: Some(block_hash),
+											block_number: Some(block.header.number),
+											transaction_hash: Some(status.transaction_hash),
+											transaction_index: Some(
+												status.transaction_index.into(),
+											),
+											log_index: Some(U256::from(
+												(pre_receipts_log_index.unwrap_or(0)) + i as u32,
+											)),
+											transaction_log_index: Some(U256::from(i)),
+											removed: false,
+										})
+										.collect()
+								},
+								status_code: Some(U64::from(status_code)),
+								logs_bloom,
+								state_root: None,
+								effective_gas_price,
+							})
+						})
+						.map(|r| r.unwrap())
+						.collect())
+				}
+				_ => Ok(vec![]),
+			}
+		})
+	}
+
 	fn transaction_receipt(&self, hash: H256) -> BoxFuture<Result<Option<Receipt>>> {
 		let client = Arc::clone(&self.client);
 		let overrides = Arc::clone(&self.overrides);
@@ -2861,7 +3040,8 @@ where
 				// Make sure only block hashes marked as best are referencing cache checkpoints.
 				if notification.block == client.info().best_hash {
 					// Just map the change set to the actual data.
-					let storage: Vec<Option<StorageData>> = notification.changes
+					let storage: Vec<Option<StorageData>> = notification
+						.changes
 						.iter()
 						.filter_map(|(o_sk, _k, v)| {
 							if o_sk.is_none() {

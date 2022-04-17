@@ -87,6 +87,10 @@ pub trait EthApi {
 	#[rpc(name = "eth_getBlockByNumber")]
 	fn block_by_number(&self, _: BlockNumber, _: bool) -> BoxFuture<Result<Option<RichBlock>>>;
 
+	/// Returns block with given number.
+	#[rpc(name = "eth_getBlockReceipts")]
+	fn block_receipts(&self, _: BlockNumber) -> BoxFuture<Result<Vec<Receipt>>>;
+
 	/// Returns the number of transactions sent from given address at given time (block number).
 	#[rpc(name = "eth_getTransactionCount")]
 	fn transaction_count(&self, _: H160, _: Option<BlockNumber>) -> Result<U256>;
