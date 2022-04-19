@@ -1423,7 +1423,7 @@ checksum = "77f3309417938f28bf8228fcff79a4a37103981e3e186d2ccd19c74b38f4eb71"
 [[package]]
 name = "evm"
 version = "0.35.0"
-source = "git+https://github.com/purestake/evm?branch=jeremy-tmp-subcalls-and-delegatecall#dbd2f6b5152a10303039651e2cf75d3c022cb742"
+source = "git+https://github.com/purestake/evm?branch=jeremy-tmp-subcalls-and-delegatecall#bda9ffe921c139a45952215b74e38125fdc92b82"
 dependencies = [
  "auto_impl",
  "environmental",
@@ -1443,7 +1443,7 @@ dependencies = [
 [[package]]
 name = "evm-core"
 version = "0.35.0"
-source = "git+https://github.com/purestake/evm?branch=jeremy-tmp-subcalls-and-delegatecall#dbd2f6b5152a10303039651e2cf75d3c022cb742"
+source = "git+https://github.com/purestake/evm?branch=jeremy-tmp-subcalls-and-delegatecall#bda9ffe921c139a45952215b74e38125fdc92b82"
 dependencies = [
  "parity-scale-codec",
  "primitive-types",
@@ -1454,7 +1454,7 @@ dependencies = [
 [[package]]
 name = "evm-gasometer"
 version = "0.35.0"
-source = "git+https://github.com/purestake/evm?branch=jeremy-tmp-subcalls-and-delegatecall#dbd2f6b5152a10303039651e2cf75d3c022cb742"
+source = "git+https://github.com/purestake/evm?branch=jeremy-tmp-subcalls-and-delegatecall#bda9ffe921c139a45952215b74e38125fdc92b82"
 dependencies = [
  "environmental",
  "evm-core",
@@ -1465,7 +1465,7 @@ dependencies = [
 [[package]]
 name = "evm-runtime"
 version = "0.35.0"
-source = "git+https://github.com/purestake/evm?branch=jeremy-tmp-subcalls-and-delegatecall#dbd2f6b5152a10303039651e2cf75d3c022cb742"
+source = "git+https://github.com/purestake/evm?branch=jeremy-tmp-subcalls-and-delegatecall#bda9ffe921c139a45952215b74e38125fdc92b82"
 dependencies = [
  "auto_impl",
  "environmental",
