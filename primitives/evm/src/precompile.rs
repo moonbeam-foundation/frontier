@@ -16,7 +16,7 @@
 // limitations under the License.
 
 pub use evm::{
-	executor::stack::{PrecompileFailure, PrecompileOutput, PrecompileSet},
+	executor::stack::{PrecompileFailure, PrecompileHandle, PrecompileOutput, PrecompileSet},
 	Context, ExitError, ExitRevert, ExitSucceed,
 };
 use sp_std::vec::Vec;
@@ -28,7 +28,8 @@ pub trait Precompile {
 	/// Try to execute the precompile. Calculate the amount of gas needed with given `input` and
 	/// `target_gas`. Return `Ok(status, output, gas_used)` if the execution is
 	/// successful. Otherwise return `Err(_)`.
-	fn execute(
+	fn execute<H: PrecompileHandle>(
+		handle: &mut H,
 		input: &[u8],
 		target_gas: Option<u64>,
 		context: &Context,
@@ -47,15 +48,20 @@ pub trait LinearCostPrecompile {
 }
 
 impl<T: LinearCostPrecompile> Precompile for T {
-	fn execute(input: &[u8], target_gas: Option<u64>, _: &Context, _: bool) -> PrecompileResult {
+	fn execute<H: PrecompileHandle>(
+		handle: &mut H,
+		input: &[u8],
+		target_gas: Option<u64>,
+		_: &Context,
+		_: bool,
+	) -> PrecompileResult {
 		let cost = ensure_linear_cost(target_gas, input.len() as u64, T::BASE, T::WORD)?;
 
+		handle.record_cost(cost)?;
 		let (exit_status, output) = T::execute(input, cost)?;
 		Ok(PrecompileOutput {
 			exit_status,
-			cost,
 			output,
-			logs: Default::default(),
 		})
 	}
 }

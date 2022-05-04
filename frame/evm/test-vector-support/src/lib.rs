@@ -15,8 +15,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use evm::{Context, ExitSucceed};
-use fp_evm::Precompile;
+use evm::{Context, ExitError, ExitReason, ExitSucceed, Transfer};
+use fp_evm::{Precompile, PrecompileHandle};
+use sp_core::{H160, H256};
 
 #[cfg(feature = "std")]
 use serde::Deserialize;
@@ -31,6 +32,33 @@ struct EthConsensusTest {
 	Gas: Option<u64>,
 }
 
+struct MockHandle(u64);
+
+impl PrecompileHandle for MockHandle {
+	/// Perform subcall in provided context.
+	/// Precompile specifies in which context the subcall is executed.
+	fn call(
+		&mut self,
+		_: H160,
+		_: Option<Transfer>,
+		_: Vec<u8>,
+		_: Option<u64>,
+		_: bool,
+		_: &Context,
+	) -> (ExitReason, Vec<u8>) {
+		unimplemented!()
+	}
+
+	fn record_cost(&mut self, cost: u64) -> Result<(), ExitError> {
+		self.0 += cost;
+		Ok(())
+	}
+
+	fn log(&mut self, _: H160, _: Vec<H256>, _: Vec<u8>) {
+		unimplemented!()
+	}
+}
+
 /// Tests a precompile against the ethereum consensus tests defined in the given file at filepath.
 /// The file is expected to be in JSON format and contain an array of test vectors, where each
 /// vector can be deserialized into an "EthConsensusTest".
@@ -41,6 +69,7 @@ pub fn test_precompile_test_vectors<P: Precompile>(filepath: &str) -> Result<(),
 	let data = fs::read_to_string(&filepath).expect("Failed to read blake2F.json");
 
 	let tests: Vec<EthConsensusTest> = serde_json::from_str(&data).expect("expected json array");
+	let mut handle = MockHandle(0);
 
 	for test in tests {
 		let input: Vec<u8> = hex::decode(test.Input).expect("Could not hex-decode test input data");
@@ -53,7 +82,7 @@ pub fn test_precompile_test_vectors<P: Precompile>(filepath: &str) -> Result<(),
 			apparent_value: From::from(0),
 		};
 
-		match P::execute(&input, Some(cost), &context, false) {
+		match P::execute(&mut handle, &input, Some(cost), &context, false) {
 			Ok(result) => {
 				let as_hex: String = hex::encode(result.output);
 				assert_eq!(
@@ -70,7 +99,7 @@ pub fn test_precompile_test_vectors<P: Precompile>(filepath: &str) -> Result<(),
 				);
 				if let Some(expected_gas) = test.Gas {
 					assert_eq!(
-						result.cost, expected_gas,
+						handle.0, expected_gas,
 						"test '{}' failed (different gas cost)",
 						test.Name
 					);

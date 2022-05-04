@@ -23,12 +23,12 @@ use std::{
 	time,
 };
 
+use crate::cache::LRUCacheByteLimited;
 use ethereum::{BlockV2 as EthereumBlock, TransactionV2 as EthereumTransaction};
 use ethereum_types::{H160, H256, H512, H64, U256, U64};
 use evm::{ExitError, ExitReason};
 use futures::{future::TryFutureExt, StreamExt};
 use jsonrpc_core::{futures::future, BoxFuture, Error, Result};
-use crate::cache::LRUCacheByteLimited;
 use tokio::sync::{mpsc, oneshot};
 
 use codec::{Decode, Encode};
@@ -42,8 +42,7 @@ use sc_transaction_pool::{ChainApi, Pool};
 use sc_transaction_pool_api::{InPoolTransaction, TransactionPool};
 use sp_api::{ApiExt, BlockId, Core, HeaderT, ProvideRuntimeApi};
 use sp_block_builder::BlockBuilder;
-use sp_blockchain::BlockStatus;
-use sp_blockchain::HeaderBackend;
+use sp_blockchain::{BlockStatus, HeaderBackend};
 use sp_core::hashing::keccak_256;
 use sp_runtime::{
 	traits::{BlakeTwo256, Block as BlockT, NumberFor, One, Saturating, UniqueSaturatedInto, Zero},
@@ -63,8 +62,8 @@ use fp_rpc::{ConvertTransactionRuntimeApi, EthereumRuntimeRPCApi, TransactionSta
 use fp_storage::EthereumStorageSchema;
 
 use crate::{
-	error_on_execution_failure, format::Formatter, frontier_backend_client, internal_err, overrides::OverrideHandle,
-	public_key, EthSigner, StorageOverride,
+	error_on_execution_failure, format::Formatter, frontier_backend_client, internal_err,
+	overrides::OverrideHandle, public_key, EthSigner, StorageOverride,
 };
 
 /// Default JSONRPC error code return by geth
@@ -89,7 +88,9 @@ pub struct EthApi<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, F: Formatter
 	_marker: PhantomData<(B, BE, F)>,
 }
 
-impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, F: Formatter> EthApi<B, C, P, CT, BE, H, A, F> {
+impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, F: Formatter>
+	EthApi<B, C, P, CT, BE, H, A, F>
+{
 	pub fn new(
 		client: Arc<C>,
 		pool: Arc<P>,
@@ -349,18 +350,13 @@ where
 	let address_bloom_filter = FilteredParams::adresses_bloom_filter(&filter.address);
 	let topics_bloom_filter = FilteredParams::topics_bloom_filter(&topics_input);
 
-
-
 	while current_number <= to {
 		let id = BlockId::Number(current_number);
 		let substrate_hash = client
 			.expect_block_hash_from_id(&id)
 			.map_err(|_| internal_err(format!("Expect block number from id: {}", id)))?;
 
-		let schema = frontier_backend_client::onchain_storage_schema::<B, C, BE>(
-			client,
-			id,
-		);
+		let schema = frontier_backend_client::onchain_storage_schema::<B, C, BE>(client, id);
 
 		let block = block_data_cache.current_block(schema, substrate_hash).await;
 
@@ -706,24 +702,29 @@ where
 					// Indexers heavily rely on the parent hash.
 					// Moonbase client-level patch for inconsistent runtime 1200 state.
 					let number = rich_block.inner.header.number.unwrap_or_default();
-					if rich_block.inner.header.parent_hash == H256::default() 
-						&& number > U256::zero() {
-							let id = BlockId::Hash(substrate_hash);
-							if let Ok(Some(header)) = client.header(id) {
-								let parent_hash = *header.parent_hash();
-	
-								let parent_id = BlockId::Hash(parent_hash);
-								let schema =
-									frontier_backend_client::onchain_storage_schema::<B, C, BE>(client.as_ref(), parent_id);
-								if let Some(block) = block_data_cache.current_block(schema, parent_hash).await {
-									rich_block.inner.header.parent_hash =
-										H256::from_slice(keccak_256(&rlp::encode(&block.header)).as_slice());
-								}
+					if rich_block.inner.header.parent_hash == H256::default()
+						&& number > U256::zero()
+					{
+						let id = BlockId::Hash(substrate_hash);
+						if let Ok(Some(header)) = client.header(id) {
+							let parent_hash = *header.parent_hash();
+
+							let parent_id = BlockId::Hash(parent_hash);
+							let schema = frontier_backend_client::onchain_storage_schema::<B, C, BE>(
+								client.as_ref(),
+								parent_id,
+							);
+							if let Some(block) =
+								block_data_cache.current_block(schema, parent_hash).await
+							{
+								rich_block.inner.header.parent_hash = H256::from_slice(
+									keccak_256(&rlp::encode(&block.header)).as_slice(),
+								);
 							}
+						}
 					}
 					Ok(Some(rich_block))
-
-				},
+				}
 				_ => Ok(None),
 			}
 		})
@@ -782,19 +783,24 @@ where
 					// Indexers heavily rely on the parent hash.
 					// Moonbase client-level patch for inconsistent runtime 1200 state.
 					let number = rich_block.inner.header.number.unwrap_or_default();
-					if rich_block.inner.header.parent_hash == H256::default() 
-						&& number > U256::zero() {
-						
+					if rich_block.inner.header.parent_hash == H256::default()
+						&& number > U256::zero()
+					{
 						let id = BlockId::Hash(substrate_hash);
 						if let Ok(Some(header)) = client.header(id) {
 							let parent_hash = *header.parent_hash();
 
 							let parent_id = BlockId::Hash(parent_hash);
-							let schema =
-								frontier_backend_client::onchain_storage_schema::<B, C, BE>(client.as_ref(), parent_id);
-							if let Some(block) = block_data_cache.current_block(schema, parent_hash).await {
-								rich_block.inner.header.parent_hash =
-									H256::from_slice(keccak_256(&rlp::encode(&block.header)).as_slice());
+							let schema = frontier_backend_client::onchain_storage_schema::<B, C, BE>(
+								client.as_ref(),
+								parent_id,
+							);
+							if let Some(block) =
+								block_data_cache.current_block(schema, parent_hash).await
+							{
+								rich_block.inner.header.parent_hash = H256::from_slice(
+									keccak_256(&rlp::encode(&block.header)).as_slice(),
+								);
 							}
 						}
 					}
@@ -2876,7 +2882,8 @@ where
 				// Make sure only block hashes marked as best are referencing cache checkpoints.
 				if notification.block == client.info().best_hash {
 					// Just map the change set to the actual data.
-					let storage: Vec<Option<StorageData>> = notification.changes
+					let storage: Vec<Option<StorageData>> = notification
+						.changes
 						.iter()
 						.filter_map(|(o_sk, _k, v)| {
 							if o_sk.is_none() {
