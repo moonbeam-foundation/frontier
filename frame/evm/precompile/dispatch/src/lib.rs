@@ -41,8 +41,8 @@ where
 	T::Call: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo + Decode,
 	<T::Call as Dispatchable>::Origin: From<Option<T::AccountId>>,
 {
-	fn execute<H: PrecompileHandle>(
-		handle: &mut H,
+	fn execute(
+		handle: &mut impl PrecompileHandle,
 		input: &[u8],
 		target_gas: Option<u64>,
 		context: &Context,

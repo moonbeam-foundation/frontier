@@ -28,8 +28,8 @@ pub trait Precompile {
 	/// Try to execute the precompile. Calculate the amount of gas needed with given `input` and
 	/// `target_gas`. Return `Ok(status, output, gas_used)` if the execution is
 	/// successful. Otherwise return `Err(_)`.
-	fn execute<H: PrecompileHandle>(
-		handle: &mut H,
+	fn execute(
+		handle: &mut impl PrecompileHandle,
 		input: &[u8],
 		target_gas: Option<u64>,
 		context: &Context,
@@ -48,8 +48,8 @@ pub trait LinearCostPrecompile {
 }
 
 impl<T: LinearCostPrecompile> Precompile for T {
-	fn execute<H: PrecompileHandle>(
-		handle: &mut H,
+	fn execute(
+		handle: &mut impl PrecompileHandle,
 		input: &[u8],
 		target_gas: Option<u64>,
 		_: &Context,

@@ -76,8 +76,8 @@ impl Bn128Add {
 }
 
 impl Precompile for Bn128Add {
-	fn execute<H: PrecompileHandle>(
-		handle: &mut H,
+	fn execute(
+		handle: &mut impl PrecompileHandle,
 		input: &[u8],
 		_target_gas: Option<u64>,
 		_context: &Context,
@@ -124,8 +124,8 @@ impl Bn128Mul {
 }
 
 impl Precompile for Bn128Mul {
-	fn execute<H: PrecompileHandle>(
-		handle: &mut H,
+	fn execute(
+		handle: &mut impl PrecompileHandle,
 		input: &[u8],
 		_target_gas: Option<u64>,
 		_context: &Context,
@@ -174,8 +174,8 @@ impl Bn128Pairing {
 }
 
 impl Precompile for Bn128Pairing {
-	fn execute<H: PrecompileHandle>(
-		handle: &mut H,
+	fn execute(
+		handle: &mut impl PrecompileHandle,
 		input: &[u8],
 		target_gas: Option<u64>,
 		_context: &Context,

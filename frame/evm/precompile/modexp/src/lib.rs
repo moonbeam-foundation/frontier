@@ -110,8 +110,8 @@ fn calculate_gas_cost(
 //       see: https://eips.ethereum.org/EIPS/eip-198
 
 impl Precompile for Modexp {
-	fn execute<H: PrecompileHandle>(
-		handle: &mut H,
+	fn execute(
+		handle: &mut impl PrecompileHandle,
 		input: &[u8],
 		target_gas: Option<u64>,
 		_context: &Context,

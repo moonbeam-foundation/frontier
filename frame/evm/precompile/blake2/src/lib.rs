@@ -36,8 +36,8 @@ impl Blake2F {
 impl Precompile for Blake2F {
 	/// Format of `input`:
 	/// [4 bytes for rounds][64 bytes for h][128 bytes for m][8 bytes for t_0][8 bytes for t_1][1 byte for f]
-	fn execute<H: PrecompileHandle>(
-		handle: &mut H,
+	fn execute(
+		handle: &mut impl PrecompileHandle,
 		input: &[u8],
 		target_gas: Option<u64>,
 		_context: &Context,
