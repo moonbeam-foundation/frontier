@@ -16,14 +16,14 @@ sha3 = { version = "0.10", default-features = false }
 
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false }
 scale-info = { version = "2.0.0", default-features = false, features = ["derive"] }
-sp-io = { version = "6.0.0", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19" }
-sp-runtime = { version = "6.0.0", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19" }
-sp-std = { version = "4.0.0", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19" }
+sp-io = { version = "6.0.0", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19-gorka-xcm-v3" }
+sp-runtime = { version = "6.0.0", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19-gorka-xcm-v3" }
+sp-std = { version = "4.0.0", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19-gorka-xcm-v3" }
 
-frame-support = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19" }
-frame-system = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19" }
-pallet-balances = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19" }
-pallet-timestamp = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19" }
+frame-support = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19-gorka-xcm-v3" }
+frame-system = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19-gorka-xcm-v3" }
+pallet-balances = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19-gorka-xcm-v3" }
+pallet-timestamp = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.19-gorka-xcm-v3" }
 
 fp-consensus = { version = "2.0.0-dev", path = "../../primitives/consensus", default-features = false }
 fp-evm = { version = "3.0.0-dev", path = "../../primitives/evm", default-features = false }
@@ -36,7 +36,7 @@ num_enum = { version = "0.5.4", default-features = false }
 [dev-dependencies]
 libsecp256k1 = { version = "0.7", features = ["static-context", "hmac"] }
 rustc-hex = { version = "2.1.0", default-features = false }
-sp-core = { version = "6.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.19" }
+sp-core = { version = "6.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.19-gorka-xcm-v3" }
 
 [features]
 default = ["std"]
