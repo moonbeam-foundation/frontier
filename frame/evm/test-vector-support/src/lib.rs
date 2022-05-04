@@ -15,8 +15,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use evm::{Context, ExitSucceed};
-use fp_evm::Precompile;
+use std::fs;
+
+use evm::{Context, ExitError, ExitReason, ExitSucceed, Transfer};
+use fp_evm::{Precompile, PrecompileHandle};
+use sp_core::{H160, H256};
 
 #[cfg(feature = "std")]
 use serde::Deserialize;
@@ -29,6 +32,57 @@ struct EthConsensusTest {
 	Expected: String,
 	Name: String,
 	Gas: Option<u64>,
+}
+
+pub struct MockHandle(pub u64);
+
+impl PrecompileHandle for MockHandle {
+	/// Perform subcall in provided context.
+	/// Precompile specifies in which context the subcall is executed.
+	fn call(
+		&mut self,
+		_: H160,
+		_: Option<Transfer>,
+		_: Vec<u8>,
+		_: Option<u64>,
+		_: bool,
+		_: &Context,
+	) -> (ExitReason, Vec<u8>) {
+		unimplemented!()
+	}
+
+	fn record_cost(&mut self, cost: u64) -> Result<(), ExitError> {
+		self.0 += cost;
+		Ok(())
+	}
+
+	fn log(&mut self, _: H160, _: Vec<H256>, _: Vec<u8>) -> Result<(), ExitError> {
+		unimplemented!()
+	}
+
+	fn remaining_gas(&self) -> u64 {
+		unimplemented!()
+	}
+
+	fn code_address(&self) -> H160 {
+		unimplemented!()
+	}
+
+	fn input(&self) -> &[u8] {
+		unimplemented!()
+	}
+
+	fn context(&self) -> &Context {
+		unimplemented!()
+	}
+
+	fn is_static(&self) -> bool {
+		unimplemented!()
+	}
+
+	fn gas_limit(&self) -> Option<u64> {
+		unimplemented!()
+	}
 }
 
 /// Tests a precompile against the ethereum consensus tests defined in the given file at filepath.
@@ -53,7 +107,9 @@ pub fn test_precompile_test_vectors<P: Precompile>(filepath: &str) -> Result<(),
 			apparent_value: From::from(0),
 		};
 
-		match P::execute(&input, Some(cost), &context, false) {
+		let mut handle = MockHandle(0);
+
+		match P::execute(&mut handle, &input, Some(cost), &context, false) {
 			Ok(result) => {
 				let as_hex: String = hex::encode(result.output);
 				assert_eq!(
@@ -70,7 +126,7 @@ pub fn test_precompile_test_vectors<P: Precompile>(filepath: &str) -> Result<(),
 				);
 				if let Some(expected_gas) = test.Gas {
 					assert_eq!(
-						result.cost, expected_gas,
+						handle.0, expected_gas,
 						"test '{}' failed (different gas cost)",
 						test.Name
 					);
