@@ -31,6 +31,7 @@ pub use evm::backend::{Basic as Account, Log};
 pub use self::precompile::{
 	Context, ExitError, ExitRevert, ExitSucceed, LinearCostPrecompile, Precompile,
 	PrecompileFailure, PrecompileHandle, PrecompileOutput, PrecompileResult, PrecompileSet,
+	Transfer,
 };
 
 #[derive(Clone, Eq, PartialEq, Encode, Decode, Default)]
