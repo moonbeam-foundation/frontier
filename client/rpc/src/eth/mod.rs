@@ -120,7 +120,7 @@ where
 	BE: Backend<B> + 'static,
 	BE::State: StateBackend<BlakeTwo256>,
 	A: ChainApi<Block = B> + 'static,
-	F: Send + Sync + 'static,
+	F: Formatter + Send + Sync + 'static,
 {
 	// ########################################################################
 	// Client
