@@ -638,7 +638,9 @@ where
 				const BATCH_PRECOMPILE_BATCH_ALL_SELECTOR: [u8; 4] = hex_literal::hex!("96e292b8");
 				if request.to == Some(BATCH_PRECOMPILE_ADDRESS) {
 					if let Some(ref mut data) = request.data {
-						data.0[..8].copy_from_slice(&BATCH_PRECOMPILE_BATCH_ALL_SELECTOR);
+						if data.0.len() >= 4 {
+							data.0[..4].copy_from_slice(&BATCH_PRECOMPILE_BATCH_ALL_SELECTOR);
+						}
 					}
 				}
 
