@@ -44,7 +44,7 @@ use crate::{
 /// Default JSONRPC error code return by geth
 pub const JSON_RPC_ERROR_DEFAULT: i32 = -32000;
 
-impl<B, C, P, CT, BE, H: ExHashT, A: ChainApi> Eth<B, C, P, CT, BE, H, A>
+impl<B, C, P, CT, BE, H: ExHashT, A: ChainApi, F> Eth<B, C, P, CT, BE, H, A, F>
 where
 	B: BlockT<Hash = H256> + Send + Sync + 'static,
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE>,
