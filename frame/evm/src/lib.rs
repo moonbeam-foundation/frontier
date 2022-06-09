@@ -87,9 +87,9 @@ pub use evm::{
 #[cfg(feature = "std")]
 use fp_evm::GenesisAccount;
 pub use fp_evm::{
-	Account, CallInfo, CreateInfo, ExecutionInfo, FeeCalculator, LinearCostPrecompile, Log,
-	Precompile, PrecompileFailure, PrecompileHandle, PrecompileOutput, PrecompileResult,
-	PrecompileSet, Vicinity,
+	Account, CallInfo, CreateInfo, ExecutionInfo, FeeCalculator, InvalidEvmTransactionError,
+	LinearCostPrecompile, Log, Precompile, PrecompileFailure, PrecompileHandle, PrecompileOutput,
+	PrecompileResult, PrecompileSet, Vicinity,
 };
 
 pub use self::{
@@ -197,6 +197,7 @@ pub mod pallet {
 			T::CallOrigin::ensure_address_origin(&source, origin)?;
 
 			let is_transactional = true;
+			let validate = true;
 			let info = match T::Runner::call(
 				source,
 				target,
@@ -208,6 +209,7 @@ pub mod pallet {
 				nonce,
 				access_list,
 				is_transactional,
+				validate,
 				T::config(),
 			) {
 				Ok(info) => info,
@@ -256,6 +258,7 @@ pub mod pallet {
 			T::CallOrigin::ensure_address_origin(&source, origin)?;
 
 			let is_transactional = true;
+			let validate = true;
 			let info = match T::Runner::create(
 				source,
 				init,
@@ -266,6 +269,7 @@ pub mod pallet {
 				nonce,
 				access_list,
 				is_transactional,
+				validate,
 				T::config(),
 			) {
 				Ok(info) => info,
@@ -322,6 +326,7 @@ pub mod pallet {
 			T::CallOrigin::ensure_address_origin(&source, origin)?;
 
 			let is_transactional = true;
+			let validate = true;
 			let info = match T::Runner::create2(
 				source,
 				init,
@@ -333,6 +338,7 @@ pub mod pallet {
 				nonce,
 				access_list,
 				is_transactional,
+				validate,
 				T::config(),
 			) {
 				Ok(info) => info,
@@ -436,8 +442,28 @@ pub mod pallet {
 		GasPriceTooLow,
 		/// Nonce is invalid
 		InvalidNonce,
-		/// Maximum address count exceeded
-		MaxAddressCountExceeded,
+		/// Gas limit is too low.
+		GasLimitTooLow,
+		/// Gas limit is too high.
+		GasLimitTooHigh,
+		/// Undefined error.
+		Undefined,
+	}
+
+	impl<T> From<InvalidEvmTransactionError> for Error<T> {
+		fn from(validation_error: InvalidEvmTransactionError) -> Self {
+			match validation_error {
+				InvalidEvmTransactionError::GasLimitTooLow => Error::<T>::GasLimitTooLow,
+				InvalidEvmTransactionError::GasLimitTooHigh => Error::<T>::GasLimitTooHigh,
+				InvalidEvmTransactionError::GasPriceTooLow => Error::<T>::GasLimitTooLow,
+				InvalidEvmTransactionError::PriorityFeeTooHigh => Error::<T>::GasPriceTooLow,
+				InvalidEvmTransactionError::BalanceTooLow => Error::<T>::BalanceLow,
+				InvalidEvmTransactionError::TxNonceTooLow => Error::<T>::InvalidNonce,
+				InvalidEvmTransactionError::TxNonceTooHigh => Error::<T>::InvalidNonce,
+				InvalidEvmTransactionError::InvalidPaymentInput => Error::<T>::GasPriceTooLow,
+				_ => Error::<T>::Undefined,
+			}
+		}
 	}
 
 	#[pallet::genesis_config]
