@@ -30,6 +30,7 @@ fp-evm = { version = "3.0.0-dev", path = "../../primitives/evm", default-feature
 fp-rpc = { version = "3.0.0-dev", path = "../../primitives/rpc", default-features = false }
 fp-self-contained = { version = "1.0.0-dev", path = "../../primitives/self-contained", default-features = false }
 fp-storage = { version = "2.0.0", path = "../../primitives/storage", default-features = false }
+fp-xcm = { version = "1.0.0-dev", path = "../../primitives/xcm", default-features = false }
 pallet-evm = { version = "6.0.0-dev", path = "../evm", default-features = false }
 num_enum = { version = "0.5.4", default-features = false }
 
@@ -67,6 +68,7 @@ std = [
 	"fp-rpc/std",
 	"fp-self-contained/std",
 	"fp-storage/std",
+	"fp-xcm/std",
 	"pallet-evm/std",
 	"num_enum/std",
 ]
