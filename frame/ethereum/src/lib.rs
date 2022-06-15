@@ -1059,12 +1059,8 @@ struct InvalidTransactionWrapper(InvalidTransaction);
 impl From<InvalidEvmTransactionError> for InvalidTransactionWrapper {
 	fn from(validation_error: InvalidEvmTransactionError) -> Self {
 		match validation_error {
-			InvalidEvmTransactionError::GasLimitTooLow => InvalidTransactionWrapper(
-				InvalidTransaction::Custom(TransactionValidationError::InvalidGasLimit as u8),
-			),
-			InvalidEvmTransactionError::GasLimitTooHigh => InvalidTransactionWrapper(
-				InvalidTransaction::Custom(TransactionValidationError::InvalidGasLimit as u8),
-			),
+			InvalidEvmTransactionError::GasLimitTooLow => InvalidTransactionWrapper(InvalidTransaction::Payment),
+			InvalidEvmTransactionError::GasLimitTooHigh => InvalidTransactionWrapper(InvalidTransaction::Payment),
 			InvalidEvmTransactionError::GasPriceTooLow => {
 				InvalidTransactionWrapper(InvalidTransaction::Payment)
 			}

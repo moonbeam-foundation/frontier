@@ -448,6 +448,7 @@ pub mod pallet {
 		GasLimitTooHigh,
 		/// Undefined error.
 		Undefined,
+		MaxAddressCountExceeded,
 	}
 
 	impl<T> From<InvalidEvmTransactionError> for Error<T> {
