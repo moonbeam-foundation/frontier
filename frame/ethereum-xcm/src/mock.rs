@@ -26,8 +26,7 @@ use frame_support::{
 };
 use pallet_evm::{AddressMapping, EnsureAddressTruncated, FeeCalculator};
 use rlp::RlpStream;
-use sha3::Digest;
-use sp_core::{H160, H256, U256};
+use sp_core::{hashing::keccak_256, H160, H256, U256};
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, IdentityLookup},
@@ -35,7 +34,13 @@ use sp_runtime::{
 };
 
 use super::*;
-use crate::IntermediateStateRoot;
+use sp_runtime::{
+	traits::DispatchInfoOf,
+	transaction_validity::{
+		TransactionValidity, TransactionValidityError,
+	},
+};
+use pallet_ethereum::IntermediateStateRoot;
 
 pub type SignedExtra = (frame_system::CheckSpecVersion<Test>,);
 
@@ -52,7 +57,8 @@ frame_support::construct_runtime! {
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage},
 		EVM: pallet_evm::{Pallet, Call, Storage, Config, Event<T>},
-		Ethereum: crate::{Pallet, Call, Storage, Event, Origin},
+		Ethereum: pallet_ethereum::{Pallet, Call, Storage, Event, Origin},
+		EthereumXcm: crate::{Pallet, Call, Origin},
 	}
 }
 
@@ -168,13 +174,18 @@ impl pallet_evm::Config for Test {
 	type BlockGasLimit = BlockGasLimit;
 	type OnChargeTransaction = ();
 	type FindAuthor = FindAuthorTruncated;
-	type BlockHashMapping = crate::EthereumBlockHashMapping<Self>;
-	type WeightInfo = ();
+	type BlockHashMapping = pallet_ethereum::EthereumBlockHashMapping<Self>;
+}
+
+impl pallet_ethereum::Config for Test {
+	type Event = Event;
+	type StateRoot = IntermediateStateRoot<Self>;
 }
 
 impl crate::Config for Test {
-	type Event = Event;
-	type StateRoot = IntermediateStateRoot<Self>;
+	type InvalidEvmTransactionError = pallet_ethereum::InvalidTransactionWrapper;
+	type ValidatedTransaction = pallet_ethereum::ValidatedTransaction<Self>;
+	type XcmEthereumOrigin = crate::EnsureXcmEthereumTransaction;
 }
 
 impl fp_self_contained::SelfContainedCall for Call {
@@ -222,8 +233,8 @@ impl fp_self_contained::SelfContainedCall for Call {
 	) -> Option<sp_runtime::DispatchResultWithInfo<sp_runtime::traits::PostDispatchInfoOf<Self>>> {
 		use sp_runtime::traits::Dispatchable as _;
 		match self {
-			call @ Call::Ethereum(crate::Call::transact { .. }) => {
-				Some(call.dispatch(Origin::from(crate::RawOrigin::EthereumTransaction(info))))
+			call @ Call::Ethereum(pallet_ethereum::Call::transact { .. }) => {
+				Some(call.dispatch(Origin::from(pallet_ethereum::RawOrigin::EthereumTransaction(info))))
 			}
 			_ => None,
 		}
@@ -240,7 +251,7 @@ fn address_build(seed: u8) -> AccountInfo {
 	let private_key = H256::from_slice(&[(seed + 1) as u8; 32]); //H256::from_low_u64_be((i + 1) as u64);
 	let secret_key = libsecp256k1::SecretKey::parse_slice(&private_key[..]).unwrap();
 	let public_key = &libsecp256k1::PublicKey::from_secret_key(&secret_key).serialize()[1..65];
-	let address = H160::from(H256::from_slice(&Keccak256::digest(public_key)[..]));
+	let address = H160::from(H256::from(keccak_256(public_key)));
 
 	let mut data = [0u8; 32];
 	data[0..20].copy_from_slice(&address[..]);
@@ -275,20 +286,6 @@ pub fn new_test_ext(accounts_len: usize) -> (Vec<AccountInfo>, sp_io::TestExtern
 	(pairs, ext.into())
 }
 
-pub fn contract_address(sender: H160, nonce: u64) -> H160 {
-	let mut rlp = RlpStream::new_list(2);
-	rlp.append(&sender);
-	rlp.append(&nonce);
-
-	H160::from_slice(&Keccak256::digest(&rlp.out())[12..])
-}
-
-pub fn storage_address(sender: H160, slot: H256) -> H256 {
-	H256::from_slice(&Keccak256::digest(
-		[&H256::from(sender)[..], &slot[..]].concat().as_slice(),
-	))
-}
-
 pub struct LegacyUnsignedTransaction {
 	pub nonce: U256,
 	pub gas_price: U256,
@@ -315,7 +312,7 @@ impl LegacyUnsignedTransaction {
 	fn signing_hash(&self) -> H256 {
 		let mut stream = RlpStream::new();
 		self.signing_rlp_append(&mut stream);
-		H256::from_slice(&Keccak256::digest(&stream.out()).as_slice())
+		H256::from(keccak_256(&stream.out()))
 	}
 
 	pub fn sign(&self, key: &H256) -> Transaction {

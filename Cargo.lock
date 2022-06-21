@@ -1784,6 +1784,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "fp-ethereum"
+version = "1.0.0-dev"
+dependencies = [
+ "ethereum",
+ "ethereum-types",
+ "fp-evm",
+ "frame-support",
+ "parity-scale-codec",
+ "sp-core",
+ "sp-std",
+]
+
+[[package]]
 name = "fp-evm"
 version = "3.0.0-dev"
 dependencies = [
@@ -2121,6 +2134,7 @@ dependencies = [
  "pallet-base-fee",
  "pallet-dynamic-fee",
  "pallet-ethereum",
+ "pallet-ethereum-xcm",
  "pallet-evm",
  "pallet-evm-precompile-modexp",
  "pallet-evm-precompile-sha3fips",
@@ -4443,16 +4457,45 @@ dependencies = [
  "ethereum-types",
  "evm",
  "fp-consensus",
+ "fp-ethereum",
  "fp-evm",
  "fp-rpc",
  "fp-self-contained",
  "fp-storage",
+ "frame-support",
+ "frame-system",
+ "hex",
+ "libsecp256k1",
+ "pallet-balances",
+ "pallet-evm",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "rlp",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-ethereum-xcm"
+version = "1.0.0-dev"
+dependencies = [
+ "ethereum",
+ "ethereum-types",
+ "fp-ethereum",
+ "fp-evm",
+ "fp-rpc",
+ "fp-self-contained",
  "fp-xcm",
  "frame-support",
  "frame-system",
  "libsecp256k1",
  "num_enum",
  "pallet-balances",
+ "pallet-ethereum",
  "pallet-evm",
  "pallet-timestamp",
  "parity-scale-codec",
