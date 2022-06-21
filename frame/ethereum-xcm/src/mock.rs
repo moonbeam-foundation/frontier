@@ -34,7 +34,13 @@ use sp_runtime::{
 };
 
 use super::*;
-use crate::IntermediateStateRoot;
+use sp_runtime::{
+	traits::DispatchInfoOf,
+	transaction_validity::{
+		TransactionValidity, TransactionValidityError,
+	},
+};
+use pallet_ethereum::IntermediateStateRoot;
 
 pub type SignedExtra = (frame_system::CheckSpecVersion<Test>,);
 
@@ -51,7 +57,8 @@ frame_support::construct_runtime! {
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage},
 		EVM: pallet_evm::{Pallet, Call, Storage, Config, Event<T>},
-		Ethereum: crate::{Pallet, Call, Storage, Event, Origin},
+		Ethereum: pallet_ethereum::{Pallet, Call, Storage, Event, Origin},
+		EthereumXcm: crate::{Pallet, Call, Origin},
 	}
 }
 
@@ -167,12 +174,18 @@ impl pallet_evm::Config for Test {
 	type BlockGasLimit = BlockGasLimit;
 	type OnChargeTransaction = ();
 	type FindAuthor = FindAuthorTruncated;
-	type BlockHashMapping = crate::EthereumBlockHashMapping<Self>;
+	type BlockHashMapping = pallet_ethereum::EthereumBlockHashMapping<Self>;
+}
+
+impl pallet_ethereum::Config for Test {
+	type Event = Event;
+	type StateRoot = IntermediateStateRoot<Self>;
 }
 
 impl crate::Config for Test {
-	type Event = Event;
-	type StateRoot = IntermediateStateRoot<Self>;
+	type InvalidEvmTransactionError = pallet_ethereum::InvalidTransactionWrapper;
+	type ValidatedTransaction = pallet_ethereum::ValidatedTransaction<Self>;
+	type XcmEthereumOrigin = crate::EnsureXcmEthereumTransaction;
 }
 
 impl fp_self_contained::SelfContainedCall for Call {
@@ -220,8 +233,8 @@ impl fp_self_contained::SelfContainedCall for Call {
 	) -> Option<sp_runtime::DispatchResultWithInfo<sp_runtime::traits::PostDispatchInfoOf<Self>>> {
 		use sp_runtime::traits::Dispatchable as _;
 		match self {
-			call @ Call::Ethereum(crate::Call::transact { .. }) => {
-				Some(call.dispatch(Origin::from(crate::RawOrigin::EthereumTransaction(info))))
+			call @ Call::Ethereum(pallet_ethereum::Call::transact { .. }) => {
+				Some(call.dispatch(Origin::from(pallet_ethereum::RawOrigin::EthereumTransaction(info))))
 			}
 			_ => None,
 		}
@@ -271,20 +284,6 @@ pub fn new_test_ext(accounts_len: usize) -> (Vec<AccountInfo>, sp_io::TestExtern
 		.unwrap();
 
 	(pairs, ext.into())
-}
-
-pub fn contract_address(sender: H160, nonce: u64) -> H160 {
-	let mut rlp = RlpStream::new_list(2);
-	rlp.append(&sender);
-	rlp.append(&nonce);
-
-	H160::from_slice(&keccak_256(&rlp.out())[12..])
-}
-
-pub fn storage_address(sender: H160, slot: H256) -> H256 {
-	H256::from(keccak_256(
-		[&H256::from(sender)[..], &slot[..]].concat().as_slice(),
-	))
 }
 
 pub struct LegacyUnsignedTransaction {

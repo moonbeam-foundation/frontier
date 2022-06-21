@@ -1,10 +1,10 @@
 [package]
-name = "pallet-ethereum"
-version = "4.0.0-dev"
+name = "pallet-ethereum-xcm"
+version = "1.0.0-dev"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 license = "Apache-2.0"
-description = "Ethereum compatibility full block processing emulation pallet for Substrate."
+description = "Xcm Transact compatibility for pallet-etherum."
 repository = "https://github.com/paritytech/frontier/"
 
 [package.metadata.docs.rs]
@@ -12,7 +12,6 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 ethereum = { version = "0.12.0", default-features = false, features = ["with-codec"] }
-evm = { git = "https://github.com/rust-blockchain/evm", rev = "01bcbd2205a212c34451d3b4fabc962793b057d3", features = ["with-codec"], default-features = false }
 serde = { version = "1.0.137", optional = true }
 
 # Parity
@@ -31,15 +30,15 @@ frame-system = { version = "4.0.0-dev", git = "https://github.com/paritytech/sub
 pallet-timestamp = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "master", default-features = false }
 
 # Frontier
-fp-consensus = { version = "2.0.0-dev", path = "../../primitives/consensus", default-features = false }
 fp-ethereum = { version = "1.0.0-dev", path = "../../primitives/ethereum", default-features = false }
 fp-evm = { version = "3.0.0-dev", path = "../../primitives/evm", default-features = false }
 fp-rpc = { version = "3.0.0-dev", path = "../../primitives/rpc", default-features = false }
 fp-self-contained = { version = "1.0.0-dev", path = "../../primitives/self-contained", default-features = false }
-fp-storage = { version = "2.0.0", path = "../../primitives/storage", default-features = false }
+fp-xcm = { version = "1.0.0-dev", path = "../../primitives/xcm", default-features = false }
 pallet-evm = { version = "6.0.0-dev", path = "../evm", default-features = false }
 
 [dev-dependencies]
+pallet-ethereum = { version = "4.0.0-dev", path = "../ethereum" }
 hex = "0.4.3"
 # Parity
 libsecp256k1 = { version = "0.7", features = ["static-context", "hmac"] }
@@ -52,7 +51,6 @@ pallet-balances = { version = "4.0.0-dev", git = "https://github.com/paritytech/
 default = ["std"]
 std = [
 	"ethereum/std",
-	"evm/std",
 	"serde",
 	# Parity
 	"codec/std",
@@ -68,12 +66,11 @@ std = [
 	"frame-system/std",
 	"pallet-timestamp/std",
 	# Frontier
-	"fp-consensus/std",
 	"fp-ethereum/std",
 	"fp-evm/std",
 	"fp-rpc/std",
 	"fp-self-contained/std",
-	"fp-storage/std",
+	"fp-xcm/std",
 	"pallet-evm/std",
 ]
 runtime-benchmarks = [

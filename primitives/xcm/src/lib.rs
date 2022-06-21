@@ -195,7 +195,7 @@ mod tests {
 		let xcm_transaction = EthereumXcmTransactionV1 {
 			gas_limit: U256::from(1),
 			fee_payment: EthereumXcmFee::Auto(AutoEthereumXcmFee::Low),
-			action: TransactionAction::Create,
+			action: TransactionAction::Call(H160::default()),
 			value: U256::from(0),
 			input: vec![1u8],
 			access_list: None,
@@ -208,7 +208,7 @@ mod tests {
 			max_fee_per_gas: base_fee,
 			max_priority_fee_per_gas: U256::from(0),
 			gas_limit: U256::from(1),
-			action: TransactionAction::Create,
+			action: TransactionAction::Call(H160::default()),
 			value: U256::from(0),
 			input: vec![1u8],
 			access_list: vec![],
@@ -228,7 +228,7 @@ mod tests {
 		let xcm_transaction = EthereumXcmTransactionV1 {
 			gas_limit: U256::from(1),
 			fee_payment: EthereumXcmFee::Auto(AutoEthereumXcmFee::Medium),
-			action: TransactionAction::Create,
+			action: TransactionAction::Call(H160::default()),
 			value: U256::from(0),
 			input: vec![1u8],
 			access_list: None,
@@ -241,7 +241,7 @@ mod tests {
 			max_fee_per_gas: base_fee * 2,
 			max_priority_fee_per_gas: base_fee,
 			gas_limit: U256::from(1),
-			action: TransactionAction::Create,
+			action: TransactionAction::Call(H160::default()),
 			value: U256::from(0),
 			input: vec![1u8],
 			access_list: vec![],
@@ -261,9 +261,9 @@ mod tests {
 		let xcm_transaction = EthereumXcmTransactionV1 {
 			gas_limit: U256::from(1),
 			fee_payment: EthereumXcmFee::Auto(AutoEthereumXcmFee::High),
-			action: TransactionAction::Create,
+			action: TransactionAction::Call(H160::default()),
 			value: U256::from(0),
-			input: vec![1u8],
+			input: vec![],
 			access_list: None,
 		};
 		let nonce = U256::from(0);
@@ -274,9 +274,9 @@ mod tests {
 			max_fee_per_gas: base_fee * 3,
 			max_priority_fee_per_gas: base_fee * 2,
 			gas_limit: U256::from(1),
-			action: TransactionAction::Create,
+			action: TransactionAction::Call(H160::default()),
 			value: U256::from(0),
-			input: vec![1u8],
+			input: vec![],
 			access_list: vec![],
 			odd_y_parity: true,
 			r: H256::from_low_u64_be(1u64),
@@ -297,9 +297,9 @@ mod tests {
 				max_fee_per_gas: None,
 				max_priority_fee_per_gas: None,
 			}),
-			action: TransactionAction::Create,
+			action: TransactionAction::Call(H160::default()),
 			value: U256::from(0),
-			input: vec![1u8],
+			input: vec![],
 			access_list: None,
 		};
 		let nonce = U256::from(0);
@@ -308,9 +308,9 @@ mod tests {
 			nonce,
 			gas_price,
 			gas_limit: U256::from(1),
-			action: TransactionAction::Create,
+			action: TransactionAction::Call(H160::default()),
 			value: U256::from(0),
-			input: vec![1u8],
+			input: vec![],
 			signature: TransactionSignature::new(42, rs_id(), rs_id()).unwrap(),
 		}));
 
@@ -338,9 +338,9 @@ mod tests {
 				max_fee_per_gas: None,
 				max_priority_fee_per_gas: None,
 			}),
-			action: TransactionAction::Create,
+			action: TransactionAction::Call(H160::default()),
 			value: U256::from(0),
-			input: vec![1u8],
+			input: vec![],
 			access_list: access_list.clone(),
 		};
 
@@ -351,9 +351,9 @@ mod tests {
 			nonce,
 			gas_price,
 			gas_limit: U256::from(1),
-			action: TransactionAction::Create,
+			action: TransactionAction::Call(H160::default()),
 			value: U256::from(0),
-			input: vec![1u8],
+			input: vec![],
 			access_list: from_tuple_to_access_list(&access_list.unwrap()),
 			odd_y_parity: true,
 			r: H256::from_low_u64_be(1u64),
