@@ -16,7 +16,6 @@
 // limitations under the License.
 
 use frame_support::weights::{DispatchInfo, GetDispatchInfo};
-use sp_debug_derive::RuntimeDebug;
 use sp_runtime::{
 	traits::{
 		self, DispatchInfoOf, Dispatchable, MaybeDisplay, Member, PostDispatchInfoOf,
@@ -25,6 +24,7 @@ use sp_runtime::{
 	transaction_validity::{
 		InvalidTransaction, TransactionSource, TransactionValidity, TransactionValidityError,
 	},
+	RuntimeDebug,
 };
 
 use crate::SelfContainedCall;
@@ -140,7 +140,7 @@ where
 			CheckedSignature::SelfContained(signed_info) => {
 				// If pre-dispatch fail, the block must be considered invalid
 				self.function
-					.pre_dispatch_self_contained(&signed_info)
+					.pre_dispatch_self_contained(&signed_info, info, len)
 					.ok_or(TransactionValidityError::Invalid(
 						InvalidTransaction::BadProof,
 					))??;

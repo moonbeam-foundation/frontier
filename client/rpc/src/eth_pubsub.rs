@@ -51,12 +51,7 @@ pub struct EthereumSubIdProvider;
 
 impl jsonrpsee::core::traits::IdProvider for EthereumSubIdProvider {
 	fn next_id(&self) -> jsonrpsee::types::SubscriptionId<'static> {
-		use rustc_hex::ToHex as _;
-		format!(
-			"0x{}",
-			rand::random::<u128>().to_le_bytes()[..].to_hex::<String>()
-		)
-		.into()
+		format!("0x{}", hex::encode(rand::random::<u128>().to_le_bytes())).into()
 	}
 }
 
@@ -120,10 +115,7 @@ impl SubscriptionResult {
 				logs_bloom: block.header.logs_bloom,
 				timestamp: U256::from(block.header.timestamp),
 				difficulty: block.header.difficulty,
-				seal_fields: vec![
-					Bytes(block.header.mix_hash.as_bytes().to_vec()),
-					Bytes(block.header.nonce.as_bytes().to_vec()),
-				],
+				nonce: Some(block.header.nonce),
 				size: Some(U256::from(rlp::encode(&block.header).len() as u32)),
 			},
 			extra_info: BTreeMap::new(),

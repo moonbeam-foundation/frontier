@@ -26,8 +26,7 @@ use frame_support::{
 };
 use pallet_evm::{AddressMapping, EnsureAddressTruncated, FeeCalculator};
 use rlp::RlpStream;
-use sha3::Digest;
-use sp_core::{H160, H256, U256};
+use sp_core::{hashing::keccak_256, H160, H256, U256};
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, IdentityLookup},
@@ -208,9 +207,11 @@ impl fp_self_contained::SelfContainedCall for Call {
 	fn pre_dispatch_self_contained(
 		&self,
 		info: &Self::SignedInfo,
+		dispatch_info: &DispatchInfoOf<Call>,
+		len: usize,
 	) -> Option<Result<(), TransactionValidityError>> {
 		match self {
-			Call::Ethereum(call) => call.pre_dispatch_self_contained(info),
+			Call::Ethereum(call) => call.pre_dispatch_self_contained(info, dispatch_info, len),
 			_ => None,
 		}
 	}
@@ -239,7 +240,7 @@ fn address_build(seed: u8) -> AccountInfo {
 	let private_key = H256::from_slice(&[(seed + 1) as u8; 32]); //H256::from_low_u64_be((i + 1) as u64);
 	let secret_key = libsecp256k1::SecretKey::parse_slice(&private_key[..]).unwrap();
 	let public_key = &libsecp256k1::PublicKey::from_secret_key(&secret_key).serialize()[1..65];
-	let address = H160::from(H256::from_slice(&Keccak256::digest(public_key)[..]));
+	let address = H160::from(H256::from(keccak_256(public_key)));
 
 	let mut data = [0u8; 32];
 	data[0..20].copy_from_slice(&address[..]);
@@ -279,11 +280,11 @@ pub fn contract_address(sender: H160, nonce: u64) -> H160 {
 	rlp.append(&sender);
 	rlp.append(&nonce);
 
-	H160::from_slice(&Keccak256::digest(&rlp.out())[12..])
+	H160::from_slice(&keccak_256(&rlp.out())[12..])
 }
 
 pub fn storage_address(sender: H160, slot: H256) -> H256 {
-	H256::from_slice(&Keccak256::digest(
+	H256::from(keccak_256(
 		[&H256::from(sender)[..], &slot[..]].concat().as_slice(),
 	))
 }
@@ -314,7 +315,7 @@ impl LegacyUnsignedTransaction {
 	fn signing_hash(&self) -> H256 {
 		let mut stream = RlpStream::new();
 		self.signing_rlp_append(&mut stream);
-		H256::from_slice(&Keccak256::digest(&stream.out()).as_slice())
+		H256::from(keccak_256(&stream.out()))
 	}
 
 	pub fn sign(&self, key: &H256) -> Transaction {

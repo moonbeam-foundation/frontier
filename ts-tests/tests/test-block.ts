@@ -1,6 +1,7 @@
 import { expect } from "chai";
 import { step } from "mocha-steps";
 
+import { BLOCK_GAS_LIMIT } from "./config";
 import { createAndFinalizeBlock, describeWithFrontier } from "./util";
 
 describeWithFrontier("Frontier RPC (Block)", (context) => {
@@ -21,7 +22,7 @@ describeWithFrontier("Frontier RPC (Block)", (context) => {
 			author: "0x0000000000000000000000000000000000000000",
 			difficulty: "0",
 			extraData: "0x",
-			gasLimit: 75000000,
+			gasLimit: BLOCK_GAS_LIMIT,
 			gasUsed: 0,
 			logsBloom:
 				"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
@@ -33,10 +34,7 @@ describeWithFrontier("Frontier RPC (Block)", (context) => {
 			totalDifficulty: "0",
 		});
 
-		expect((block as any).sealFields).to.eql([
-			"0x0000000000000000000000000000000000000000000000000000000000000000",
-			"0x0000000000000000",
-		]);
+		expect(block.nonce).to.eql("0x0000000000000000");
 		expect(block.hash).to.be.a("string").lengthOf(66);
 		expect(block.parentHash).to.be.a("string").lengthOf(66);
 		expect(block.timestamp).to.be.a("number");
@@ -76,7 +74,7 @@ describeWithFrontier("Frontier RPC (Block)", (context) => {
 			author: "0x0000000000000000000000000000000000000000",
 			difficulty: "0",
 			extraData: "0x",
-			gasLimit: 75000000,
+			gasLimit: BLOCK_GAS_LIMIT,
 			gasUsed: 0,
 			logsBloom:
 				"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
@@ -88,10 +86,7 @@ describeWithFrontier("Frontier RPC (Block)", (context) => {
 			totalDifficulty: "0",
 		});
 
-		expect((block as any).sealFields).to.eql([
-			"0x0000000000000000000000000000000000000000000000000000000000000000",
-			"0x0000000000000000",
-		]);
+		expect(block.nonce).to.eql("0x0000000000000000");
 		expect(block.hash).to.be.a("string").lengthOf(66);
 		expect(block.parentHash).to.be.a("string").lengthOf(66);
 		expect(block.timestamp).to.be.a("number");
@@ -105,7 +100,7 @@ describeWithFrontier("Frontier RPC (Block)", (context) => {
 			author: "0x0000000000000000000000000000000000000000",
 			difficulty: "0",
 			extraData: "0x",
-			gasLimit: 75000000,
+			gasLimit: BLOCK_GAS_LIMIT,
 			gasUsed: 0,
 			//hash: "0x14fe6f7c93597f79b901f8b5d7a84277a90915b8d355959b587e18de34f1dc17",
 			logsBloom:
@@ -125,22 +120,19 @@ describeWithFrontier("Frontier RPC (Block)", (context) => {
 
 		expect(block.transactions).to.be.a("array").empty;
 		expect(block.uncles).to.be.a("array").empty;
-		expect((block as any).sealFields).to.eql([
-			"0x0000000000000000000000000000000000000000000000000000000000000000",
-			"0x0000000000000000",
-		]);
+		expect(block.nonce).to.eql("0x0000000000000000");
 		expect(block.hash).to.be.a("string").lengthOf(66);
 		expect(block.parentHash).to.be.a("string").lengthOf(66);
 		expect(block.timestamp).to.be.a("number");
 	});
 
-	step("get block by hash", async function() {
+	step("get block by hash", async function () {
 		const latest_block = await context.web3.eth.getBlock("latest");
 		const block = await context.web3.eth.getBlock(latest_block.hash);
 		expect(block.hash).to.be.eq(latest_block.hash);
 	});
 
-	step("get block by number", async function() {
+	step("get block by number", async function () {
 		const block = await context.web3.eth.getBlock(1);
 		expect(block).not.null;
 	});
