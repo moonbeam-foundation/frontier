@@ -386,7 +386,22 @@ impl<T: Config> Pallet<T> {
 		}
 
 		let ommers = Vec::<ethereum::Header>::new();
-		let receipts_root = ethereum::util::ordered_trie_root(receipts.iter().map(rlp::encode));
+		let receipts_root = ethereum::util::ordered_trie_root(receipts.iter().map(|v| {
+			let encoded = rlp::encode(v);
+			let slice_from = match v {
+				Receipt::EIP2930(_) | Receipt::EIP1559(_) => if encoded.len() > 56 {
+					let first = encoded.get(0).unwrap();
+					// RLP encoding for strings longer than 55 bytes in size, which is always the case for receipts,
+					// are prepended with a first byte component of value 183 + the size of the second component. 
+					(first - 183 + 1) as usize
+				} else {
+					// For strings smaller than 55 bytes in size, a single byte is prepended.
+					1usize
+				},
+				_ => 0usize
+			};
+			encoded[slice_from..].to_vec()
+		}));
 		let partial_header = ethereum::PartialHeader {
 			parent_hash: if block_number > U256::zero() {
 				BlockHash::<T>::get(block_number - 1)
