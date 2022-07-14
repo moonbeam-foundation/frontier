@@ -57,6 +57,6 @@ pub struct Receipt {
 	/// Effective gas price. Pre-eip1559 this is just the gasprice. Post-eip1559 this is base fee + priority fee.
 	pub effective_gas_price: U256,
 	/// EIP-2718 type
-	#[serde(rename = "type", skip_serializing_if = "Option::is_none")]
-	pub transaction_type: Option<U256>,
+	#[serde(rename = "type")]
+	pub transaction_type: U256,
 }
