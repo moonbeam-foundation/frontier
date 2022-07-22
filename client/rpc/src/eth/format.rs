@@ -46,15 +46,12 @@ impl Formatter for Geth {
 		// https://github.com/ethereum/go-ethereum/blob/794c6133efa2c7e8376d9d141c900ea541790bce/core/error.go
 		match err.into_pool_error() {
 			Ok(PError::AlreadyImported(_)) => "already known".to_string(),
-			// In Frontier the only case there is a `TemporarilyBanned` is because
-			// the same transaction was received before and returned
-			// `InvalidTransaction::Stale`. Thus we return the same error.
-			Ok(PError::TemporarilyBanned) => "nonce too low".into(),
+			Ok(PError::TemporarilyBanned) => "already known".into(),
 			Ok(PError::TooLowPriority { .. }) => "replacement transaction underpriced".into(),
 			Ok(PError::InvalidTransaction(inner)) => match inner {
 				InvalidTransaction::Stale => "nonce too low".into(),
 				InvalidTransaction::Payment => "insufficient funds for gas * price + value".into(),
-				InvalidTransaction::ExhaustsResources => "gas limit reached".into(),
+				InvalidTransaction::ExhaustsResources => "exceeds block gas limit".into(),
 				InvalidTransaction::Custom(inner) => match inner.into() {
 					VError::UnknownError => "unknown error".into(),
 					VError::InvalidChainId => "invalid chain id".into(),
@@ -62,7 +59,7 @@ impl Formatter for Geth {
 					VError::GasLimitTooLow => "intrinsic gas too low".into(),
 					VError::GasLimitTooHigh => "exceeds block gas limit".into(),
 					VError::InsufficientFundsForTransfer => {
-						"insufficient funds for transfer".into()
+						"insufficient funds for gas * price + value".into()
 					}
 					VError::MaxFeePerGasTooLow => {
 						"max priority fee per gas higher than max fee per gas".into()
