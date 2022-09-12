@@ -38,7 +38,7 @@ use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 use sc_network::{ExHashT, NetworkService};
 use sc_transaction_pool::{ChainApi, Pool};
 use sc_transaction_pool_api::{InPoolTransaction, TransactionPool};
-use sp_api::{Core, ProvideRuntimeApi};
+use sp_api::{Core, HeaderT, ProvideRuntimeApi};
 use sp_block_builder::BlockBuilder as BlockBuilderApi;
 use sp_blockchain::HeaderBackend;
 use sp_core::hashing::keccak_256;
@@ -476,12 +476,19 @@ where
 		.map(|in_pool_tx| in_pool_tx.data().clone())
 		.collect::<Vec<<B as BlockT>::Extrinsic>>();
 	// Manually initialize the overlay.
-	let header = client.header(best).unwrap().unwrap();
-	api.initialize_block(&best, &header)
-		.map_err(|e| internal_err(format!("Runtime api access error: {:?}", e)))?;
-	// Apply the ready queue to the best block's state.
-	for xt in xts {
-		let _ = api.apply_extrinsic(&best, xt);
+	if let Ok(Some(header)) = client.header(best) {
+		let parent_hash = BlockId::Hash(*header.parent_hash());
+		api.initialize_block(&parent_hash, &header)
+			.map_err(|e| internal_err(format!("Runtime api access error: {:?}", e)))?;
+		// Apply the ready queue to the best block's state.
+		for xt in xts {
+			let _ = api.apply_extrinsic(&best, xt);
+		}
+		Ok(api)
+	} else {
+		Err(internal_err(format!(
+			"Cannot get header for block {:?}",
+			best
+		)))
 	}
-	Ok(api)
 }
