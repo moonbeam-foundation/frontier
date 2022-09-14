@@ -22,6 +22,7 @@ use crate::{
 	BlockHashMapping, Config, Error, Event, FeeCalculator, OnChargeEVMTransaction, Pallet,
 	RunnerError,
 };
+use environmental::RefCell;
 use evm::{
 	backend::Backend as BackendT,
 	executor::stack::{Accessed, StackExecutor, StackState as StackStateT, StackSubstateMetadata},
@@ -32,6 +33,8 @@ use frame_support::traits::{Currency, ExistenceRequirement, Get};
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::UniqueSaturatedInto;
 use sp_std::{boxed::Box, collections::btree_set::BTreeSet, marker::PhantomData, mem, vec::Vec};
+
+environmental::thread_local_impl!(static IN_EVM: RefCell<bool> = RefCell::new(false));
 
 #[derive(Default)]
 pub struct Runner<T: Config> {
@@ -65,6 +68,59 @@ where
 		) -> (ExitReason, R),
 	{
 		let (base_fee, weight) = T::FeeCalculator::min_gas_price();
+
+		if IN_EVM.with(|in_evm| in_evm.replace(true)) {
+			return Err(RunnerError {
+				error: Error::<T>::EvmReentrancy,
+				weight,
+			});
+		}
+
+		let res = Self::execute_inner(
+			source,
+			value,
+			gas_limit,
+			max_fee_per_gas,
+			max_priority_fee_per_gas,
+			config,
+			precompiles,
+			is_transactional,
+			f,
+			base_fee,
+			weight,
+		);
+
+		// Set IN_EVM to false
+		// We should make sure that this line is executed whatever the execution path.
+		let _ = IN_EVM.with(|in_evm| in_evm.take());
+
+		res
+	}
+
+	// Execute an already validated EVM operation.
+	fn execute_inner<'config, 'precompiles, F, R>(
+		source: H160,
+		value: U256,
+		gas_limit: u64,
+		max_fee_per_gas: Option<U256>,
+		max_priority_fee_per_gas: Option<U256>,
+		config: &'config evm::Config,
+		precompiles: &'precompiles T::PrecompilesType,
+		is_transactional: bool,
+		f: F,
+		base_fee: U256,
+		weight: crate::Weight,
+	) -> Result<ExecutionInfo<R>, RunnerError<Error<T>>>
+	where
+		F: FnOnce(
+			&mut StackExecutor<
+				'config,
+				'precompiles,
+				SubstrateStackState<'_, 'config, T>,
+				T::PrecompilesType,
+			>,
+		) -> (ExitReason, R),
+	{
 		let max_fee_per_gas = match (max_fee_per_gas, is_transactional) {
 			(Some(max_fee_per_gas), _) => max_fee_per_gas,
 			// Gas price check is skipped for non-transactional calls that don't

@@ -417,6 +417,8 @@ pub mod pallet {
 		GasLimitTooHigh,
 		/// Undefined error.
 		Undefined,
+		/// EVM reentrancy
+		EvmReentrancy,
 	}
 
 	impl<T> From<InvalidEvmTransactionError> for Error<T> {
