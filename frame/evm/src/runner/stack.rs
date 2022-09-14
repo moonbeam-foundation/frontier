@@ -770,3 +770,70 @@ where
 			.recursive_is_cold(&|a: &Accessed| a.accessed_storage.contains(&(address, key)))
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::mock::Test;
+	use evm::ExitSucceed;
+	use std::assert_matches::assert_matches;
+
+	#[test]
+	fn test_evm_reentrancy() {
+		let config = evm::Config::istanbul();
+
+		// Should fail with the appropriate error if there is reentrancy
+		let res = Runner::<Test>::execute(
+			H160::default(),
+			U256::default(),
+			100_000,
+			None,
+			None,
+			&config,
+			&(),
+			false,
+			|_| {
+				let res = Runner::<Test>::execute(
+					H160::default(),
+					U256::default(),
+					100_000,
+					None,
+					None,
+					&config,
+					&(),
+					false,
+					|_| (ExitReason::Succeed(ExitSucceed::Stopped), ()),
+				);
+				assert_matches!(
+					res,
+					Err(RunnerError {
+						error: Error::<Test>::EvmReentrancy,
+						..
+					})
+				);
+				(ExitReason::Error(ExitError::CallTooDeep), ())
+			},
+		);
+		assert_matches!(
+			res,
+			Ok(ExecutionInfo {
+				exit_reason: ExitReason::Error(ExitError::CallTooDeep),
+				..
+			})
+		);
+
+		// Should succeed if there is no reentrancy
+		let res = Runner::<Test>::execute(
+			H160::default(),
+			U256::default(),
+			100_000,
+			None,
+			None,
+			&config,
+			&(),
+			false,
+			|_| (ExitReason::Succeed(ExitSucceed::Stopped), ()),
+		);
+		assert!(res.is_ok());
+	}
+}
