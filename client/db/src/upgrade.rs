@@ -213,6 +213,11 @@ where
 		}
 		db.write(transaction)
 			.map_err(|_| io::Error::new(ErrorKind::Other, "Failed to commit on migrate_1_to_2"))?;
+		log::info!(
+			"🔨 Success {}, error {}.",
+			res.success,
+			res.error.len()
+		);
 		Ok(())
 	};
 
@@ -232,11 +237,9 @@ where
 	for (i, chunk) in chunks.enumerate() {
 		process_chunk(&db, chunk)?;
 		log::info!(
-			"🔨 Processed {} of {} entries. Succeed {}, error {}.",
+			"🔨 Processed {} of {} entries.",
 			(CHUNK_SIZE * (i + 1)),
-			all_len,
-			&res.success,
-			&res.error.len()
+			all_len
 		);
 	}
 	Ok(res)
