@@ -205,6 +205,11 @@ where
 							maybe_error = false;
 						}
 					}
+				} else {
+					// If version 2 data, we just consider this hash a success.
+					// This can happen if the process was closed in the middle of the migration.
+					res.success += 1;
+					maybe_error = false;
 				}
 			}
 			if maybe_error {
@@ -213,7 +218,8 @@ where
 		}
 		db.write(transaction)
 			.map_err(|_| io::Error::new(ErrorKind::Other, "Failed to commit on migrate_1_to_2"))?;
-		log::info!(
+		log::debug!(
+			target: "fc-db-upgrade",
 			"🔨 Success {}, error {}.",
 			res.success,
 			res.error.len()
@@ -236,7 +242,8 @@ where
 	let all_len = ethereum_hashes.len();
 	for (i, chunk) in chunks.enumerate() {
 		process_chunk(&db, chunk)?;
-		log::info!(
+		log::debug!(
+			target: "fc-db-upgrade",
 			"🔨 Processed {} of {} entries.",
 			(CHUNK_SIZE * (i + 1)),
 			all_len
