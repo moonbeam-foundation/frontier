@@ -228,8 +228,15 @@ where
 	// Read and update each entry in db transaction batches
 	const CHUNK_SIZE: usize = 10_000;
 	let chunks = ethereum_hashes.chunks(CHUNK_SIZE);
-	for chunk in chunks {
+	for (i, chunk) in chunks.enumerate() {
 		process_chunk(&db, chunk)?;
+		log::info!(
+			"🔨 Processed {} of {} entries. Succeed {}, error {}.",
+			(CHUNK_SIZE * (i + 1)),
+			ethereum_hashes.len(),
+			res.error.success,
+			res.error.len()
+		);
 	}
 	Ok(res)
 }
