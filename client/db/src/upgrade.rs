@@ -234,7 +234,7 @@ where
 			"🔨 Processed {} of {} entries. Succeed {}, error {}.",
 			(CHUNK_SIZE * (i + 1)),
 			ethereum_hashes.len(),
-			res.error.success,
+			res.success,
 			res.error.len()
 		);
 	}
