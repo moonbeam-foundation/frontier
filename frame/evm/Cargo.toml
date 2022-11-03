@@ -20,7 +20,7 @@ serde = { version = "1.0.144", optional = true, features = ["derive"] }
 
 # Parity
 codec = { package = "parity-scale-codec", version = "3.2.1", default-features = false, features = ["derive"] }
-primitive-types = { version = "0.11.1", default-features = false, features = ["rlp", "byteorder"] }
+primitive-types = { version = "0.12.1", default-features = false, features = ["rlp", "byteorder"] }
 rlp = { version = "0.5", default-features = false }
 scale-info = { version = "2.3.0", default-features = false, features = ["derive"] }
 
