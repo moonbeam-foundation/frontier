@@ -11,8 +11,9 @@ repository = "https://github.com/paritytech/frontier/"
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-ethereum = { version = "0.12.0", features = ["with-codec"] }
-evm = "0.36.0"
+
+ethereum = { package = "ethereum", git = "https://github.com/girazoki/ethereum", branch = "girazoki-0.9.31-fork", features = ["with-codec"]}
+evm = { package = "evm", git = "https://github.com/girazoki/evm", branch = "girazoki-0.9.31-fork"  }
 futures = "0.3.24"
 hex = "0.4.3"
 log = "0.4.17"
