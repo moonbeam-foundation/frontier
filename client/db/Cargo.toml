@@ -16,15 +16,15 @@ parking_lot = "0.12.1"
 
 # Parity
 codec = { package = "parity-scale-codec", version = "3.0.0", features = ["derive"] }
-kvdb-rocksdb = { version = "0.15.2", optional = true }
+kvdb-rocksdb = { version = "0.16.0", optional = true }
 parity-db = { version = "0.3.16", optional = true }
 
 # Substrate
-sc-client-db = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate", branch = "master", features = ["rocksdb"] }
-sp-blockchain = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "master" }
-sp-core = { version = "6.0.0", git = "https://github.com/paritytech/substrate", branch = "master" }
-sp-database = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "master" }
-sp-runtime = { version = "6.0.0", git = "https://github.com/paritytech/substrate", branch = "master" }
+sc-client-db = { version = "0.10.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.31", features = ["rocksdb"] }
+sp-blockchain = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.31" }
+sp-core = { version = "6.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.31" }
+sp-database = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.31" }
+sp-runtime = { version = "6.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.31" }
 
 # Frontier
 fp-storage = { version = "2.0.0-dev", path = "../../primitives/storage" }
@@ -34,8 +34,8 @@ default = ["kvdb-rocksdb", "parity-db"]
 
 [dev-dependencies]
 futures = "0.3.24"
-sc-block-builder = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate", branch = "master" }
-sc-client-db = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate", branch = "master", features = ["rocksdb"] }
-sp-consensus = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate", branch = "master" }
-substrate-test-runtime-client = { version = "2.0.0", git = "https://github.com/paritytech/substrate", branch = "master" }
+sc-block-builder = { version = "0.10.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.31" }
+sc-client-db = { version = "0.10.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.31", features = ["rocksdb"] }
+sp-consensus = { version = "0.10.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.31" }
+substrate-test-runtime-client = { version = "2.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.31" }
 tempfile = "3.3.0"
