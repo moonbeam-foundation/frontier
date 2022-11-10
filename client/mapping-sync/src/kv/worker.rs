@@ -16,20 +16,23 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use fp_rpc::EthereumRuntimeRPCApi;
+use std::{pin::Pin, sync::Arc, time::Duration};
+
 use futures::{
 	prelude::*,
 	task::{Context, Poll},
 };
 use futures_timer::Delay;
 use log::debug;
+// Substrate
 use sc_client_api::{BlockOf, ImportNotifications};
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
-use std::{pin::Pin, sync::Arc, time::Duration};
+// Frontier
+use fp_rpc::EthereumRuntimeRPCApi;
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum SyncStrategy {
 	Normal,
 	Parachain,
@@ -42,7 +45,7 @@ pub struct MappingSyncWorker<Block: BlockT, C, B> {
 
 	client: Arc<C>,
 	substrate_backend: Arc<B>,
-	frontier_backend: Arc<fc_db::Backend<Block>>,
+	frontier_backend: Arc<fc_db::kv::Backend<Block>>,
 
 	have_next: bool,
 	retry_times: usize,
@@ -58,7 +61,7 @@ impl<Block: BlockT, C, B> MappingSyncWorker<Block, C, B> {
 		timeout: Duration,
 		client: Arc<C>,
 		substrate_backend: Arc<B>,
-		frontier_backend: Arc<fc_db::Backend<Block>>,
+		frontier_backend: Arc<fc_db::kv::Backend<Block>>,
 		retry_times: usize,
 		sync_from: <Block::Header as HeaderT>::Number,
 		strategy: SyncStrategy,
@@ -118,7 +121,7 @@ where
 		if fire {
 			self.inner_delay = None;
 
-			match crate::sync_blocks(
+			match super::sync_blocks(
 				self.client.as_ref(),
 				self.substrate_backend.blockchain(),
 				self.frontier_backend.as_ref(),

@@ -19,7 +19,7 @@
 use ethereum_types::H256;
 use futures::future::TryFutureExt;
 use jsonrpsee::core::RpcResult as Result;
-
+// Substrate
 use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 use sc_network::ExHashT;
 use sc_transaction_pool::ChainApi;
@@ -32,7 +32,7 @@ use sp_runtime::{
 	traits::{BlakeTwo256, Block as BlockT},
 	transaction_validity::TransactionSource,
 };
-
+// Frontier
 use fc_rpc_core::types::*;
 use fp_rpc::{ConvertTransaction, ConvertTransactionRuntimeApi, EthereumRuntimeRPCApi};
 
@@ -71,7 +71,7 @@ where
 
 		let nonce = match request.nonce {
 			Some(nonce) => nonce,
-			None => match self.transaction_count(from, None) {
+			None => match self.transaction_count(from, None).await {
 				Ok(nonce) => nonce,
 				Err(e) => return Err(e),
 			},
@@ -214,7 +214,7 @@ where
 		if slice.is_empty() {
 			return Err(internal_err("transaction data is empty"));
 		}
-		let first = slice.get(0).unwrap();
+		let first = slice.first().unwrap();
 		let transaction = if first > &0x7f {
 			// Legacy transaction. Decode and wrap in envelope.
 			match rlp::decode::<ethereum::TransactionV0>(slice) {

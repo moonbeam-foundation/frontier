@@ -18,6 +18,7 @@
 
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
+// Substrate
 use sc_client_api::{backend::AuxStore, BlockOf};
 use sc_consensus::{BlockCheckParams, BlockImport, BlockImportParams, ImportResult};
 use sp_api::ProvideRuntimeApi;
@@ -25,7 +26,7 @@ use sp_block_builder::BlockBuilder as BlockBuilderApi;
 use sp_blockchain::{well_known_cache_keys::Id as CacheKeyId, HeaderBackend};
 use sp_consensus::Error as ConsensusError;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
-
+// Frontier
 use fp_consensus::{ensure_log, FindLogError};
 use fp_rpc::EthereumRuntimeRPCApi;
 
@@ -63,7 +64,6 @@ impl From<Error> for ConsensusError {
 pub struct FrontierBlockImport<B: BlockT, I, C> {
 	inner: I,
 	client: Arc<C>,
-	backend: Arc<fc_db::Backend<B>>,
 	_marker: PhantomData<B>,
 }
 
@@ -72,7 +72,6 @@ impl<Block: BlockT, I: Clone + BlockImport<Block>, C> Clone for FrontierBlockImp
 		FrontierBlockImport {
 			inner: self.inner.clone(),
 			client: self.client.clone(),
-			backend: self.backend.clone(),
 			_marker: PhantomData,
 		}
 	}
@@ -87,11 +86,10 @@ where
 	C::Api: EthereumRuntimeRPCApi<B>,
 	C::Api: BlockBuilderApi<B>,
 {
-	pub fn new(inner: I, client: Arc<C>, backend: Arc<fc_db::Backend<B>>) -> Self {
+	pub fn new(inner: I, client: Arc<C>) -> Self {
 		Self {
 			inner,
 			client,
-			backend,
 			_marker: PhantomData,
 		}
 	}

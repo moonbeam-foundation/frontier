@@ -54,7 +54,7 @@ pub mod frontier_backend_client {
 	use codec::Decode;
 	use ethereum_types::H256;
 	use jsonrpsee::core::RpcResult;
-
+	// Substrate
 	use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 	use sp_blockchain::HeaderBackend;
 	use sp_runtime::{
@@ -62,13 +62,13 @@ pub mod frontier_backend_client {
 		traits::{BlakeTwo256, Block as BlockT, Header as HeaderT, UniqueSaturatedInto, Zero},
 	};
 	use sp_storage::StorageKey;
-
+	// Frontier
 	use fc_rpc_core::types::BlockNumber;
 	use fp_storage::{EthereumStorageSchema, PALLET_ETHEREUM_SCHEMA};
 
-	pub fn native_block_id<B: BlockT, C>(
+	pub async fn native_block_id<B: BlockT, C>(
 		client: &C,
-		backend: &fc_db::Backend<B>,
+		backend: &(dyn fc_db::BackendReader<B> + Send + Sync),
 		number: Option<BlockNumber>,
 	) -> RpcResult<Option<BlockId<B>>>
 	where
@@ -76,9 +76,9 @@ pub mod frontier_backend_client {
 		C: HeaderBackend<B> + Send + Sync + 'static,
 	{
 		Ok(match number.unwrap_or(BlockNumber::Latest) {
-			BlockNumber::Hash { hash, .. } => {
-				load_hash::<B, C>(client, backend, hash).unwrap_or(None)
-			}
+			BlockNumber::Hash { hash, .. } => load_hash::<B, C>(client, backend, hash)
+				.await
+				.unwrap_or(None),
 			BlockNumber::Num(number) => Some(BlockId::Number(number.unique_saturated_into())),
 			BlockNumber::Latest => Some(BlockId::Hash(client.info().best_hash)),
 			BlockNumber::Earliest => Some(BlockId::Number(Zero::zero())),
@@ -88,9 +88,9 @@ pub mod frontier_backend_client {
 		})
 	}
 
-	pub fn load_hash<B: BlockT, C>(
+	pub async fn load_hash<B: BlockT, C>(
 		client: &C,
-		backend: &fc_db::Backend<B>,
+		backend: &(dyn fc_db::BackendReader<B> + Send + Sync),
 		hash: H256,
 	) -> RpcResult<Option<BlockId<B>>>
 	where
@@ -98,8 +98,8 @@ pub mod frontier_backend_client {
 		C: HeaderBackend<B> + Send + Sync + 'static,
 	{
 		let substrate_hashes = backend
-			.mapping()
 			.block_hash(&hash)
+			.await
 			.map_err(|err| internal_err(format!("fetch aux store failed: {:?}", err)))?;
 
 		if let Some(substrate_hashes) = substrate_hashes {
@@ -110,35 +110,6 @@ pub mod frontier_backend_client {
 			}
 		}
 		Ok(None)
-	}
-
-	pub fn load_cached_schema<B: BlockT, C>(
-		backend: &fc_db::Backend<B>,
-	) -> RpcResult<Option<Vec<(EthereumStorageSchema, H256)>>>
-	where
-		B: BlockT<Hash = H256> + Send + Sync + 'static,
-		C: HeaderBackend<B> + Send + Sync + 'static,
-	{
-		let cache = backend
-			.meta()
-			.ethereum_schema()
-			.map_err(|err| internal_err(format!("fetch backend failed: {:?}", err)))?;
-		Ok(cache)
-	}
-
-	pub fn write_cached_schema<B: BlockT, C>(
-		backend: &fc_db::Backend<B>,
-		new_cache: Vec<(EthereumStorageSchema, H256)>,
-	) -> RpcResult<()>
-	where
-		B: BlockT<Hash = H256> + Send + Sync + 'static,
-		C: HeaderBackend<B> + Send + Sync + 'static,
-	{
-		backend
-			.meta()
-			.write_ethereum_schema(new_cache)
-			.map_err(|err| internal_err(format!("write backend failed: {:?}", err)))?;
-		Ok(())
 	}
 
 	pub fn onchain_storage_schema<B: BlockT, C, BE>(
@@ -172,9 +143,9 @@ pub mod frontier_backend_client {
 		false
 	}
 
-	pub fn load_transactions<B: BlockT, C>(
+	pub async fn load_transactions<B: BlockT, C>(
 		client: &C,
-		backend: &fc_db::Backend<B>,
+		backend: &(dyn fc_db::BackendReader<B> + Send + Sync),
 		transaction_hash: H256,
 		only_canonical: bool,
 	) -> RpcResult<Option<(H256, u32)>>
@@ -183,8 +154,8 @@ pub mod frontier_backend_client {
 		C: HeaderBackend<B> + Send + Sync + 'static,
 	{
 		let transaction_metadata = backend
-			.mapping()
 			.transaction_metadata(&transaction_hash)
+			.await
 			.map_err(|err| internal_err(format!("fetch aux store failed: {:?}", err)))?;
 
 		transaction_metadata
@@ -279,13 +250,13 @@ mod tests {
 	fn open_frontier_backend<C>(
 		client: Arc<C>,
 		path: PathBuf,
-	) -> Result<Arc<fc_db::Backend<OpaqueBlock>>, String>
+	) -> Result<Arc<fc_db::kv::Backend<OpaqueBlock>>, String>
 	where
 		C: sp_blockchain::HeaderBackend<OpaqueBlock>,
 	{
-		Ok(Arc::new(fc_db::Backend::<OpaqueBlock>::new(
+		Ok(Arc::new(fc_db::kv::Backend::<OpaqueBlock>::new(
 			client,
-			&fc_db::DatabaseSettings {
+			&fc_db::kv::DatabaseSettings {
 				source: sc_client_db::DatabaseSource::RocksDb {
 					path,
 					cache_size: 0,
@@ -327,7 +298,7 @@ mod tests {
 		executor::block_on(client.import(BlockOrigin::Own, b1)).unwrap();
 
 		// Map B1
-		let commitment = fc_db::MappingCommitment::<OpaqueBlock> {
+		let commitment = fc_db::kv::MappingCommitment::<OpaqueBlock> {
 			block_hash: b1_hash,
 			ethereum_block_hash,
 			ethereum_transaction_hashes: vec![],
@@ -336,11 +307,11 @@ mod tests {
 
 		// Expect B1 to be canon
 		assert_eq!(
-			super::frontier_backend_client::load_hash(
+			futures::executor::block_on(super::frontier_backend_client::load_hash(
 				client.as_ref(),
 				frontier_backend.as_ref(),
 				ethereum_block_hash
-			)
+			))
 			.unwrap()
 			.unwrap(),
 			BlockId::Hash(b1_hash),
@@ -356,7 +327,7 @@ mod tests {
 		executor::block_on(client.import(BlockOrigin::Own, b2)).unwrap();
 
 		// Map B2 to same ethereum hash
-		let commitment = fc_db::MappingCommitment::<OpaqueBlock> {
+		let commitment = fc_db::kv::MappingCommitment::<OpaqueBlock> {
 			block_hash: b2_hash,
 			ethereum_block_hash,
 			ethereum_transaction_hashes: vec![],
@@ -365,11 +336,11 @@ mod tests {
 
 		// Still expect B1 to be canon
 		assert_eq!(
-			super::frontier_backend_client::load_hash(
+			futures::executor::block_on(super::frontier_backend_client::load_hash(
 				client.as_ref(),
 				frontier_backend.as_ref(),
 				ethereum_block_hash
-			)
+			))
 			.unwrap()
 			.unwrap(),
 			BlockId::Hash(b1_hash),
@@ -385,11 +356,11 @@ mod tests {
 
 		// Expect B2 to be new canon
 		assert_eq!(
-			super::frontier_backend_client::load_hash(
+			futures::executor::block_on(super::frontier_backend_client::load_hash(
 				client.as_ref(),
 				frontier_backend.as_ref(),
 				ethereum_block_hash
-			)
+			))
 			.unwrap()
 			.unwrap(),
 			BlockId::Hash(b2_hash),

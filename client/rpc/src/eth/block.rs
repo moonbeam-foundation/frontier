@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use ethereum_types::{H256, U256};
 use jsonrpsee::core::RpcResult as Result;
-
+// Substrate
 use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 use sc_network::ExHashT;
 use sc_transaction_pool::ChainApi;
@@ -28,7 +28,7 @@ use sp_api::{BlockId, HeaderT};
 use sp_blockchain::HeaderBackend;
 use sp_core::hashing::keccak_256;
 use sp_runtime::traits::{BlakeTwo256, Block as BlockT};
-
+// Frontier
 use fc_rpc_core::types::*;
 
 use crate::{
@@ -54,6 +54,7 @@ where
 			backend.as_ref(),
 			hash,
 		)
+		.await
 		.map_err(|err| internal_err(format!("{:?}", err)))?
 		{
 			Some(hash) => hash,
@@ -128,7 +129,9 @@ where
 			client.as_ref(),
 			backend.as_ref(),
 			Some(number),
-		)? {
+		)
+		.await?
+		{
 			Some(id) => id,
 			None => return Ok(None),
 		};
@@ -190,12 +193,13 @@ where
 		}
 	}
 
-	pub fn block_transaction_count_by_hash(&self, hash: H256) -> Result<Option<U256>> {
+	pub async fn block_transaction_count_by_hash(&self, hash: H256) -> Result<Option<U256>> {
 		let id = match frontier_backend_client::load_hash::<B, C>(
 			self.client.as_ref(),
 			self.backend.as_ref(),
 			hash,
 		)
+		.await
 		.map_err(|err| internal_err(format!("{:?}", err)))?
 		{
 			Some(hash) => hash,
@@ -216,7 +220,10 @@ where
 		}
 	}
 
-	pub fn block_transaction_count_by_number(&self, number: BlockNumber) -> Result<Option<U256>> {
+	pub async fn block_transaction_count_by_number(
+		&self,
+		number: BlockNumber,
+	) -> Result<Option<U256>> {
 		if let BlockNumber::Pending = number {
 			// get the pending transactions count
 			return Ok(Some(U256::from(
@@ -228,7 +235,9 @@ where
 			self.client.as_ref(),
 			self.backend.as_ref(),
 			Some(number),
-		)? {
+		)
+		.await?
+		{
 			Some(id) => id,
 			None => return Ok(None),
 		};

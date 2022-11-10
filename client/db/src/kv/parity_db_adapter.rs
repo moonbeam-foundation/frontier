@@ -16,8 +16,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::Database;
 use sp_database::{error::DatabaseError, Change, ColumnId, Transaction};
+
+use super::Database;
 
 fn handle_err<T>(result: parity_db::Result<T>) -> T {
 	match result {
@@ -61,6 +62,6 @@ impl<H: Clone + AsRef<[u8]>> Database<H> for DbAdapter {
 	}
 
 	fn sanitize_key(&self, key: &mut Vec<u8>) {
-		let _prefix = key.drain(0..key.len() - crate::DB_HASH_LEN);
+		let _prefix = key.drain(0..key.len() - super::DB_HASH_LEN);
 	}
 }

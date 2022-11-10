@@ -21,7 +21,7 @@ use std::sync::Arc;
 use ethereum::TransactionV2 as EthereumTransaction;
 use ethereum_types::{H256, U256, U64};
 use jsonrpsee::core::RpcResult as Result;
-
+// Substrate
 use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 use sc_network::ExHashT;
 use sc_transaction_pool::ChainApi;
@@ -33,7 +33,7 @@ use sp_runtime::{
 	generic::BlockId,
 	traits::{BlakeTwo256, Block as BlockT},
 };
-
+// Frontier
 use fc_rpc_core::types::*;
 use fp_rpc::EthereumRuntimeRPCApi;
 
@@ -64,6 +64,7 @@ where
 			hash,
 			true,
 		)
+		.await
 		.map_err(|err| internal_err(format!("{:?}", err)))?
 		{
 			Some((hash, index)) => (hash, index as usize),
@@ -132,6 +133,7 @@ where
 			backend.as_ref(),
 			hash,
 		)
+		.await
 		.map_err(|err| internal_err(format!("{:?}", err)))?
 		{
 			Some(hash) => hash,
@@ -181,6 +183,7 @@ where
 			backend.as_ref(),
 			hash,
 		)
+		.await
 		.map_err(|err| internal_err(format!("{:?}", err)))?
 		{
 			Some(hash) => hash,
@@ -239,7 +242,9 @@ where
 			client.as_ref(),
 			backend.as_ref(),
 			Some(number),
-		)? {
+		)
+		.await?
+		{
 			Some(id) => id,
 			None => return Ok(None),
 		};
@@ -293,6 +298,7 @@ where
 			hash,
 			true,
 		)
+		.await
 		.map_err(|err| internal_err(format!("{:?}", err)))?
 		{
 			Some((hash, index)) => (hash, index as usize),
@@ -304,6 +310,7 @@ where
 			backend.as_ref(),
 			hash,
 		)
+		.await
 		.map_err(|err| internal_err(format!("{:?}", err)))?
 		{
 			Some(hash) => hash,

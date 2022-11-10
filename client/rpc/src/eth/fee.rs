@@ -18,7 +18,7 @@
 
 use ethereum_types::{H256, U256};
 use jsonrpsee::core::RpcResult as Result;
-
+// Substrate
 use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 use sc_network::ExHashT;
 use sc_transaction_pool::ChainApi;
@@ -28,7 +28,7 @@ use sp_runtime::{
 	generic::BlockId,
 	traits::{BlakeTwo256, Block as BlockT, Header as HeaderT, UniqueSaturatedInto},
 };
-
+// Frontier
 use fc_rpc_core::types::*;
 use fp_rpc::EthereumRuntimeRPCApi;
 
@@ -52,7 +52,7 @@ where
 			.map_err(|err| internal_err(format!("fetch runtime chain id failed: {:?}", err)))
 	}
 
-	pub fn fee_history(
+	pub async fn fee_history(
 		&self,
 		block_count: U256,
 		newest_block: BlockNumber,
@@ -70,7 +70,9 @@ where
 			self.client.as_ref(),
 			self.backend.as_ref(),
 			Some(newest_block),
-		) {
+		)
+		.await
+		{
 			let header = match self.client.header(id) {
 				Ok(Some(h)) => h,
 				_ => {

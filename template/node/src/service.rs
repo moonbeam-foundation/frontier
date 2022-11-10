@@ -2,13 +2,14 @@
 
 use std::{
 	collections::BTreeMap,
-	path::PathBuf,
+	path::{Path, PathBuf},
 	sync::{Arc, Mutex},
 	time::Duration,
 };
 
 use futures::{future, StreamExt};
 // Substrate
+use sc_client_api::ExecutorProvider;
 use sc_cli::SubstrateCli;
 use sc_client_api::BlockchainEvents;
 use sc_executor::NativeElseWasmExecutor;
@@ -19,15 +20,14 @@ use sp_core::U256;
 // Frontier
 use fc_consensus::FrontierBlockImport;
 use fc_db::Backend as FrontierBackend;
-use fc_mapping_sync::{MappingSyncWorker, SyncStrategy};
 use fc_rpc::{EthTask, OverrideHandle};
 use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
 // Runtime
 use frontier_template_runtime::{opaque::Block, RuntimeApi};
 
-use crate::cli::Cli;
 #[cfg(feature = "manual-seal")]
 use crate::cli::Sealing;
+use crate::cli::{BackendType, Cli};
 
 // Our native executor instance.
 pub struct ExecutorDispatch;
@@ -94,9 +94,10 @@ pub fn new_partial(
 		(
 			Option<Telemetry>,
 			ConsensusResult,
-			Arc<FrontierBackend<Block>>,
+			FrontierBackend<Block>,
 			Option<FilterPool>,
 			(FeeHistoryCache, FeeHistoryCacheLimit),
+			Arc<fc_rpc::OverrideHandle<Block>>,
 		),
 	>,
 	ServiceError,
@@ -150,18 +151,38 @@ pub fn new_partial(
 		client.clone(),
 	);
 
-	let frontier_backend = Arc::new(FrontierBackend::open(
-		Arc::clone(&client),
-		&config.database,
-		&db_config_dir(config),
-	)?);
+	let overrides = crate::rpc::overrides_handle(client.clone());
+	let frontier_backend = match cli.run.frontier_backend_type {
+		BackendType::KeyValue => FrontierBackend::KeyValue(fc_db::kv::Backend::open(
+			Arc::clone(&client),
+			&config.database,
+			&db_config_dir(config),
+		)?),
+		BackendType::Sql => {
+			let db_path = &db_config_dir(config);
+			let backend = futures::executor::block_on(fc_db::sql::Backend::new(
+				fc_db::sql::BackendConfig::Sqlite(fc_db::sql::SqliteBackendConfig {
+					path: Path::new("sqlite:///")
+						.join(db_path.strip_prefix("/").unwrap().to_str().unwrap())
+						.join("frontier.db3")
+						.to_str()
+						.unwrap(),
+					create_if_missing: true,
+				}),
+				100, // pool size
+				overrides.clone(),
+			))
+			.expect("indexer pool to be created");
+			FrontierBackend::Sql(backend)
+		}
+	};
+
 	let filter_pool: Option<FilterPool> = Some(Arc::new(Mutex::new(BTreeMap::new())));
 	let fee_history_cache: FeeHistoryCache = Arc::new(Mutex::new(BTreeMap::new()));
 	let fee_history_cache_limit: FeeHistoryCacheLimit = cli.run.fee_history_limit;
 
 	#[cfg(feature = "aura")]
 	{
-		use sc_client_api::ExecutorProvider;
 		use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
 
 		let (grandpa_block_import, grandpa_link) = sc_finality_grandpa::block_import(
@@ -171,11 +192,8 @@ pub fn new_partial(
 			telemetry.as_ref().map(|x| x.handle()),
 		)?;
 
-		let frontier_block_import = FrontierBlockImport::new(
-			grandpa_block_import.clone(),
-			client.clone(),
-			frontier_backend.clone(),
-		);
+		let frontier_block_import =
+			FrontierBlockImport::new(grandpa_block_import.clone(), client.clone());
 
 		let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
 		let target_gas_price = cli.run.target_gas_price;
@@ -219,6 +237,7 @@ pub fn new_partial(
 				frontier_backend,
 				filter_pool,
 				(fee_history_cache, fee_history_cache_limit),
+				overrides,
 			),
 		})
 	}
@@ -227,8 +246,7 @@ pub fn new_partial(
 	{
 		let sealing = cli.run.sealing;
 
-		let frontier_block_import =
-			FrontierBlockImport::new(client.clone(), client.clone(), frontier_backend.clone());
+		let frontier_block_import = FrontierBlockImport::new(client.clone(), client.clone());
 
 		let import_queue = sc_consensus_manual_seal::import_queue(
 			Box::new(frontier_block_import.clone()),
@@ -250,6 +268,7 @@ pub fn new_partial(
 				frontier_backend,
 				filter_pool,
 				(fee_history_cache, fee_history_cache_limit),
+				overrides,
 			),
 		})
 	}
@@ -264,8 +283,8 @@ fn remote_keystore(_url: &str) -> Result<Arc<LocalKeystore>, &'static str> {
 
 /// Builds a new service for a full client.
 #[cfg(feature = "aura")]
-pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, ServiceError> {
-	use sc_client_api::{BlockBackend, ExecutorProvider};
+pub async fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, ServiceError> {
+	use sc_client_api::BlockBackend;
 	use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
 
 	// Use ethereum style for subscription ids
@@ -286,6 +305,7 @@ pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, Ser
 				frontier_backend,
 				filter_pool,
 				(fee_history_cache, fee_history_cache_limit),
+				overrides,
 			),
 	} = new_partial(&config, cli)?;
 
@@ -347,7 +367,6 @@ pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, Ser
 	let name = config.network.node_name.clone();
 	let enable_grandpa = !config.disable_grandpa;
 	let prometheus_registry = config.prometheus_registry().cloned();
-	let overrides = crate::rpc::overrides_handle(client.clone());
 	let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
 		task_manager.spawn_handle(),
 		overrides.clone(),
@@ -378,7 +397,10 @@ pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, Ser
 				enable_dev_signer,
 				network: network.clone(),
 				filter_pool: filter_pool.clone(),
-				backend: frontier_backend.clone(),
+				backend: match frontier_backend.clone() {
+					fc_db::Backend::KeyValue(b) => Arc::new(b),
+					fc_db::Backend::Sql(b) => Arc::new(b),
+				},
 				max_past_logs,
 				fee_history_cache: fee_history_cache.clone(),
 				fee_history_cache_limit,
@@ -412,7 +434,8 @@ pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, Ser
 		overrides,
 		fee_history_cache,
 		fee_history_cache_limit,
-	);
+	)
+	.await;
 
 	let (block_import, grandpa_link) = consensus_result;
 
@@ -516,7 +539,7 @@ pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, Ser
 
 /// Builds a new service for a full client.
 #[cfg(feature = "manual-seal")]
-pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, ServiceError> {
+pub async fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, ServiceError> {
 	// Use ethereum style for subscription ids
 	config.rpc_id_provider = Some(Box::new(fc_rpc::EthereumSubIdProvider));
 
@@ -535,6 +558,7 @@ pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, Ser
 				frontier_backend,
 				filter_pool,
 				(fee_history_cache, fee_history_cache_limit),
+				overrides,
 			),
 	} = new_partial(&config, cli)?;
 
@@ -572,7 +596,6 @@ pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, Ser
 
 	let role = config.role.clone();
 	let prometheus_registry = config.prometheus_registry().cloned();
-	let overrides = crate::rpc::overrides_handle(client.clone());
 	let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
 		task_manager.spawn_handle(),
 		overrides.clone(),
@@ -583,16 +606,16 @@ pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, Ser
 	// Channel for the rpc handler to communicate with the authorship task.
 	let (command_sink, commands_stream) = futures::channel::mpsc::channel(1000);
 
-	let rpc_extensions_builder = {
+	let rpc_builder = {
 		let client = client.clone();
 		let pool = transaction_pool.clone();
 		let is_authority = role.is_authority();
 		let enable_dev_signer = cli.run.enable_dev_signer;
 		let network = network.clone();
 		let filter_pool = filter_pool.clone();
-		let frontier_backend = frontier_backend.clone();
 		let overrides = overrides.clone();
 		let fee_history_cache = fee_history_cache.clone();
+		let frontier_backend = frontier_backend.clone();
 		let max_past_logs = cli.run.max_past_logs;
 
 		Box::new(move |deny_unsafe, subscription_task_executor| {
@@ -605,7 +628,10 @@ pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, Ser
 				enable_dev_signer,
 				network: network.clone(),
 				filter_pool: filter_pool.clone(),
-				backend: frontier_backend.clone(),
+				backend: match frontier_backend.clone() {
+					fc_db::Backend::KeyValue(b) => Arc::new(b),
+					fc_db::Backend::Sql(b) => Arc::new(b),
+				},
 				max_past_logs,
 				fee_history_cache: fee_history_cache.clone(),
 				fee_history_cache_limit,
@@ -640,7 +666,8 @@ pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, Ser
 		overrides,
 		fee_history_cache,
 		fee_history_cache_limit,
-	);
+	)
+	.await;
 
 	if role.is_authority() {
 		let env = sc_basic_authorship::ProposerFactory::new(
@@ -726,31 +753,50 @@ pub fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManager, Ser
 	Ok(task_manager)
 }
 
-fn spawn_frontier_tasks(
+async fn spawn_frontier_tasks(
 	task_manager: &TaskManager,
 	client: Arc<FullClient>,
 	backend: Arc<FullBackend>,
-	frontier_backend: Arc<FrontierBackend<Block>>,
+	frontier_backend: FrontierBackend<Block>,
 	filter_pool: Option<FilterPool>,
 	overrides: Arc<OverrideHandle<Block>>,
 	fee_history_cache: FeeHistoryCache,
 	fee_history_cache_limit: FeeHistoryCacheLimit,
 ) {
-	task_manager.spawn_essential_handle().spawn(
-		"frontier-mapping-sync-worker",
-		None,
-		MappingSyncWorker::new(
-			client.import_notification_stream(),
-			Duration::new(6, 0),
-			client.clone(),
-			backend,
-			frontier_backend,
-			3,
-			0,
-			SyncStrategy::Normal,
-		)
-		.for_each(|()| future::ready(())),
-	);
+	// Spawn main mapping sync worker background task.
+	match frontier_backend {
+		fc_db::Backend::KeyValue(b) => {
+			task_manager.spawn_essential_handle().spawn(
+				"frontier-mapping-sync-worker",
+				None,
+				fc_mapping_sync::kv::MappingSyncWorker::new(
+					client.import_notification_stream(),
+					Duration::new(6, 0),
+					client.clone(),
+					backend,
+					Arc::new(b),
+					3,
+					0,
+					fc_mapping_sync::kv::SyncStrategy::Normal,
+				)
+				.for_each(|()| future::ready(())),
+			);
+		}
+		fc_db::Backend::Sql(b) => {
+			task_manager.spawn_essential_handle().spawn(
+				"frontier-mapping-sync-worker",
+				None,
+				fc_mapping_sync::sql::SyncWorker::run(
+					client.clone(),
+					backend,
+					Arc::new(b),
+					client.import_notification_stream(),
+					1000,                              // batch size
+					std::time::Duration::from_secs(1), // interval duration
+				),
+			);
+		}
+	}
 
 	// Spawn Frontier EthFilterApi maintenance task.
 	if let Some(filter_pool) = filter_pool {

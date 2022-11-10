@@ -33,9 +33,10 @@ use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 use ethereum::{BlockV2 as EthereumBlock, TransactionV2 as EthereumTransaction};
 use ethereum_types::{H160, H256, H512, H64, U256, U64};
 use jsonrpsee::core::{async_trait, RpcResult as Result};
-
+// Substrate
 use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
-use sc_network::{ExHashT, NetworkService};
+use sc_network::NetworkService;
+use sc_network::ExHashT;
 use sc_transaction_pool::{ChainApi, Pool};
 use sc_transaction_pool_api::{InPoolTransaction, TransactionPool};
 use sp_api::{Core, HeaderT, ProvideRuntimeApi};
@@ -46,7 +47,7 @@ use sp_runtime::{
 	generic::BlockId,
 	traits::{BlakeTwo256, Block as BlockT, UniqueSaturatedInto},
 };
-
+// Frontier
 use fc_rpc_core::{types::*, EthApiServer};
 use fp_rpc::{ConvertTransactionRuntimeApi, EthereumRuntimeRPCApi, TransactionStatus};
 
@@ -68,7 +69,7 @@ pub struct Eth<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, EGA = ()> {
 	is_authority: bool,
 	signers: Vec<Box<dyn EthSigner>>,
 	overrides: Arc<OverrideHandle<B>>,
-	backend: Arc<fc_db::Backend<B>>,
+	backend: Arc<dyn fc_db::BackendReader<B> + Send + Sync>,
 	block_data_cache: Arc<EthBlockDataCacheTask<B>>,
 	fee_history_cache: FeeHistoryCache,
 	fee_history_cache_limit: FeeHistoryCacheLimit,
@@ -87,7 +88,7 @@ impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi> Eth<B, C, P, CT, BE, H, A
 		network: Arc<NetworkService<B, H>>,
 		signers: Vec<Box<dyn EthSigner>>,
 		overrides: Arc<OverrideHandle<B>>,
-		backend: Arc<fc_db::Backend<B>>,
+		backend: Arc<dyn fc_db::BackendReader<B> + Send + Sync>,
 		is_authority: bool,
 		block_data_cache: Arc<EthBlockDataCacheTask<B>>,
 		fee_history_cache: FeeHistoryCache,
@@ -166,12 +167,12 @@ where
 		self.block_by_number(number, full).await
 	}
 
-	fn block_transaction_count_by_hash(&self, hash: H256) -> Result<Option<U256>> {
-		self.block_transaction_count_by_hash(hash)
+	async fn block_transaction_count_by_hash(&self, hash: H256) -> Result<Option<U256>> {
+		self.block_transaction_count_by_hash(hash).await
 	}
 
-	fn block_transaction_count_by_number(&self, number: BlockNumber) -> Result<Option<U256>> {
-		self.block_transaction_count_by_number(number)
+	async fn block_transaction_count_by_number(&self, number: BlockNumber) -> Result<Option<U256>> {
+		self.block_transaction_count_by_number(number).await
 	}
 
 	fn block_uncles_count_by_hash(&self, hash: H256) -> Result<U256> {
@@ -227,28 +228,33 @@ where
 	// State
 	// ########################################################################
 
-	fn balance(&self, address: H160, number: Option<BlockNumber>) -> Result<U256> {
-		self.balance(address, number)
+	async fn balance(&self, address: H160, number: Option<BlockNumber>) -> Result<U256> {
+		self.balance(address, number).await
 	}
 
-	fn storage_at(&self, address: H160, index: U256, number: Option<BlockNumber>) -> Result<H256> {
-		self.storage_at(address, index, number)
+	async fn storage_at(
+		&self,
+		address: H160,
+		index: U256,
+		number: Option<BlockNumber>,
+	) -> Result<H256> {
+		self.storage_at(address, index, number).await
 	}
 
-	fn transaction_count(&self, address: H160, number: Option<BlockNumber>) -> Result<U256> {
-		self.transaction_count(address, number)
+	async fn transaction_count(&self, address: H160, number: Option<BlockNumber>) -> Result<U256> {
+		self.transaction_count(address, number).await
 	}
 
-	fn code_at(&self, address: H160, number: Option<BlockNumber>) -> Result<Bytes> {
-		self.code_at(address, number)
+	async fn code_at(&self, address: H160, number: Option<BlockNumber>) -> Result<Bytes> {
+		self.code_at(address, number).await
 	}
 
 	// ########################################################################
 	// Execute
 	// ########################################################################
 
-	fn call(&self, request: CallRequest, number: Option<BlockNumber>) -> Result<Bytes> {
-		self.call(request, number)
+	async fn call(&self, request: CallRequest, number: Option<BlockNumber>) -> Result<Bytes> {
+		self.call(request, number).await
 	}
 
 	async fn estimate_gas(
@@ -267,13 +273,14 @@ where
 		self.gas_price()
 	}
 
-	fn fee_history(
+	async fn fee_history(
 		&self,
 		block_count: U256,
 		newest_block: BlockNumber,
 		reward_percentiles: Option<Vec<f64>>,
 	) -> Result<FeeHistory> {
 		self.fee_history(block_count, newest_block, reward_percentiles)
+			.await
 	}
 
 	fn max_priority_fee_per_gas(&self) -> Result<U256> {

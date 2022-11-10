@@ -21,7 +21,7 @@ use std::sync::Arc;
 use ethereum_types::{H256, U256};
 use evm::{ExitError, ExitReason};
 use jsonrpsee::core::RpcResult as Result;
-
+// Substrate
 use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 use sc_network::ExHashT;
 use sc_transaction_pool::ChainApi;
@@ -33,7 +33,7 @@ use sp_runtime::{
 	traits::{BlakeTwo256, Block as BlockT},
 	SaturatedConversion,
 };
-
+// Frontier
 use fc_rpc_core::types::*;
 use fp_rpc::EthereumRuntimeRPCApi;
 
@@ -74,7 +74,7 @@ where
 	A: ChainApi<Block = B> + 'static,
 	EGA: EstimateGasAdapter,
 {
-	pub fn call(&self, request: CallRequest, number: Option<BlockNumber>) -> Result<Bytes> {
+	pub async fn call(&self, request: CallRequest, number: Option<BlockNumber>) -> Result<Bytes> {
 		let CallRequest {
 			from,
 			to,
@@ -102,7 +102,9 @@ where
 			self.client.as_ref(),
 			self.backend.as_ref(),
 			number,
-		)? {
+		)
+		.await?
+		{
 			Some(id) => (id, self.client.runtime_api()),
 			None => {
 				// Not mapped in the db, assume pending.

@@ -16,14 +16,16 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use ethereum_types::H256;
-use serde::Deserialize;
 use std::sync::Arc;
 
-use super::{utils::FrontierDbMessage, Column, FrontierDbCmd, Operation};
-
-use fp_rpc::EthereumRuntimeRPCApi;
+use ethereum_types::H256;
+use serde::Deserialize;
+// Substrate
 use sp_runtime::{generic::BlockId, traits::Block as BlockT};
+// Frontier
+use fp_rpc::EthereumRuntimeRPCApi;
+
+use super::{utils::FrontierDbMessage, Column, FrontierDbCmd, Operation};
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -39,7 +41,7 @@ pub enum MappingKey {
 pub struct MappingDb<'a, C, B: BlockT> {
 	cmd: &'a FrontierDbCmd,
 	client: Arc<C>,
-	backend: Arc<fc_db::Backend<B>>,
+	backend: Arc<fc_db::kv::Backend<B>>,
 }
 
 impl<'a, C, B: BlockT> MappingDb<'a, C, B>
@@ -48,7 +50,11 @@ where
 	C::Api: EthereumRuntimeRPCApi<B>,
 	C: sp_blockchain::HeaderBackend<B>,
 {
-	pub fn new(cmd: &'a FrontierDbCmd, client: Arc<C>, backend: Arc<fc_db::Backend<B>>) -> Self {
+	pub fn new(
+		cmd: &'a FrontierDbCmd,
+		client: Arc<C>,
+		backend: Arc<fc_db::kv::Backend<B>>,
+	) -> Self {
 		Self {
 			cmd,
 			client,
@@ -90,13 +96,13 @@ where
 							vec![]
 						};
 
-						let commitment = fc_db::MappingCommitment::<B> {
+						let commitment = fc_db::kv::MappingCommitment::<B> {
 							block_hash: *substrate_block_hash,
 							ethereum_block_hash: *ethereum_block_hash,
 							ethereum_transaction_hashes: existing_transaction_hashes,
 						};
 
-						let _ = self.backend.mapping().write_hashes(commitment)?;
+						self.backend.mapping().write_hashes(commitment)?;
 					} else {
 						return Err(self.key_not_empty_error(key));
 					}
@@ -149,13 +155,13 @@ where
 							vec![]
 						};
 
-						let commitment = fc_db::MappingCommitment::<B> {
+						let commitment = fc_db::kv::MappingCommitment::<B> {
 							block_hash: *substrate_block_hash,
 							ethereum_block_hash: *ethereum_block_hash,
 							ethereum_transaction_hashes: existing_transaction_hashes,
 						};
 
-						let _ = self.backend.mapping().write_hashes(commitment)?;
+						self.backend.mapping().write_hashes(commitment)?;
 					}
 				}
 				_ => return Err(self.key_value_error(key, value)),
