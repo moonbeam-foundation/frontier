@@ -463,6 +463,15 @@ where
 					substrate_block_hash
 				)
 			);
+			COMMIT;",
+		)
+		.execute(pool)
+		.await
+	}
+
+	pub async fn create_indexes(&self) -> Result<SqliteQueryResult, Error> {
+		sqlx::query(
+			"BEGIN;
 			CREATE INDEX IF NOT EXISTS block_number_idx ON logs (
 				block_number,
 				address
@@ -495,7 +504,7 @@ where
 			);
 			COMMIT;",
 		)
-		.execute(pool)
+		.execute(self.pool())
 		.await
 	}
 }
