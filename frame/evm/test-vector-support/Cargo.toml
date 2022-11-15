@@ -8,7 +8,7 @@ description = "Test vector support for EVM pallet."
 repository = "https://github.com/paritytech/frontier/"
 
 [dependencies]
-evm = { package = "evm", git = "https://github.com/girazoki/evm", branch = "girazoki-0.9.31-fork", features = ["with-codec"]}
+evm = { version = "0.37.0", default-features = false, features = ["with-codec"] }
 hex = "0.4.3"
 serde = { version = "1.0.101", features = ["derive"] }
 serde_json = "1.0"
