@@ -92,6 +92,10 @@ where
 		loop {
 			futures::select! {
 				_ = (&mut import_interval).fuse() => {
+					log::debug!(
+						target: "frontier-sql",
+						"🕐  New interval"
+					);
 					let leaves = backend.leaves();
 					if let Ok(mut leaves) = leaves {
 						if let Some(hash) = resume_at {
@@ -119,6 +123,10 @@ where
 					import_interval.reset(interval);
 				},
 				notification = notifications.next() => if let Some(notification) = notification {
+					log::debug!(
+						target: "frontier-sql",
+						"📣  New notification"
+					);
 					// On first notification try create indexes
 					if try_create_indexes {
 						try_create_indexes = false;
