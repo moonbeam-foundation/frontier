@@ -36,7 +36,7 @@ use jsonrpsee::core::{async_trait, RpcResult as Result};
 // Substrate
 use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 use sc_network::NetworkService;
-use sc_network::ExHashT;
+use sc_network_common::ExHashT;
 use sc_transaction_pool::{ChainApi, Pool};
 use sc_transaction_pool_api::{InPoolTransaction, TransactionPool};
 use sp_api::{Core, HeaderT, ProvideRuntimeApi};
@@ -79,7 +79,7 @@ pub struct Eth<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, EGA = ()> {
 	_marker: PhantomData<(B, BE, EGA)>,
 }
 
-impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi> Eth<B, C, P, CT, BE, H, A> {
+impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi> Eth<B, C, P, CT, BE, H, A, ()> {
 	pub fn new(
 		client: Arc<C>,
 		pool: Arc<P>,
@@ -114,8 +114,48 @@ impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi> Eth<B, C, P, CT, BE, H, A
 	}
 }
 
+impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, EGA> Eth<B, C, P, CT, BE, H, A, EGA> {
+	pub fn with_estimate_gas_adapter<EGA2: EstimateGasAdapter>(
+		self,
+	) -> Eth<B, C, P, CT, BE, H, A, EGA2> {
+		let Self {
+			client,
+			pool,
+			graph,
+			convert_transaction,
+			network,
+			is_authority,
+			signers,
+			overrides,
+			backend,
+			block_data_cache,
+			fee_history_cache,
+			fee_history_cache_limit,
+			execute_gas_limit_multiplier,
+			_marker: _,
+		} = self;
+
+		Eth {
+			client,
+			pool,
+			graph,
+			convert_transaction,
+			network,
+			is_authority,
+			signers,
+			overrides,
+			backend,
+			block_data_cache,
+			fee_history_cache,
+			fee_history_cache_limit,
+			execute_gas_limit_multiplier,
+			_marker: PhantomData,
+		}
+	}
+}
+
 #[async_trait]
-impl<B, C, P, CT, BE, H: ExHashT, A> EthApiServer for Eth<B, C, P, CT, BE, H, A>
+impl<B, C, P, CT, BE, H: ExHashT, A, EGA> EthApiServer for Eth<B, C, P, CT, BE, H, A, EGA>
 where
 	B: BlockT<Hash = H256> + Send + Sync + 'static,
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE>,
@@ -126,6 +166,7 @@ where
 	BE: Backend<B> + 'static,
 	BE::State: StateBackend<BlakeTwo256>,
 	A: ChainApi<Block = B> + 'static,
+	EGA: EstimateGasAdapter + Send + Sync + 'static,
 {
 	// ########################################################################
 	// Client

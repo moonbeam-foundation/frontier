@@ -87,8 +87,6 @@ pub trait StorageOverride<Block: BlockT> {
 		block: &BlockId<Block>,
 	) -> Option<Vec<fp_rpc::TransactionStatus>>;
 	/// Return the base fee at the given height.
-	fn base_fee(&self, block: &BlockId<Block>) -> Option<U256>;
-	/// Return the base fee at the given height.
 	fn elasticity(&self, block: &BlockId<Block>) -> Option<Permill>;
 	/// Return `true` if the request BlockId is post-eip1559.
 	fn is_eip1559(&self, block: &BlockId<Block>) -> bool;

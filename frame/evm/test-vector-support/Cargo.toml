@@ -8,13 +8,13 @@ description = "Test vector support for EVM pallet."
 repository = "https://github.com/paritytech/frontier/"
 
 [dependencies]
-evm = { git = "https://github.com/purestake/evm", branch = "moonbeam-polkadot-v0.9.29", features = ["with-codec"] }
+evm = { version = "0.37.0", features = ["with-codec"] }
 hex = "0.4.3"
-serde = { version = "1.0.101", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Substrate
-sp-core = { version = "6.0.0", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.29" }
+sp-core = { version = "6.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32" }
 
 # Frontier
 fp-evm = { version = "3.0.0-dev", path = "../../../primitives/evm" }

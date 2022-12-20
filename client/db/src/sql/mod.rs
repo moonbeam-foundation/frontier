@@ -464,14 +464,15 @@ where
 		BE: BackendT<Block> + 'static,
 		BE::State: StateBackend<BlakeTwo256>,
 	{
-		match client.storage(
-			&at,
-			&sp_storage::StorageKey(PALLET_ETHEREUM_SCHEMA.to_vec()),
-		) {
-			Ok(Some(bytes)) => Decode::decode(&mut &bytes.0[..])
-				.ok()
-				.unwrap_or(EthereumStorageSchema::Undefined),
-			_ => EthereumStorageSchema::Undefined,
+		if let Ok(Some(header)) = client.header(at) {
+			match client.storage(&header.hash(), &sp_storage::StorageKey(PALLET_ETHEREUM_SCHEMA.to_vec())) {
+				Ok(Some(bytes)) => Decode::decode(&mut &bytes.0[..])
+					.ok()
+					.unwrap_or(EthereumStorageSchema::Undefined),
+				_ => EthereumStorageSchema::Undefined,
+			}
+		} else {
+			EthereumStorageSchema::Undefined
 		}
 	}
 

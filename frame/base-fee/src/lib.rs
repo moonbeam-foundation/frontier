@@ -46,7 +46,7 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		type Event: From<Event> + IsType<<Self as frame_system::Config>::Event>;
+		type RuntimeEvent: From<Event> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Lower and upper bounds for increasing / decreasing `BaseFeePerGas`.
 		type Threshold: BaseFeeThreshold;
 		type DefaultBaseFeePerGas: Get<U256>;
@@ -124,7 +124,7 @@ pub mod pallet {
 			// 	- One storage read to get the Elasticity.
 			// 	- One write to BaseFeePerGas.
 			let db_weight = <T as frame_system::Config>::DbWeight::get();
-			db_weight.reads(2).saturating_add(db_weight.writes(1))
+			db_weight.reads_writes(2, 1)
 		}
 
 		fn on_finalize(_n: <T as frame_system::Config>::BlockNumber) {
@@ -146,7 +146,8 @@ pub mod pallet {
 
 			// We convert `weight` into block fullness and ensure we are within the lower and upper bound.
 			let weight_used =
-				Permill::from_rational(weight.total().ref_time(), max_weight.ref_time()).clamp(lower, upper);
+				Permill::from_rational(weight.total().ref_time(), max_weight.ref_time())
+					.clamp(lower, upper);
 			// After clamp `weighted_used` is always between `lower` and `upper`.
 			// We scale the block fullness range to the lower/upper range, and the usage represents the
 			// actual percentage within this new scale.

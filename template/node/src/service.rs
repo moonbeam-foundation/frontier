@@ -204,19 +204,16 @@ pub fn new_partial(
 				slot_duration,
 			);
 			let dynamic_fee = fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
-			Ok((timestamp, slot, dynamic_fee))
+			Ok((slot, timestamp, dynamic_fee))
 		};
 
-		let import_queue = sc_consensus_aura::import_queue::<AuraPair, _, _, _, _, _, _>(
+		let import_queue = sc_consensus_aura::import_queue::<AuraPair, _, _, _, _, _>(
 			sc_consensus_aura::ImportQueueParams {
 				block_import: frontier_block_import.clone(),
 				justification_import: Some(Box::new(grandpa_block_import)),
 				client: client.clone(),
 				create_inherent_data_providers,
 				spawner: &task_manager.spawn_essential_handle(),
-				can_author_with: sp_consensus::CanAuthorWithNativeVersion::new(
-					client.executor().clone(),
-				),
 				registry: config.prometheus_registry(),
 				check_for_equivocation: Default::default(),
 				telemetry: telemetry.as_ref().map(|x| x.handle()),
@@ -342,7 +339,7 @@ pub async fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManage
 		Vec::default(),
 	));
 
-	let (network, system_rpc_tx, network_starter) =
+	let (network, system_rpc_tx, tx_handler_controller, network_starter) =
 		sc_service::build_network(sc_service::BuildNetworkParams {
 			config: &config,
 			client: client.clone(),
@@ -421,6 +418,7 @@ pub async fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManage
 		rpc_builder: rpc_extensions_builder,
 		backend: backend.clone(),
 		system_rpc_tx,
+		tx_handler_controller,
 		config,
 		telemetry: telemetry.as_mut(),
 	})?;
@@ -457,10 +455,10 @@ pub async fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManage
 				slot_duration,
 			);
 			let dynamic_fee = fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
-			Ok((timestamp, slot, dynamic_fee))
+			Ok((slot, timestamp, dynamic_fee))
 		};
 
-		let aura = sc_consensus_aura::start_aura::<AuraPair, _, _, _, _, _, _, _, _, _, _, _>(
+		let aura = sc_consensus_aura::start_aura::<AuraPair, _, _, _, _, _, _, _, _, _, _>(
 			sc_consensus_aura::StartAuraParams {
 				slot_duration,
 				client: client.clone(),
@@ -473,9 +471,6 @@ pub async fn new_full(mut config: Configuration, cli: &Cli) -> Result<TaskManage
 				force_authoring,
 				backoff_authoring_blocks: Option::<()>::None,
 				keystore: keystore_container.sync_keystore(),
-				can_author_with: sp_consensus::CanAuthorWithNativeVersion::new(
-					client.executor().clone(),
-				),
 				block_proposal_slot_portion: sc_consensus_aura::SlotProportion::new(2f32 / 3f32),
 				max_block_proposal_slot_portion: None,
 				telemetry: telemetry.as_ref().map(|x| x.handle()),

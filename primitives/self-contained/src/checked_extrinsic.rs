@@ -62,7 +62,7 @@ impl<AccountId, Call, Extra, SelfContainedSignedInfo, Origin> traits::Applyable
 where
 	AccountId: Member + MaybeDisplay,
 	Call: Member
-		+ Dispatchable<Origin = Origin>
+		+ Dispatchable<RuntimeOrigin = Origin>
 		+ SelfContainedCall<SignedInfo = SelfContainedSignedInfo>,
 	Extra: SignedExtension<AccountId = AccountId, Call = Call>,
 	Origin: From<Option<AccountId>>,

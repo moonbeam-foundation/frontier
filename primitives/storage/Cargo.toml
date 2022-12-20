@@ -11,7 +11,7 @@ repository = "https://github.com/paritytech/frontier/"
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-ethereum = { version = "0.12.0", features = ["with-codec"], default-features = false }
+ethereum = { version = "0.14.0", features = ["with-codec"], default-features = false }
 serde = { version = "1.0", features = ["derive"], optional = true }
 
 # Frontier
@@ -19,12 +19,12 @@ fp-rpc = { path = "../rpc", default-features = false }
 
 # Parity
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
-ethereum-types = { version = "0.13.1", default-features = false }
+ethereum-types = { version = "0.14.0", default-features = false }
 
 # Substrate
-sp-api = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.29", default-features = false }
-sp-runtime = { version = "6.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.29", default-features = false }
-sp-std = { version = "4.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.29", default-features = false }
+sp-api = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32", default-features = false }
+sp-runtime = { version = "6.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32", default-features = false }
+sp-std = { version = "4.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32", default-features = false }
 
 [features]
 default = ["std"]

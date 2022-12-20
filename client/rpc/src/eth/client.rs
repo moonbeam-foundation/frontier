@@ -20,7 +20,7 @@ use ethereum_types::{H160, H256, U256, U64};
 use jsonrpsee::core::RpcResult as Result;
 // Substrate
 use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
-use sc_network::ExHashT;
+use sc_network_common::ExHashT;
 use sc_transaction_pool::ChainApi;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
@@ -35,7 +35,7 @@ use fp_rpc::EthereumRuntimeRPCApi;
 
 use crate::{eth::Eth, frontier_backend_client, internal_err};
 
-impl<B, C, P, CT, BE, H: ExHashT, A: ChainApi> Eth<B, C, P, CT, BE, H, A>
+impl<B, C, P, CT, BE, H: ExHashT, A: ChainApi, EGA> Eth<B, C, P, CT, BE, H, A, EGA>
 where
 	B: BlockT<Hash = H256> + Send + Sync + 'static,
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE>,

@@ -12,23 +12,23 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 # Parity
-codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
-scale-info = { version = "2.1.2", default-features = false, features = ["derive"] }
+codec = { package = "parity-scale-codec", version = "3.2.1", default-features = false, features = ["derive"] }
+scale-info = { version = "2.3.0", default-features = false, features = ["derive"] }
 
 # Substrate
-sp-core = { version = "6.0.0", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.29" }
-sp-runtime = { version = "6.0.0", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.29" }
-sp-std = { version = "4.0.0", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.29" }
+sp-core = { version = "6.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32", default-features = false }
+sp-runtime = { version = "6.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32", default-features = false }
+sp-std = { version = "4.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32", default-features = false }
 # Substrate FRAME
-frame-benchmarking = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", default-features = false, optional = true , branch = "moonbeam-polkadot-v0.9.29" }
-frame-support = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.29" }
-frame-system = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", default-features = false , branch = "moonbeam-polkadot-v0.9.29" }
+frame-benchmarking = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32", default-features = false, optional = true }
+frame-support = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32", default-features = false }
+frame-system = { version = "4.0.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32", default-features = false }
 
 # Frontier
 pallet-evm = { path = "../evm", default-features = false }
 
 [dev-dependencies]
-sp-io = { version = "6.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.29" }
+sp-io = { version = "6.0.0", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32" }
 
 [features]
 default = ["std"]
