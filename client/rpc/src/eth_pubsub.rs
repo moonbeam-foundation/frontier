@@ -21,14 +21,14 @@ use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 use ethereum::{BlockV2 as EthereumBlock, TransactionV2 as EthereumTransaction};
 use ethereum_types::{H256, U256};
 use futures::{FutureExt as _, StreamExt as _};
-use jsonrpsee::{SubscriptionSink, types::SubscriptionEmptyError};
+use jsonrpsee::{types::SubscriptionEmptyError, SubscriptionSink};
 
 use sc_client_api::{
 	backend::{Backend, StateBackend, StorageProvider},
 	client::BlockchainEvents,
 };
-use sc_network_common::ExHashT;
 use sc_network::{NetworkService, NetworkStatusProvider};
+use sc_network_common::ExHashT;
 use sc_rpc::SubscriptionTaskExecutor;
 use sc_transaction_pool_api::TransactionPool;
 use sp_api::{ApiExt, BlockId, ProvideRuntimeApi};
@@ -209,7 +209,12 @@ where
 	BE: Backend<B> + 'static,
 	BE::State: StateBackend<BlakeTwo256>,
 {
-	fn subscribe(&self, mut sink: SubscriptionSink, kind: Kind, params: Option<Params>) -> sc_service::Result<(), SubscriptionEmptyError> {
+	fn subscribe(
+		&self,
+		mut sink: SubscriptionSink,
+		kind: Kind,
+		params: Option<Params>,
+	) -> sc_service::Result<(), SubscriptionEmptyError> {
 		sink.accept()?;
 
 		let filtered_params = match params {
@@ -410,7 +415,7 @@ where
 			Some("rpc"),
 			fut.map(drop).boxed(),
 		);
-	
+
 		Ok(())
 	}
 }

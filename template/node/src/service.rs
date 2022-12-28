@@ -9,9 +9,8 @@ use std::{
 
 use futures::{future, StreamExt};
 // Substrate
-use sc_client_api::ExecutorProvider;
 use sc_cli::SubstrateCli;
-use sc_client_api::BlockchainEvents;
+use sc_client_api::{BlockchainEvents, ExecutorProvider};
 use sc_executor::NativeElseWasmExecutor;
 use sc_keystore::LocalKeystore;
 use sc_service::{error::Error as ServiceError, BasePath, Configuration, TaskManager};
@@ -170,6 +169,7 @@ pub fn new_partial(
 					create_if_missing: true,
 				}),
 				100, // pool size
+				cli.run.frontier_sql_backend_num_ops_timeout,
 				overrides.clone(),
 			))
 			.expect("indexer pool to be created");

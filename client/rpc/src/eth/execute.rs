@@ -312,7 +312,11 @@ where
 		}
 	}
 
-	pub async fn estimate_gas(&self, mut request: CallRequest, _: Option<BlockNumber>) -> Result<U256> {
+	pub async fn estimate_gas(
+		&self,
+		mut request: CallRequest,
+		_: Option<BlockNumber>,
+	) -> Result<U256> {
 		let client = Arc::clone(&self.client);
 		let block_data_cache = Arc::clone(&self.block_data_cache);
 

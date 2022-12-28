@@ -227,7 +227,9 @@ where
 					target: "frontier-sql",
 					"🛠️  Inserted block metadata"
 				);
-				indexer_backend.spawn_logs_task(client.clone(), batch_size).await; // Spawn actual logs task
+				indexer_backend
+					.spawn_logs_task(client.clone(), batch_size)
+					.await; // Spawn actual logs task
 				known_hashes.append(current_batch);
 				current_batch.clear();
 			}

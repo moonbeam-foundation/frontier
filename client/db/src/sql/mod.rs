@@ -69,6 +69,7 @@ pub enum BackendConfig<'a> {
 pub struct Backend<Block: BlockT> {
 	pool: SqlitePool,
 	overrides: Arc<OverrideHandle<Block>>,
+	num_ops_timeout: i32,
 }
 impl<Block: BlockT> Backend<Block>
 where
@@ -77,6 +78,7 @@ where
 	pub async fn new(
 		config: BackendConfig<'_>,
 		pool_size: u32,
+		num_ops_timeout: u32,
 		overrides: Arc<OverrideHandle<Block>>,
 	) -> Result<Self, Error> {
 		let any_pool = SqlitePoolOptions::new()
@@ -90,6 +92,7 @@ where
 		Ok(Self {
 			pool: any_pool,
 			overrides,
+			num_ops_timeout: num_ops_timeout.try_into().unwrap_or(i32::MAX),
 		})
 	}
 
@@ -784,7 +787,15 @@ impl<Block: BlockT<Hash = H256>> crate::BackendReader<Block> for Backend<Block> 
 		let sql = query.sql();
 
 		let mut out: Vec<FilteredLog> = vec![];
-		match query.fetch_all(self.pool()).await {
+		let mut conn = self
+			.pool()
+			.acquire()
+			.await
+			.map_err(|err| format!("failed acquiring sqlite connection: {}", err))?;
+		conn.set_progress_handler(self.num_ops_timeout, || false)
+			.await;
+
+		match query.fetch_all(&mut conn).await {
 			Ok(result) => {
 				for row in result.iter() {
 					// Substrate block hash
@@ -816,6 +827,7 @@ impl<Block: BlockT<Hash = H256>> crate::BackendReader<Block> for Backend<Block> 
 				}
 			}
 			_ => {
+				conn.remove_progress_handler().await;
 				log::error!(
 					target: "frontier-sql",
 					"Failed to query sql db with statement {:?}",
@@ -825,6 +837,7 @@ impl<Block: BlockT<Hash = H256>> crate::BackendReader<Block> for Backend<Block> 
 			}
 		};
 
+		conn.remove_progress_handler().await;
 		Ok(out)
 	}
 

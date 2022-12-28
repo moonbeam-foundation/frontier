@@ -14,7 +14,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 futures = "0.3.24"
 futures-timer = "3.0.2"
 log = "0.4.17"
-sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "sqlite", "offline"] }
+sqlx = { features = ["runtime-tokio-native-tls", "sqlite", "offline"], git = "https://github.com/nbaztec/sqlx", branch = "sqlite-progress-handler" }
 tokio = { version = "1.19", features = ["macros", "sync"] }
 
 # Substrate
