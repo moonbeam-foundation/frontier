@@ -21,8 +21,8 @@ use std::sync::Arc;
 use ethereum_types::H256;
 use futures::executor::block_on;
 use jsonrpsee::core::RpcResult as Result;
-use sc_network_common::ExHashT;
 use sc_network::{NetworkService, NetworkStatusProvider};
+use sc_network_common::ExHashT;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::{generic::BlockId, traits::Block as BlockT};
@@ -72,8 +72,11 @@ where
 	fn peer_count(&self) -> Result<PeerCount> {
 		use futures::TryFutureExt;
 
-		let status = block_on(self.network.status()
-			.map_err(|_| internal_err("network status unavailable")))?;
+		let status = block_on(
+			self.network
+				.status()
+				.map_err(|_| internal_err("network status unavailable")),
+		)?;
 		let peer_count = status.num_connected_peers;
 		Ok(match self.peer_count_as_hex {
 			true => PeerCount::String(format!("0x{:x}", peer_count)),

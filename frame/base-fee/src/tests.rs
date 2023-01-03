@@ -147,7 +147,10 @@ fn should_not_overflow_u256() {
 	let base_fee = U256::max_value();
 	new_test_ext(Some(base_fee), None).execute_with(|| {
 		let init = BaseFee::base_fee_per_gas();
-		System::register_extra_weight_unchecked(Weight::from_ref_time(1000000000000), DispatchClass::Normal);
+		System::register_extra_weight_unchecked(
+			Weight::from_ref_time(1000000000000),
+			DispatchClass::Normal,
+		);
 		BaseFee::on_finalize(System::block_number());
 		assert_eq!(BaseFee::base_fee_per_gas(), init);
 	});
@@ -197,7 +200,10 @@ fn should_handle_consecutive_full_blocks() {
 	new_test_ext(Some(base_fee), None).execute_with(|| {
 		for _ in 0..10000 {
 			// Register max weight in block.
-			System::register_extra_weight_unchecked(Weight::from_ref_time(1000000000000), DispatchClass::Normal);
+			System::register_extra_weight_unchecked(
+				Weight::from_ref_time(1000000000000),
+				DispatchClass::Normal,
+			);
 			BaseFee::on_finalize(System::block_number());
 			System::set_block_number(System::block_number() + 1);
 		}
@@ -214,7 +220,10 @@ fn should_handle_consecutive_full_blocks() {
 	new_test_ext(Some(base_fee), Some(zero_elasticity)).execute_with(|| {
 		for _ in 0..10000 {
 			// Register max weight in block.
-			System::register_extra_weight_unchecked(Weight::from_ref_time(1000000000000), DispatchClass::Normal);
+			System::register_extra_weight_unchecked(
+				Weight::from_ref_time(1000000000000),
+				DispatchClass::Normal,
+			);
 			BaseFee::on_finalize(System::block_number());
 			System::set_block_number(System::block_number() + 1);
 		}
@@ -232,7 +241,10 @@ fn should_increase_total_base_fee() {
 	new_test_ext(Some(base_fee), None).execute_with(|| {
 		assert_eq!(BaseFee::base_fee_per_gas(), U256::from(1000000000));
 		// Register max weight in block.
-		System::register_extra_weight_unchecked(Weight::from_ref_time(1000000000000), DispatchClass::Normal);
+		System::register_extra_weight_unchecked(
+			Weight::from_ref_time(1000000000000),
+			DispatchClass::Normal,
+		);
 		BaseFee::on_finalize(System::block_number());
 		// Expect the base fee to increase by 12.5%.
 		assert_eq!(BaseFee::base_fee_per_gas(), U256::from(1125000000));
@@ -245,7 +257,10 @@ fn should_increase_delta_of_base_fee() {
 	new_test_ext(Some(base_fee), None).execute_with(|| {
 		assert_eq!(BaseFee::base_fee_per_gas(), U256::from(1000000000));
 		// Register 75% capacity in block weight.
-		System::register_extra_weight_unchecked(Weight::from_ref_time(750000000000), DispatchClass::Normal);
+		System::register_extra_weight_unchecked(
+			Weight::from_ref_time(750000000000),
+			DispatchClass::Normal,
+		);
 		BaseFee::on_finalize(System::block_number());
 		// Expect a 6.25% increase in base fee for a target capacity of 50% ((75/50)-1 = 0.5 * 0.125 = 0.0625).
 		assert_eq!(BaseFee::base_fee_per_gas(), U256::from(1062500000));
@@ -258,7 +273,10 @@ fn should_idle_base_fee() {
 	new_test_ext(Some(base_fee), None).execute_with(|| {
 		assert_eq!(BaseFee::base_fee_per_gas(), U256::from(1000000000));
 		// Register half capacity in block weight.
-		System::register_extra_weight_unchecked(Weight::from_ref_time(500000000000), DispatchClass::Normal);
+		System::register_extra_weight_unchecked(
+			Weight::from_ref_time(500000000000),
+			DispatchClass::Normal,
+		);
 		BaseFee::on_finalize(System::block_number());
 		// Expect the base fee to remain unchanged
 		assert_eq!(BaseFee::base_fee_per_gas(), U256::from(1000000000));

@@ -9,9 +9,8 @@ use std::{
 
 use futures::{future, StreamExt};
 // Substrate
-use sc_client_api::ExecutorProvider;
 use sc_cli::SubstrateCli;
-use sc_client_api::BlockchainEvents;
+use sc_client_api::{BlockchainEvents, ExecutorProvider};
 use sc_executor::NativeElseWasmExecutor;
 use sc_keystore::LocalKeystore;
 use sc_service::{error::Error as ServiceError, BasePath, Configuration, TaskManager};
