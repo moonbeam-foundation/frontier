@@ -169,6 +169,7 @@ pub fn new_partial(
 					create_if_missing: true,
 				}),
 				100, // pool size
+				cli.run.frontier_sql_backend_num_ops_timeout,
 				overrides.clone(),
 			))
 			.expect("indexer pool to be created");

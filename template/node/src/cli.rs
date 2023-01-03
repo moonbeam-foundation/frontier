@@ -60,6 +60,10 @@ pub struct RunCmd {
 	/// Sets the backend type (KeyValue or Sql)
 	#[clap(long, value_enum, ignore_case = true, default_value_t = BackendType::default())]
 	pub frontier_backend_type: BackendType,
+
+	/// Sets the SQL backend's query timeout in number of VM ops.
+	#[clap(long, default_value = "10000000")]
+	pub frontier_sql_backend_num_ops_timeout: u32,
 }
 
 #[derive(Debug, clap::Parser)]
