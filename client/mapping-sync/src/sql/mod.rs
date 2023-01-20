@@ -474,7 +474,7 @@ mod test {
 		let indexer_backend = fc_db::sql::Backend::new(
 			fc_db::sql::BackendConfig::Sqlite(fc_db::sql::SqliteBackendConfig {
 				path: Path::new("sqlite:///")
-					.join(tmp.path().strip_prefix("/").unwrap().to_str().unwrap())
+					.join(tmp.path())
 					.join("test.db3")
 					.to_str()
 					.unwrap(),
@@ -662,7 +662,7 @@ mod test {
 		let indexer_backend = fc_db::sql::Backend::new(
 			fc_db::sql::BackendConfig::Sqlite(fc_db::sql::SqliteBackendConfig {
 				path: Path::new("sqlite:///")
-					.join(tmp.path().strip_prefix("/").unwrap().to_str().unwrap())
+					.join(tmp.path())
 					.join("test.db3")
 					.to_str()
 					.unwrap(),
@@ -850,7 +850,7 @@ mod test {
 		let indexer_backend = fc_db::sql::Backend::new(
 			fc_db::sql::BackendConfig::Sqlite(fc_db::sql::SqliteBackendConfig {
 				path: Path::new("sqlite:///")
-					.join(tmp.path().strip_prefix("/").unwrap().to_str().unwrap())
+					.join(tmp.path())
 					.join("test.db3")
 					.to_str()
 					.unwrap(),
@@ -984,7 +984,7 @@ mod test {
 		let indexer_backend = fc_db::sql::Backend::new(
 			fc_db::sql::BackendConfig::Sqlite(fc_db::sql::SqliteBackendConfig {
 				path: Path::new("sqlite:///")
-					.join(tmp.path().strip_prefix("/").unwrap().to_str().unwrap())
+					.join(tmp.path())
 					.join("test.db3")
 					.to_str()
 					.unwrap(),
@@ -1114,7 +1114,7 @@ mod test {
 		let indexer_backend = fc_db::sql::Backend::new(
 			fc_db::sql::BackendConfig::Sqlite(fc_db::sql::SqliteBackendConfig {
 				path: Path::new("sqlite:///")
-					.join(tmp.path().strip_prefix("/").unwrap().to_str().unwrap())
+					.join(tmp.path())
 					.join("test.db3")
 					.to_str()
 					.unwrap(),

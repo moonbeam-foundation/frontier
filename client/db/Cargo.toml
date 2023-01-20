@@ -46,6 +46,7 @@ default = ["kvdb-rocksdb", "parity-db"]
 [dev-dependencies]
 fc-rpc = { version = "2.0.0-dev", path = "../../client/rpc" }
 futures = "0.3.24"
+maplit = "1.0.2"
 sc-block-builder = { version = "0.10.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32" }
 sc-client-db = { version = "0.10.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32", features = ["rocksdb"] }
 sp-consensus = { version = "0.10.0-dev", git = "https://github.com/purestake/substrate", branch = "moonbeam-polkadot-v0.9.32" }
