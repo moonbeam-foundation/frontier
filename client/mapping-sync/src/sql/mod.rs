@@ -29,14 +29,16 @@ use sp_runtime::{
 use sqlx::{Row, SqlitePool};
 use std::{collections::VecDeque, sync::Arc, time::Duration};
 
-/// Represents known indexed block hashes.
+/// Represents known indexed block hashes. The structure uses a bounded
+/// cache containing upto `cache_size` latest entries, with a passthrough
+/// to the underlying database, if needed.
 #[derive(Debug, Default)]
-pub struct KnownHashes {
+pub struct IndexedBlocks {
 	cache: VecDeque<H256>,
 	cache_size: usize,
 }
 
-impl KnownHashes {
+impl IndexedBlocks {
 	/// Retrieves and populates the cache with upto N last indexed blocks, where N is the `cache_size`.
 	pub async fn populate_cache(&mut self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
 		sqlx::query(&format!(
@@ -106,7 +108,7 @@ impl KnownHashes {
 /// Implements an indexer that imports blocks and their transactions.
 pub struct SyncWorker<Block, Backend, Client> {
 	_phantom: std::marker::PhantomData<(Block, Backend, Client)>,
-	imported_blocks: KnownHashes,
+	imported_blocks: IndexedBlocks,
 	current_batch: Vec<H256>,
 	batch_size: usize,
 }
@@ -248,7 +250,7 @@ where
 		}
 	}
 
-	pub fn new(batch_size: usize) -> Self {
+	fn new(batch_size: usize) -> Self {
 		SyncWorker {
 			_phantom: Default::default(),
 			imported_blocks: Default::default(),
@@ -479,8 +481,11 @@ mod test {
 					.to_str()
 					.unwrap(),
 				create_if_missing: true,
+				cache_size: 204800,
+				thread_count: 4,
 			}),
 			100,
+			0,
 			overrides.clone(),
 		)
 		.await
@@ -494,15 +499,15 @@ mod test {
 			// New block including pallet ethereum block digest
 			let mut builder = client.new_block(ethereum_digest()).unwrap();
 			// Addresses
-			let address_1 = H160::random();
-			let address_2 = H160::random();
+			let address_1 = H160::repeat_byte(0x01);
+			let address_2 = H160::repeat_byte(0x02);
 			// Topics
-			let topics_1_1 = H256::random();
-			let topics_1_2 = H256::random();
-			let topics_2_1 = H256::random();
-			let topics_2_2 = H256::random();
-			let topics_2_3 = H256::random();
-			let topics_2_4 = H256::random();
+			let topics_1_1 = H256::repeat_byte(0x01);
+			let topics_1_2 = H256::repeat_byte(0x02);
+			let topics_2_1 = H256::repeat_byte(0x03);
+			let topics_2_2 = H256::repeat_byte(0x04);
+			let topics_2_3 = H256::repeat_byte(0x05);
+			let topics_2_4 = H256::repeat_byte(0x06);
 
 			let receipts = Encode::encode(&vec![
 				ethereum::ReceiptV3::EIP1559(ethereum::EIP1559ReceiptData {
@@ -667,8 +672,11 @@ mod test {
 					.to_str()
 					.unwrap(),
 				create_if_missing: true,
+				cache_size: 204800,
+				thread_count: 4,
 			}),
 			100,
+			0,
 			overrides.clone(),
 		)
 		.await
@@ -678,7 +686,7 @@ mod test {
 
 		// Spawn worker after creating the blocks will resolve the interval future.
 		// Because the SyncWorker is spawned at service level, in the real world this will only
-		// happen when we are in major syncing (where there is lack of import notificatons).
+		// happen when we are in major syncing (where there is lack of import notifications).
 		let notification_stream = client.clone().import_notification_stream();
 		let client_inner = client.clone();
 		tokio::task::spawn(async move {
@@ -692,6 +700,7 @@ mod test {
 			)
 			.await
 		});
+
 		// Create 10 blocks, 2 receipts each, 1 log per receipt
 		let mut logs: Vec<(i32, fc_db::sql::Log)> = vec![];
 		for block_number in 1..11 {
@@ -855,8 +864,11 @@ mod test {
 					.to_str()
 					.unwrap(),
 				create_if_missing: true,
+				cache_size: 204800,
+				thread_count: 4,
 			}),
 			100,
+			0,
 			overrides.clone(),
 		)
 		.await
@@ -989,8 +1001,11 @@ mod test {
 					.to_str()
 					.unwrap(),
 				create_if_missing: true,
+				cache_size: 204800,
+				thread_count: 4,
 			}),
 			100,
+			0,
 			overrides.clone(),
 		)
 		.await
@@ -1119,8 +1134,11 @@ mod test {
 					.to_str()
 					.unwrap(),
 				create_if_missing: true,
+				cache_size: 204800,
+				thread_count: 4,
 			}),
 			100,
+			0,
 			overrides.clone(),
 		)
 		.await
