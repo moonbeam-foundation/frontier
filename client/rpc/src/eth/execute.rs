@@ -74,7 +74,12 @@ where
 	A: ChainApi<Block = B> + 'static,
 	EGA: EstimateGasAdapter,
 {
-	pub fn call(&self, request: CallRequest, number: Option<BlockNumber>) -> Result<Bytes> {
+	pub fn call(
+		&self,
+		request: CallRequest,
+		number: Option<BlockNumber>,
+		state_override: Option<CallStateOverride>,
+	) -> Result<Bytes> {
 		let CallRequest {
 			from,
 			to,
@@ -111,6 +116,10 @@ where
 				(id, api)
 			}
 		};
+
+		// TODO set state on api
+		let best = BlockId::Hash(self.client.info().best_hash);
+		api.apply_extrinsic(&best);
 
 		if let Ok(BlockStatus::Unknown) = self.client.status(id) {
 			return Err(crate::err(JSON_RPC_ERROR_DEFAULT, "header not found", None));

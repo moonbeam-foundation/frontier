@@ -289,8 +289,13 @@ where
 	// Execute
 	// ########################################################################
 
-	fn call(&self, request: CallRequest, number: Option<BlockNumber>) -> Result<Bytes> {
-		self.call(request, number)
+	fn call(
+		&self,
+		request: CallRequest,
+		number: Option<BlockNumber>,
+		state_override: Option<CallStateOverride>,
+	) -> Result<Bytes> {
+		self.call(request, number, state_override)
 	}
 
 	async fn estimate_gas(
