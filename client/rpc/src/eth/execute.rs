@@ -74,7 +74,12 @@ where
 	A: ChainApi<Block = B> + 'static,
 	EGA: EstimateGasAdapter,
 {
-	pub fn call(&self, request: CallRequest, number: Option<BlockNumber>) -> Result<Bytes> {
+	pub fn call(
+		&self,
+		request: CallRequest,
+		number: Option<BlockNumber>,
+		state_override: Option<CallStateOverride>,
+	) -> Result<Bytes> {
 		let CallRequest {
 			from,
 			to,
