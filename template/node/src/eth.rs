@@ -15,7 +15,6 @@ use sp_runtime::traits::BlakeTwo256;
 // Frontier
 pub use fc_consensus::FrontierBlockImport;
 pub use fc_db::kv::frontier_database_dir;
-use fc_mapping_sync::kv::{MappingSyncWorker, SyncStrategy};
 use fc_rpc::{EthTask, OverrideHandle};
 pub use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
 // Local
@@ -24,7 +23,7 @@ use frontier_template_runtime::opaque::Block;
 use crate::client::{FullBackend, FullClient};
 
 /// Frontier DB backend type.
-pub type FrontierBackend = fc_db::kv::Backend<Block>;
+pub type FrontierBackend = fc_db::Backend<Block>;
 
 pub fn db_config_dir(config: &Configuration) -> PathBuf {
 	let application = &config.impl_name;
@@ -120,21 +119,41 @@ pub fn spawn_frontier_tasks<RuntimeApi, Executor>(
 		EthCompatRuntimeApiCollection<StateBackend = StateBackendFor<FullBackend, Block>>,
 	Executor: NativeExecutionDispatch + 'static,
 {
-	task_manager.spawn_essential_handle().spawn(
-		"frontier-mapping-sync-worker",
-		Some("frontier"),
-		MappingSyncWorker::new(
-			client.import_notification_stream(),
-			Duration::new(6, 0),
-			client.clone(),
-			backend,
-			frontier_backend,
-			3,
-			0,
-			SyncStrategy::Normal,
-		)
-		.for_each(|()| future::ready(())),
-	);
+	match frontier_backend.as_ref() {
+		fc_db::Backend::KeyValue(frontier_backend_inner) => {
+			task_manager.spawn_essential_handle().spawn(
+				"frontier-mapping-sync-worker",
+				Some("frontier"),
+				fc_mapping_sync::kv::MappingSyncWorker::new(
+					client.import_notification_stream(),
+					Duration::new(6, 0),
+					client.clone(),
+					backend,
+					frontier_backend_inner.clone(),
+					3,
+					0,
+					fc_mapping_sync::kv::SyncStrategy::Normal,
+				)
+				.for_each(|()| future::ready(())),
+			);
+		} // fc_db::Backend::Sql(frontier_backend) => {
+		  // 	task_manager.spawn_essential_handle().spawn(
+		  // 		"frontier-mapping-sync-worker",
+		  // 		Some("frontier"),
+		  // 		MappingSyncWorker::new(
+		  // 			client.import_notification_stream(),
+		  // 			Duration::new(6, 0),
+		  // 			client.clone(),
+		  // 			backend,
+		  // 			Arc::new(frontier_backend),
+		  // 			3,
+		  // 			0,
+		  // 			SyncStrategy::Normal,
+		  // 		)
+		  // 		.for_each(|()| future::ready(())),
+		  // 	);
+		  // }
+	}
 
 	// Spawn Frontier EthFilterApi maintenance task.
 	if let Some(filter_pool) = filter_pool {

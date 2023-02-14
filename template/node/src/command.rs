@@ -24,8 +24,8 @@ use fc_db::kv::frontier_database_dir;
 
 use crate::{
 	chain_spec,
-	cli::{Cli, Subcommand},
-	service::{self, db_config_dir},
+	cli::{Cli, FrontierBackendType, Subcommand},
+	service::{self, db_config_dir, FrontierBackendConfig},
 };
 
 impl SubstrateCli for Cli {
@@ -209,13 +209,26 @@ pub fn run() -> sc_cli::Result<()> {
 			runner.sync_run(|mut config| {
 				let (client, _, _, _, frontier_backend) =
 					service::new_chain_ops(&mut config, &cli.eth)?;
-				cmd.run(client, frontier_backend)
+				let fc_db::Backend::KeyValue(frontier_backend_inner) = frontier_backend.as_ref() else {
+					panic!("Only fc_db::Backend::KeyValue supported")
+				};
+				cmd.run(client, frontier_backend_inner.clone())
 			})
 		}
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {
-				service::build_full(config, cli.eth, cli.sealing).map_err(Into::into)
+				let frontier_backend_config = match cli.frontier_backend_type {
+					FrontierBackendType::KeyValue => FrontierBackendConfig::KeyValue,
+					FrontierBackendType::Sql => FrontierBackendConfig::Sql {
+						pool_size: cli.frontier_sql_backend_pool_size,
+						num_ops_timeout: cli.frontier_sql_backend_num_ops_timeout,
+						thread_count: cli.frontier_sql_backend_thread_count,
+						cache_size: cli.frontier_sql_backend_cache_size,
+					},
+				};
+				service::build_full(config, cli.eth, cli.sealing, frontier_backend_config)
+					.map_err(Into::into)
 			})
 		}
 	}

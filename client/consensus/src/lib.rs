@@ -64,7 +64,7 @@ impl From<Error> for ConsensusError {
 pub struct FrontierBlockImport<B: BlockT, I, C> {
 	inner: I,
 	client: Arc<C>,
-	backend: Arc<fc_db::kv::Backend<B>>,
+	backend: Arc<fc_db::Backend<B>>,
 	_marker: PhantomData<B>,
 }
 
@@ -88,7 +88,7 @@ where
 	C::Api: EthereumRuntimeRPCApi<B>,
 	C::Api: BlockBuilderApi<B>,
 {
-	pub fn new(inner: I, client: Arc<C>, backend: Arc<fc_db::kv::Backend<B>>) -> Self {
+	pub fn new(inner: I, client: Arc<C>, backend: Arc<fc_db::Backend<B>>) -> Self {
 		Self {
 			inner,
 			client,

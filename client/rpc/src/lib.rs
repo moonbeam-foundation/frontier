@@ -63,12 +63,13 @@ pub mod frontier_backend_client {
 	};
 	use sp_storage::StorageKey;
 	// Frontier
+	use fc_db::BackendReader;
 	use fc_rpc_core::types::BlockNumber;
 	use fp_storage::{EthereumStorageSchema, PALLET_ETHEREUM_SCHEMA};
 
 	pub fn native_block_id<B: BlockT, C>(
 		client: &C,
-		backend: &fc_db::kv::Backend<B>,
+		backend: &fc_db::Backend<B>,
 		number: Option<BlockNumber>,
 	) -> RpcResult<Option<BlockId<B>>>
 	where
@@ -90,7 +91,7 @@ pub mod frontier_backend_client {
 
 	pub fn load_hash<B: BlockT, C>(
 		client: &C,
-		backend: &fc_db::kv::Backend<B>,
+		backend: &fc_db::Backend<B>,
 		hash: H256,
 	) -> RpcResult<Option<BlockId<B>>>
 	where
@@ -98,7 +99,6 @@ pub mod frontier_backend_client {
 		C: HeaderBackend<B> + Send + Sync + 'static,
 	{
 		let substrate_hashes = backend
-			.mapping()
 			.block_hash(&hash)
 			.map_err(|err| internal_err(format!("fetch aux store failed: {:?}", err)))?;
 
@@ -178,7 +178,7 @@ pub mod frontier_backend_client {
 
 	pub fn load_transactions<B: BlockT, C>(
 		client: &C,
-		backend: &fc_db::kv::Backend<B>,
+		backend: &fc_db::Backend<B>,
 		transaction_hash: H256,
 		only_canonical: bool,
 	) -> RpcResult<Option<(H256, u32)>>
@@ -187,7 +187,6 @@ pub mod frontier_backend_client {
 		C: HeaderBackend<B> + Send + Sync + 'static,
 	{
 		let transaction_metadata = backend
-			.mapping()
 			.transaction_metadata(&transaction_hash)
 			.map_err(|err| internal_err(format!("fetch aux store failed: {:?}", err)))?;
 

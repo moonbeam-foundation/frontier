@@ -15,6 +15,21 @@ impl Default for Sealing {
 	}
 }
 
+/// Available Backend types.
+#[derive(Debug, Copy, Clone, clap::ValueEnum)]
+pub enum FrontierBackendType {
+	/// Either RocksDb or ParityDb as per inherited from the global backend settings.
+	KeyValue,
+	/// Sql database with custom log indexing.
+	Sql,
+}
+
+impl Default for FrontierBackendType {
+	fn default() -> Self {
+		FrontierBackendType::KeyValue
+	}
+}
+
 #[derive(Debug, clap::Parser)]
 pub struct Cli {
 	#[command(subcommand)]
@@ -27,6 +42,27 @@ pub struct Cli {
 	/// Choose sealing method.
 	#[arg(long, value_enum, ignore_case = true)]
 	pub sealing: Option<Sealing>,
+
+	/// Sets the backend type (KeyValue or Sql)
+	#[arg(long, value_enum, ignore_case = true, default_value_t = FrontierBackendType::default())]
+	pub frontier_backend_type: FrontierBackendType,
+
+	/// Sets the SQL backend's pool size.
+	#[arg(long, default_value = "100")]
+	pub frontier_sql_backend_pool_size: u32,
+
+	/// Sets the SQL backend's query timeout in number of VM ops.
+	#[arg(long, default_value = "10000000")]
+	pub frontier_sql_backend_num_ops_timeout: u32,
+
+	/// Sets the SQL backend's auxiliary thread limit.
+	#[arg(long, default_value = "4")]
+	pub frontier_sql_backend_thread_count: u32,
+
+	/// Sets the SQL backend's query timeout in number of VM ops.
+	/// Default value is 200MB.
+	#[arg(long, default_value = "209715200")]
+	pub frontier_sql_backend_cache_size: u64,
 
 	#[command(flatten)]
 	pub eth: EthConfiguration,

@@ -37,6 +37,8 @@ use sp_runtime::traits::Block as BlockT;
 // Frontier
 use fp_storage::{EthereumStorageSchema, PALLET_ETHEREUM_SCHEMA_CACHE};
 
+use crate::TransactionMetadata;
+
 const DB_HASH_LEN: usize = 32;
 /// Hash type that this backend uses for the database.
 pub type DbHash = [u8; DB_HASH_LEN];
@@ -203,13 +205,6 @@ pub struct MappingCommitment<Block: BlockT> {
 	pub ethereum_transaction_hashes: Vec<H256>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
-pub struct TransactionMetadata<Block: BlockT> {
-	pub block_hash: Block::Hash,
-	pub ethereum_block_hash: H256,
-	pub ethereum_index: u32,
-}
-
 pub struct MappingDb<Block: BlockT> {
 	db: Arc<dyn Database<DbHash>>,
 	write_lock: Arc<Mutex<()>>,
@@ -328,5 +323,35 @@ impl<Block: BlockT> MappingDb<Block> {
 			.map_err(|e| format!("{:?}", e))?;
 
 		Ok(())
+	}
+}
+
+#[async_trait::async_trait]
+impl<Block: BlockT> crate::BackendReader<Block> for Backend<Block> {
+	fn block_hash(&self, ethereum_block_hash: &H256) -> Result<Option<Vec<Block::Hash>>, String> {
+		self.mapping().block_hash(ethereum_block_hash)
+	}
+
+	fn transaction_metadata(
+		&self,
+		ethereum_transaction_hash: &H256,
+	) -> Result<Vec<TransactionMetadata<Block>>, String> {
+		self.mapping()
+			.transaction_metadata(ethereum_transaction_hash)
+	}
+
+	async fn filter_logs(
+		&self,
+		_from_block: u64,
+		_to_block: u64,
+		_addresses: Vec<sp_core::H160>,
+		_topics: Vec<Vec<Option<H256>>>,
+	) -> Result<Vec<crate::FilteredLog>, String> {
+		// KeyValue db does not index logs, so filtering not possible.
+		unimplemented!();
+	}
+
+	fn is_indexed(&self) -> bool {
+		false
 	}
 }

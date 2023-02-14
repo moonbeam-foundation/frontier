@@ -40,10 +40,22 @@ type GrandpaBlockImport<Client> =
 type GrandpaLinkHalf<Client> = sc_finality_grandpa::LinkHalf<Block, Client, FullSelectChain>;
 type BoxBlockImport<Client> = sc_consensus::BoxBlockImport<Block, TransactionFor<Client, Block>>;
 
+/// Defines the generic backend configuration.
+pub enum FrontierBackendConfig {
+	KeyValue,
+	Sql {
+		pool_size: u32,
+		num_ops_timeout: u32,
+		thread_count: u32,
+		cache_size: u64,
+	},
+}
+
 pub fn new_partial<RuntimeApi, Executor, BIQ>(
 	config: &Configuration,
 	eth_config: &EthConfiguration,
 	build_import_queue: BIQ,
+	frontier_backend_config: FrontierBackendConfig,
 ) -> Result<
 	PartialComponents<
 		FullClient<RuntimeApi, Executor>,
@@ -123,11 +135,38 @@ where
 		telemetry.as_ref().map(|x| x.handle()),
 	)?;
 
-	let frontier_backend = Arc::new(FrontierBackend::open(
-		client.clone(),
-		&config.database,
-		&db_config_dir(config),
-	)?);
+	let frontier_backend = match frontier_backend_config {
+		FrontierBackendConfig::KeyValue => Arc::new(FrontierBackend::KeyValue(Arc::new(
+			fc_db::kv::Backend::open(client.clone(), &config.database, &db_config_dir(config))?,
+		))),
+		FrontierBackendConfig::Sql {
+			pool_size,
+			num_ops_timeout,
+			thread_count,
+			cache_size,
+		} => {
+			// let db_path = &db_config_dir(config);
+			// let backend = futures::executor::block_on(fc_db::sql::Backend::new(
+			// 	fc_db::sql::BackendConfig::Sqlite(fc_db::sql::SqliteBackendConfig {
+			// 		path: Path::new("sqlite:///")
+			// 			.join(db_path)
+			// 			.join("frontier.db3")
+			// 			.to_str()
+			// 			.unwrap(),
+			// 		create_if_missing: true,
+			// 		thread_count,
+			// 		cache_size,
+			// 	}),
+			// 	pool_size,
+			// 	num_ops_timeout,
+			// 	crate::rpc::overrides_handle(client.clone()),
+			// ))
+			// .expect("indexer pool to be created");
+			// Arc::new(FrontierBackend::Sql(backend))
+			unimplemented!();
+		}
+	};
+
 	let (import_queue, block_import) = build_import_queue(
 		client.clone(),
 		config,
@@ -257,6 +296,7 @@ pub fn new_full<RuntimeApi, Executor>(
 	mut config: Configuration,
 	eth_config: EthConfiguration,
 	sealing: Option<Sealing>,
+	frontier_backend_config: FrontierBackendConfig,
 ) -> Result<TaskManager, ServiceError>
 where
 	RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
@@ -280,7 +320,12 @@ where
 		select_chain,
 		transaction_pool,
 		other: (mut telemetry, block_import, grandpa_link, frontier_backend),
-	} = new_partial(&config, &eth_config, build_import_queue)?;
+	} = new_partial(
+		&config,
+		&eth_config,
+		build_import_queue,
+		frontier_backend_config,
+	)?;
 
 	let FrontierPartialComponents {
 		filter_pool,
@@ -629,9 +674,13 @@ pub fn build_full(
 	config: Configuration,
 	eth_config: EthConfiguration,
 	sealing: Option<Sealing>,
+	frontier_backend_config: FrontierBackendConfig,
 ) -> Result<TaskManager, ServiceError> {
 	new_full::<frontier_template_runtime::RuntimeApi, TemplateRuntimeExecutor>(
-		config, eth_config, sealing,
+		config,
+		eth_config,
+		sealing,
+		frontier_backend_config,
 	)
 }
 
@@ -660,6 +709,7 @@ pub fn new_chain_ops(
 		config,
 		eth_config,
 		build_aura_grandpa_import_queue,
+		FrontierBackendConfig::KeyValue,
 	)?;
 	Ok((client, backend, import_queue, task_manager, other.3))
 }
