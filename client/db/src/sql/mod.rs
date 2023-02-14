@@ -16,12 +16,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use codec::{Decode, Encode};
 use fp_consensus::FindLogError;
 use fp_rpc::EthereumRuntimeRPCApi;
 use fp_storage::{EthereumStorageSchema, OverrideHandle, PALLET_ETHEREUM_SCHEMA};
 use futures::TryStreamExt;
 use sc_client_api::backend::{Backend as BackendT, StateBackend, StorageProvider};
+use scale_codec::{Decode, Encode};
 use sp_api::{ApiExt, ProvideRuntimeApi};
 use sp_blockchain::HeaderBackend;
 use sp_core::{H160, H256};
@@ -89,9 +89,9 @@ pub struct Backend<Block: BlockT> {
 	overrides: Arc<OverrideHandle<Block>>,
 	num_ops_timeout: i32,
 }
-impl<Block: BlockT> Backend<Block>
+impl<Block: BlockT<Hash = H256>> Backend<Block>
 where
-	Block: BlockT<Hash = H256> + Send + Sync,
+	Block: BlockT + Send + Sync,
 {
 	pub async fn new(
 		config: BackendConfig<'_>,
@@ -189,9 +189,9 @@ where
 		BE::State: StateBackend<BlakeTwo256>,
 	{
 		let id = BlockId::Number(Zero::zero());
-		let maybe_substrate_hash: Option<H256> = if let Ok(Some(genesis_header)) = client.header(id)
+		let maybe_substrate_hash: Option<H256> = if let Ok(substrate_genesis_hash) =
+			client.expect_block_hash_from_id(&id)
 		{
-			let substrate_genesis_hash = genesis_header.hash();
 			let has_api = client
 				.runtime_api()
 				.has_api::<dyn EthereumRuntimeRPCApi<Block>>(&id)
@@ -216,7 +216,8 @@ where
 				let ethereum_block_hash = ethereum_block.header.hash().as_bytes().to_owned();
 				let substrate_block_hash = substrate_genesis_hash.as_bytes();
 				let block_number = 0i32;
-				let schema = Self::onchain_storage_schema(client.as_ref(), id).encode();
+				let schema =
+					Self::onchain_storage_schema(client.as_ref(), substrate_genesis_hash).encode();
 				let is_canon = 1i32;
 
 				let _ = sqlx::query!(
@@ -260,23 +261,16 @@ where
 		);
 		let mut out = Vec::new();
 		for &hash in hashes.iter() {
-			let id = BlockId::Hash(hash);
-			if let Ok(Some(header)) = client.header(id) {
+			if let Ok(Some(header)) = client.header(hash) {
 				match fp_consensus::find_log(header.digest()) {
 					Ok(log) => {
 						let header_number = *header.number();
 						let block_number =
 							UniqueSaturatedInto::<u32>::unique_saturated_into(header_number) as i32;
-						let is_canon = match client.header(BlockId::Number(header_number)) {
-							Ok(Some(header)) => (header.hash() == hash) as i32,
-							Ok(None) => {
-								log::debug!(
-									target: "frontier-sql",
-									"[Metadata] Missing header for block #{} ({:?})",
-									block_number, hash,
-								);
-								0
-							}
+						let is_canon = match client
+							.expect_block_hash_from_id(&BlockId::Number(header_number))
+						{
+							Ok(header_hash) => (header_hash == hash) as i32,
 							Err(err) => {
 								log::debug!(
 									"[Metadata] Failed to retrieve header for block #{} ({:?}): {:?}",
@@ -286,7 +280,7 @@ where
 							}
 						};
 
-						let schema = Self::onchain_storage_schema(client.as_ref(), id);
+						let schema = Self::onchain_storage_schema(client.as_ref(), hash);
 						log::trace!(
 							target: "frontier-sql",
 							"🛠️  [Metadata] Prepared block metadata for #{} ({:?}) canon={}",
@@ -520,9 +514,9 @@ where
 		let mut logs: Vec<Log> = vec![];
 		let mut transaction_count: usize = 0;
 		let mut log_count: usize = 0;
-		for substrate_block_hash in substrate_block_hashes.iter() {
+		for substrate_block_hash in substrate_block_hashes {
 			let id = BlockId::Hash(*substrate_block_hash);
-			let schema = Self::onchain_storage_schema(client.as_ref(), id);
+			let schema = Self::onchain_storage_schema(client.as_ref(), *substrate_block_hash);
 			let handler = overrides
 				.schemas
 				.get(&schema)
@@ -582,19 +576,13 @@ where
 		logs
 	}
 
-	fn onchain_storage_schema<Client, BE>(
-		client: &Client,
-		at: BlockId<Block>,
-	) -> EthereumStorageSchema
+	fn onchain_storage_schema<Client, BE>(client: &Client, at: Block::Hash) -> EthereumStorageSchema
 	where
 		Client: StorageProvider<Block, BE> + HeaderBackend<Block> + Send + Sync + 'static,
 		BE: BackendT<Block> + 'static,
 		BE::State: StateBackend<BlakeTwo256>,
 	{
-		match client.storage(
-			&at,
-			&sp_storage::StorageKey(PALLET_ETHEREUM_SCHEMA.to_vec()),
-		) {
+		match client.storage(at, &sp_storage::StorageKey(PALLET_ETHEREUM_SCHEMA.to_vec())) {
 			Ok(Some(bytes)) => Decode::decode(&mut &bytes.0[..])
 				.ok()
 				.unwrap_or(EthereumStorageSchema::Undefined),

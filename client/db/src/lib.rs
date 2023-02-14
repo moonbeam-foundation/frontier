@@ -22,7 +22,7 @@ use sp_runtime::traits::Block as BlockT;
 use std::sync::Arc;
 
 pub mod kv;
-// pub mod sql;
+pub mod sql;
 
 /// Defines the metadata structure for an ethereum transaction.
 #[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
@@ -47,10 +47,13 @@ pub struct FilteredLog {
 #[async_trait::async_trait]
 pub trait BackendReader<Block: BlockT>: Send + Sync {
 	/// Returns the substrate block hash for a given ethereum block hash.
-	fn block_hash(&self, ethereum_block_hash: &H256) -> Result<Option<Vec<Block::Hash>>, String>;
+	async fn block_hash(
+		&self,
+		ethereum_block_hash: &H256,
+	) -> Result<Option<Vec<Block::Hash>>, String>;
 
 	/// Returns the ethereum transaction metadata for a provided ethereum transaction hash.
-	fn transaction_metadata(
+	async fn transaction_metadata(
 		&self,
 		ethereum_transaction_hash: &H256,
 	) -> Result<Vec<TransactionMetadata<Block>>, String>;
@@ -69,26 +72,41 @@ pub trait BackendReader<Block: BlockT>: Send + Sync {
 }
 
 /// Defines a backend type for frontier. The options are `KeyValue` which is backed
-/// by RocksDB, or `Sql` which is backed by Sqlite.
+/// by RocksDB, or `Sql` which is backed by Sqlite. The object can be freely cloned
+/// since the the connections are contained within an `Arc`.
+#[derive(Clone)]
 pub enum Backend<Block: BlockT> {
 	KeyValue(Arc<kv::Backend<Block>>),
-	// Sql(sql::Backend<Block>),
+	Sql(Arc<sql::Backend<Block>>),
 }
 
 #[async_trait::async_trait]
-impl<Block: BlockT> crate::BackendReader<Block> for Backend<Block> {
-	fn block_hash(&self, ethereum_block_hash: &H256) -> Result<Option<Vec<Block::Hash>>, String> {
+impl<Block: BlockT<Hash = H256>> crate::BackendReader<Block> for Backend<Block> {
+	async fn block_hash(
+		&self,
+		ethereum_block_hash: &H256,
+	) -> Result<Option<Vec<Block::Hash>>, String> {
 		match self {
-			Backend::KeyValue(b) => b.block_hash(ethereum_block_hash),
+			Backend::KeyValue(b) => b.as_ref().block_hash(ethereum_block_hash).await,
+			Backend::Sql(b) => b.as_ref().block_hash(ethereum_block_hash).await,
 		}
 	}
 
-	fn transaction_metadata(
+	async fn transaction_metadata(
 		&self,
 		ethereum_transaction_hash: &H256,
 	) -> Result<Vec<TransactionMetadata<Block>>, String> {
 		match self {
-			Backend::KeyValue(b) => b.transaction_metadata(ethereum_transaction_hash),
+			Backend::KeyValue(b) => {
+				b.as_ref()
+					.transaction_metadata(ethereum_transaction_hash)
+					.await
+			}
+			Backend::Sql(b) => {
+				b.as_ref()
+					.transaction_metadata(ethereum_transaction_hash)
+					.await
+			}
 		}
 	}
 
@@ -100,13 +118,23 @@ impl<Block: BlockT> crate::BackendReader<Block> for Backend<Block> {
 		topics: Vec<Vec<Option<H256>>>,
 	) -> Result<Vec<crate::FilteredLog>, String> {
 		match self {
-			Backend::KeyValue(b) => b.filter_logs(from_block, to_block, addresses, topics).await,
+			Backend::KeyValue(b) => {
+				b.as_ref()
+					.filter_logs(from_block, to_block, addresses, topics)
+					.await
+			}
+			Backend::Sql(b) => {
+				b.as_ref()
+					.filter_logs(from_block, to_block, addresses, topics)
+					.await
+			}
 		}
 	}
 
 	fn is_indexed(&self) -> bool {
 		match self {
-			Backend::KeyValue(b) => b.is_indexed(),
+			Backend::KeyValue(b) => b.as_ref().is_indexed(),
+			Backend::Sql(b) => b.as_ref().is_indexed(),
 		}
 	}
 }

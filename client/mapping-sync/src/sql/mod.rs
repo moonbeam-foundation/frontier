@@ -313,10 +313,9 @@ where
 			.get_first_missing_block(indexer_backend.pool())
 			.await
 		{
-			if let Ok(Some(header)) =
-				client.header(BlockId::Number(block_number.unique_saturated_into()))
+			if let Ok(block_hash) = client
+				.expect_block_hash_from_id(&BlockId::Number(block_number.unique_saturated_into()))
 			{
-				let block_hash = header.hash();
 				log::debug!(
 					target: "frontier-sql",
 					"Indexing past blocks from #{} {:?}",
@@ -386,7 +385,7 @@ where
 				break;
 			}
 
-			if let Ok(Some(header)) = blockchain_backend.header(BlockId::Hash(hash)) {
+			if let Ok(Some(header)) = blockchain_backend.header(hash) {
 				let parent_hash = header.parent_hash();
 				hashes.push(*parent_hash);
 			}

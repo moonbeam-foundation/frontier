@@ -12,6 +12,10 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 async-trait = "0.1.64"
+ethereum = { workspace = true, features = ["with-codec"] }
+futures = "0.3.26"
+sqlx = { features = ["runtime-tokio-native-tls", "sqlite", "offline"], git = "https://github.com/PureStake/sqlx", branch = "v0.6.2-timeout" }
+tokio = { version = "1.24", features = ["sync"] }
 kvdb-rocksdb = { workspace = true, optional = true }
 log = "0.4.17"
 parity-db = { workspace = true, optional = true }
@@ -19,12 +23,17 @@ parking_lot = "0.12.1"
 scale-codec = { package = "parity-scale-codec", workspace = true }
 smallvec = "1.10"
 # Substrate
+sp-api = { workspace = true }
+sc-client-api = { workspace = true }
 sc-client-db = { workspace = true, features = ["rocksdb"] }
 sp-blockchain = { workspace = true }
 sp-core = { workspace = true }
 sp-database = { workspace = true }
+sp-storage = { workspace = true }
 sp-runtime = { workspace = true }
 # Frontier
+fp-consensus = { workspace = true }
+fp-rpc = { workspace = true }
 fp-storage = { workspace = true, features = ["std"] }
 
 [features]
