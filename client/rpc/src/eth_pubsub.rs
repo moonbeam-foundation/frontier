@@ -37,6 +37,7 @@ use sp_consensus::SyncOracle;
 use sp_core::hashing::keccak_256;
 use sp_runtime::traits::{BlakeTwo256, Block as BlockT, UniqueSaturatedInto};
 // Frontier
+use crate::frontier_backend_client;
 use fc_rpc_core::{
 	types::{
 		pubsub::{Kind, Params, PubSubSyncStatus, Result as PubSubResult, SyncStatusMetadata},
@@ -45,8 +46,7 @@ use fc_rpc_core::{
 	EthPubSubApiServer,
 };
 use fp_rpc::EthereumRuntimeRPCApi;
-
-use crate::{frontier_backend_client, overrides::OverrideHandle};
+use fp_storage::OverrideHandle;
 
 #[derive(Debug)]
 pub struct EthereumSubIdProvider;

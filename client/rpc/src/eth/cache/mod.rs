@@ -43,13 +43,10 @@ use sp_runtime::{
 // Frontier
 use fc_rpc_core::types::*;
 use fp_rpc::{EthereumRuntimeRPCApi, TransactionStatus};
-use fp_storage::EthereumStorageSchema;
+use fp_storage::{EthereumStorageSchema, OverrideHandle, StorageOverride};
 
 use self::lru_cache::LRUCacheByteLimited;
-use crate::{
-	frontier_backend_client,
-	overrides::{OverrideHandle, StorageOverride},
-};
+use crate::frontier_backend_client;
 
 type WaitList<Hash, T> = HashMap<Hash, Vec<oneshot::Sender<Option<T>>>>;
 

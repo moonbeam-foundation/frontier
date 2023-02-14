@@ -16,6 +16,7 @@ use sp_core::U256;
 use sp_runtime::traits::BlakeTwo256;
 use sp_trie::PrefixedMemoryDB;
 // Runtime
+use fp_rpc::EthereumRuntimeRPCApi;
 use frontier_template_runtime::{opaque::Block, Hash, TransactionConverter};
 
 use crate::{
@@ -75,8 +76,8 @@ pub fn new_partial<RuntimeApi, Executor, BIQ>(
 where
 	RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
 	RuntimeApi: Send + Sync + 'static,
-	RuntimeApi::RuntimeApi:
-		BaseRuntimeApiCollection<StateBackend = StateBackendFor<FullBackend, Block>>,
+	RuntimeApi::RuntimeApi: BaseRuntimeApiCollection<StateBackend = StateBackendFor<FullBackend, Block>>
+		+ EthereumRuntimeRPCApi<Block>,
 	Executor: NativeExecutionDispatch + 'static,
 	BIQ: FnOnce(
 		Arc<FullClient<RuntimeApi, Executor>>,
@@ -135,6 +136,7 @@ where
 		telemetry.as_ref().map(|x| x.handle()),
 	)?;
 
+	let overrides = crate::rpc::overrides_handle(client.clone());
 	let frontier_backend = match frontier_backend_config {
 		FrontierBackendConfig::KeyValue => Arc::new(FrontierBackend::KeyValue(Arc::new(
 			fc_db::kv::Backend::open(client.clone(), &config.database, &db_config_dir(config))?,
@@ -145,25 +147,24 @@ where
 			thread_count,
 			cache_size,
 		} => {
-			// let db_path = &db_config_dir(config);
-			// let backend = futures::executor::block_on(fc_db::sql::Backend::new(
-			// 	fc_db::sql::BackendConfig::Sqlite(fc_db::sql::SqliteBackendConfig {
-			// 		path: Path::new("sqlite:///")
-			// 			.join(db_path)
-			// 			.join("frontier.db3")
-			// 			.to_str()
-			// 			.unwrap(),
-			// 		create_if_missing: true,
-			// 		thread_count,
-			// 		cache_size,
-			// 	}),
-			// 	pool_size,
-			// 	num_ops_timeout,
-			// 	crate::rpc::overrides_handle(client.clone()),
-			// ))
-			// .expect("indexer pool to be created");
-			// Arc::new(FrontierBackend::Sql(backend))
-			unimplemented!();
+			let db_path = &db_config_dir(config);
+			let backend = futures::executor::block_on(fc_db::sql::Backend::new(
+				fc_db::sql::BackendConfig::Sqlite(fc_db::sql::SqliteBackendConfig {
+					path: std::path::Path::new("sqlite:///")
+						.join(db_path)
+						.join("frontier.db3")
+						.to_str()
+						.unwrap(),
+					create_if_missing: true,
+					thread_count,
+					cache_size,
+				}),
+				pool_size,
+				num_ops_timeout,
+				overrides,
+			))
+			.expect("indexer pool to be created");
+			Arc::new(FrontierBackend::Sql(Arc::new(backend)))
 		}
 	};
 

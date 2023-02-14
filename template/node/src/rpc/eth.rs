@@ -17,11 +17,11 @@ use sp_runtime::traits::{BlakeTwo256, Block as BlockT, Header as HeaderT};
 // Frontier
 use fc_db::Backend as FrontierBackend;
 pub use fc_rpc::{
-	EthBlockDataCacheTask, OverrideHandle, RuntimeApiStorageOverride, SchemaV1Override,
-	SchemaV2Override, SchemaV3Override, StorageOverride,
+	EthBlockDataCacheTask, RuntimeApiStorageOverride, SchemaV1Override, SchemaV2Override,
+	SchemaV3Override,
 };
 pub use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
-use fp_storage::EthereumStorageSchema;
+use fp_storage::{EthereumStorageSchema, OverrideHandle, StorageOverride};
 
 /// Extra dependencies for Ethereum compatibility.
 pub struct EthDeps<C, P, A: ChainApi, CT, B: BlockT> {

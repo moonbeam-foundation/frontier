@@ -15,8 +15,9 @@ use sp_runtime::traits::BlakeTwo256;
 // Frontier
 pub use fc_consensus::FrontierBlockImport;
 pub use fc_db::kv::frontier_database_dir;
-use fc_rpc::{EthTask, OverrideHandle};
+use fc_rpc::EthTask;
 pub use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
+use fp_storage::OverrideHandle;
 // Local
 use frontier_template_runtime::opaque::Block;
 
@@ -136,23 +137,21 @@ pub fn spawn_frontier_tasks<RuntimeApi, Executor>(
 				)
 				.for_each(|()| future::ready(())),
 			);
-		} // fc_db::Backend::Sql(frontier_backend) => {
-		  // 	task_manager.spawn_essential_handle().spawn(
-		  // 		"frontier-mapping-sync-worker",
-		  // 		Some("frontier"),
-		  // 		MappingSyncWorker::new(
-		  // 			client.import_notification_stream(),
-		  // 			Duration::new(6, 0),
-		  // 			client.clone(),
-		  // 			backend,
-		  // 			Arc::new(frontier_backend),
-		  // 			3,
-		  // 			0,
-		  // 			SyncStrategy::Normal,
-		  // 		)
-		  // 		.for_each(|()| future::ready(())),
-		  // 	);
-		  // }
+		}
+		fc_db::Backend::Sql(frontier_backend_inner) => {
+			task_manager.spawn_essential_handle().spawn(
+				"frontier-mapping-sync-worker",
+				Some("frontier"),
+				fc_mapping_sync::sql::SyncWorker::run(
+					client.clone(),
+					backend,
+					frontier_backend_inner.clone(),
+					client.import_notification_stream(),
+					1000,                              // batch size
+					std::time::Duration::from_secs(1), // interval duration
+				),
+			);
+		}
 	}
 
 	// Spawn Frontier EthFilterApi maintenance task.

@@ -52,7 +52,7 @@ where
 			.map_err(|err| internal_err(format!("fetch runtime chain id failed: {:?}", err)))
 	}
 
-	pub fn fee_history(
+	pub async fn fee_history(
 		&self,
 		block_count: U256,
 		newest_block: BlockNumber,
@@ -70,7 +70,9 @@ where
 			self.client.as_ref(),
 			self.backend.as_ref(),
 			Some(newest_block),
-		) {
+		)
+		.await
+		{
 			let Ok(number) = self.client.expect_block_number_from_id(&id) else {
 				return Err(internal_err(format!("Failed to retrieve block number at {id}")));
 			};
