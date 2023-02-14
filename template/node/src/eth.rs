@@ -14,8 +14,8 @@ use sp_api::ConstructRuntimeApi;
 use sp_runtime::traits::BlakeTwo256;
 // Frontier
 pub use fc_consensus::FrontierBlockImport;
-pub use fc_db::frontier_database_dir;
-use fc_mapping_sync::{MappingSyncWorker, SyncStrategy};
+pub use fc_db::kv::frontier_database_dir;
+use fc_mapping_sync::kv::{MappingSyncWorker, SyncStrategy};
 use fc_rpc::{EthTask, OverrideHandle};
 pub use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
 // Local
@@ -24,7 +24,7 @@ use frontier_template_runtime::opaque::Block;
 use crate::client::{FullBackend, FullClient};
 
 /// Frontier DB backend type.
-pub type FrontierBackend = fc_db::Backend<Block>;
+pub type FrontierBackend = fc_db::kv::Backend<Block>;
 
 pub fn db_config_dir(config: &Configuration) -> PathBuf {
 	let application = &config.impl_name;

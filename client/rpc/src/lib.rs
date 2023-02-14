@@ -68,7 +68,7 @@ pub mod frontier_backend_client {
 
 	pub fn native_block_id<B: BlockT, C>(
 		client: &C,
-		backend: &fc_db::Backend<B>,
+		backend: &fc_db::kv::Backend<B>,
 		number: Option<BlockNumber>,
 	) -> RpcResult<Option<BlockId<B>>>
 	where
@@ -90,7 +90,7 @@ pub mod frontier_backend_client {
 
 	pub fn load_hash<B: BlockT, C>(
 		client: &C,
-		backend: &fc_db::Backend<B>,
+		backend: &fc_db::kv::Backend<B>,
 		hash: H256,
 	) -> RpcResult<Option<BlockId<B>>>
 	where
@@ -113,7 +113,7 @@ pub mod frontier_backend_client {
 	}
 
 	pub fn load_cached_schema<B: BlockT, C>(
-		backend: &fc_db::Backend<B>,
+		backend: &fc_db::kv::Backend<B>,
 	) -> RpcResult<Option<Vec<(EthereumStorageSchema, H256)>>>
 	where
 		B: BlockT<Hash = H256> + Send + Sync + 'static,
@@ -127,7 +127,7 @@ pub mod frontier_backend_client {
 	}
 
 	pub fn write_cached_schema<B: BlockT, C>(
-		backend: &fc_db::Backend<B>,
+		backend: &fc_db::kv::Backend<B>,
 		new_cache: Vec<(EthereumStorageSchema, H256)>,
 	) -> RpcResult<()>
 	where
@@ -178,7 +178,7 @@ pub mod frontier_backend_client {
 
 	pub fn load_transactions<B: BlockT, C>(
 		client: &C,
-		backend: &fc_db::Backend<B>,
+		backend: &fc_db::kv::Backend<B>,
 		transaction_hash: H256,
 		only_canonical: bool,
 	) -> RpcResult<Option<(H256, u32)>>
@@ -283,13 +283,13 @@ mod tests {
 	fn open_frontier_backend<C>(
 		client: Arc<C>,
 		path: PathBuf,
-	) -> Result<Arc<fc_db::Backend<OpaqueBlock>>, String>
+	) -> Result<Arc<fc_db::kv::Backend<OpaqueBlock>>, String>
 	where
 		C: sp_blockchain::HeaderBackend<OpaqueBlock>,
 	{
-		Ok(Arc::new(fc_db::Backend::<OpaqueBlock>::new(
+		Ok(Arc::new(fc_db::kv::Backend::<OpaqueBlock>::new(
 			client,
-			&fc_db::DatabaseSettings {
+			&fc_db::kv::DatabaseSettings {
 				source: sc_client_db::DatabaseSource::RocksDb {
 					path,
 					cache_size: 0,
@@ -331,7 +331,7 @@ mod tests {
 		executor::block_on(client.import(BlockOrigin::Own, b1)).unwrap();
 
 		// Map B1
-		let commitment = fc_db::MappingCommitment::<OpaqueBlock> {
+		let commitment = fc_db::kv::MappingCommitment::<OpaqueBlock> {
 			block_hash: b1_hash,
 			ethereum_block_hash,
 			ethereum_transaction_hashes: vec![],
@@ -360,7 +360,7 @@ mod tests {
 		executor::block_on(client.import(BlockOrigin::Own, b2)).unwrap();
 
 		// Map B2 to same ethereum hash
-		let commitment = fc_db::MappingCommitment::<OpaqueBlock> {
+		let commitment = fc_db::kv::MappingCommitment::<OpaqueBlock> {
 			block_hash: b2_hash,
 			ethereum_block_hash,
 			ethereum_transaction_hashes: vec![],

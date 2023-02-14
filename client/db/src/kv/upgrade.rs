@@ -27,7 +27,7 @@ use scale_codec::{Decode, Encode};
 use sp_core::H256;
 use sp_runtime::traits::Block as BlockT;
 
-use crate::DatabaseSource;
+use crate::kv::DatabaseSource;
 
 /// Version file name.
 const VERSION_FILE_NAME: &str = "db_version";
@@ -188,7 +188,7 @@ where
 		let mut transaction = db.transaction();
 		for ethereum_hash in ethereum_hashes {
 			let mut maybe_error = true;
-			if let Some(substrate_hash) = db.get(crate::columns::BLOCK_MAPPING, ethereum_hash)? {
+			if let Some(substrate_hash) = db.get(crate::kv::columns::BLOCK_MAPPING, ethereum_hash)? {
 				// Only update version1 data
 				let decoded = Vec::<Block::Hash>::decode(&mut &substrate_hash[..]);
 				if decoded.is_err() || decoded.unwrap().is_empty() {
@@ -196,7 +196,7 @@ where
 					if let Ok(Some(number)) = client.number(Block::Hash::decode(&mut &substrate_hash[..]).unwrap()) {
 						if let Ok(Some(hash)) = client.hash(number) {
 							transaction.put_vec(
-								crate::columns::BLOCK_MAPPING,
+								crate::kv::columns::BLOCK_MAPPING,
 								ethereum_hash,
 								vec![hash].encode(),
 							);
@@ -231,7 +231,7 @@ where
 
 	// Get all the block hashes we need to update
 	let ethereum_hashes: Vec<_> = db
-		.iter(crate::columns::BLOCK_MAPPING)
+		.iter(crate::kv::columns::BLOCK_MAPPING)
 		.filter_map(|entry| entry.map_or(None, |r| Some(r.0)))
 		.collect();
 
@@ -272,7 +272,7 @@ where
 		let mut transaction = vec![];
 		for ethereum_hash in ethereum_hashes {
 			let mut maybe_error = true;
-			if let Some(substrate_hash) = db.get(crate::columns::BLOCK_MAPPING as u8, ethereum_hash).map_err(|_|
+			if let Some(substrate_hash) = db.get(crate::kv::columns::BLOCK_MAPPING as u8, ethereum_hash).map_err(|_|
 				io::Error::new(ErrorKind::Other, "Key does not exist")
 			)? {
 				// Only update version1 data
@@ -282,7 +282,7 @@ where
 					if let Ok(Some(number)) = client.number(Block::Hash::decode(&mut &substrate_hash[..]).unwrap()) {
 						if let Ok(Some(hash)) = client.hash(number) {
 							transaction.push((
-								crate::columns::BLOCK_MAPPING as u8,
+								crate::kv::columns::BLOCK_MAPPING as u8,
 								ethereum_hash,
 								Some(vec![hash].encode()),
 							));
@@ -302,13 +302,13 @@ where
 	};
 
 	let mut db_cfg = parity_db::Options::with_columns(db_path, V2_NUM_COLUMNS as u8);
-	db_cfg.columns[crate::columns::BLOCK_MAPPING as usize].btree_index = true;
+	db_cfg.columns[crate::kv::columns::BLOCK_MAPPING as usize].btree_index = true;
 
 	let db = parity_db::Db::open_or_create(&db_cfg)
 		.map_err(|_| io::Error::new(ErrorKind::Other, "Failed to open db"))?;
 
 	// Get all the block hashes we need to update
-	let ethereum_hashes: Vec<_> = match db.iter(crate::columns::BLOCK_MAPPING as u8) {
+	let ethereum_hashes: Vec<_> = match db.iter(crate::kv::columns::BLOCK_MAPPING as u8) {
 		Ok(mut iter) => {
 			let mut hashes = vec![];
 			while let Ok(Some((k, _))) = iter.next() {
@@ -354,12 +354,12 @@ mod tests {
 
 	pub fn open_frontier_backend<C>(
 		client: Arc<C>,
-		setting: &crate::DatabaseSettings,
-	) -> Result<Arc<crate::Backend<OpaqueBlock>>, String>
+		setting: &crate::kv::DatabaseSettings,
+	) -> Result<Arc<crate::kv::Backend<OpaqueBlock>>, String>
 	where
 		C: sp_blockchain::HeaderBackend<OpaqueBlock>,
 	{
-		Ok(Arc::new(crate::Backend::<OpaqueBlock>::new(
+		Ok(Arc::new(crate::kv::Backend::<OpaqueBlock>::new(
 			client, setting,
 		)?))
 	}
@@ -371,14 +371,14 @@ mod tests {
 
 		let settings = vec![
 			// Rocks db
-			crate::DatabaseSettings {
+			crate::kv::DatabaseSettings {
 				source: sc_client_db::DatabaseSource::RocksDb {
 					path: tmp_1.path().to_owned(),
 					cache_size: 0,
 				},
 			},
 			// Parity db
-			crate::DatabaseSettings {
+			crate::kv::DatabaseSettings {
 				source: sc_client_db::DatabaseSource::ParityDb {
 					path: tmp_2.path().to_owned(),
 				},
@@ -446,7 +446,7 @@ mod tests {
 					substrate_hashes.push(next_canon_block_hash);
 					// Set orphan hash block mapping
 					transaction.set(
-						crate::columns::BLOCK_MAPPING,
+						crate::kv::columns::BLOCK_MAPPING,
 						&ethhash.encode(),
 						&orphan_block_hash.encode(),
 					);
@@ -456,14 +456,14 @@ mod tests {
 					let eth_tx_hash = H256::random();
 					let mut metadata = vec![];
 					for hash in vec![next_canon_block_hash, orphan_block_hash].iter() {
-						metadata.push(crate::TransactionMetadata::<OpaqueBlock> {
+						metadata.push(crate::kv::TransactionMetadata::<OpaqueBlock> {
 							block_hash: *hash,
 							ethereum_block_hash: ethhash,
 							ethereum_index: 0u32,
 						});
 					}
 					transaction.set(
-						crate::columns::TRANSACTION_MAPPING,
+						crate::kv::columns::TRANSACTION_MAPPING,
 						&eth_tx_hash.encode(),
 						&metadata.encode(),
 					);
@@ -525,7 +525,7 @@ mod tests {
 		);
 		let client = Arc::new(client);
 
-		let setting = crate::DatabaseSettings {
+		let setting = crate::kv::DatabaseSettings {
 			source: sc_client_db::DatabaseSource::RocksDb {
 				path: tmp.path().to_owned(),
 				cache_size: 0,
@@ -535,7 +535,7 @@ mod tests {
 		let _ = super::upgrade_db::<OpaqueBlock, _>(client.clone(), &path, &setting.source);
 
 		let mut file =
-			std::fs::File::open(crate::upgrade::version_file_path(&path)).expect("file exist");
+			std::fs::File::open(crate::kv::upgrade::version_file_path(&path)).expect("file exist");
 
 		let mut s = String::new();
 		file.read_to_string(&mut s).expect("read file contents");
