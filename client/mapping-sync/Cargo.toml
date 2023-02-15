@@ -11,7 +11,7 @@ repository = { workspace = true }
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-futures = "0.3.25"
+futures = "0.3.26"
 futures-timer = "3.0.1"
 log = "0.4.17"
 sqlx = { features = ["runtime-tokio-native-tls", "sqlite", "offline"], git = "https://github.com/PureStake/sqlx", branch = "v0.6.2-timeout" }

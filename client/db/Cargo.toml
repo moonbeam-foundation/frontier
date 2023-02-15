@@ -40,7 +40,7 @@ fp-storage = { workspace = true, features = ["std"] }
 default = ["kvdb-rocksdb", "parity-db"]
 
 [dev-dependencies]
-futures = "0.3.25"
+futures = "0.3.26"
 tempfile = "3.3.0"
 # Substrate
 sc-block-builder = { workspace = true }
