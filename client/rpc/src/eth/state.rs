@@ -61,7 +61,7 @@ where
 				.balance)
 		} else if let Ok(Some(id)) = frontier_backend_client::native_block_id::<B, C>(
 			self.client.as_ref(),
-			self.backend.as_ref(),
+			&self.backend,
 			Some(number),
 		)
 		.await
@@ -91,7 +91,7 @@ where
 				.unwrap_or_default())
 		} else if let Ok(Some(id)) = frontier_backend_client::native_block_id::<B, C>(
 			self.client.as_ref(),
-			self.backend.as_ref(),
+			&self.backend,
 			Some(number),
 		)
 		.await
@@ -145,7 +145,7 @@ where
 
 		let id = match frontier_backend_client::native_block_id::<B, C>(
 			self.client.as_ref(),
-			self.backend.as_ref(),
+			&self.backend,
 			number,
 		)
 		.await?
@@ -172,7 +172,7 @@ where
 				.into())
 		} else if let Ok(Some(id)) = frontier_backend_client::native_block_id::<B, C>(
 			self.client.as_ref(),
-			self.backend.as_ref(),
+			&self.backend,
 			Some(number),
 		)
 		.await

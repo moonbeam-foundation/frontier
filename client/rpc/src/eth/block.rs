@@ -49,19 +49,15 @@ where
 	pub async fn block_by_hash(&self, hash: H256, full: bool) -> Result<Option<RichBlock>> {
 		let client = Arc::clone(&self.client);
 		let block_data_cache = Arc::clone(&self.block_data_cache);
-		let backend = Arc::clone(&self.backend);
 
-		let id = match frontier_backend_client::load_hash::<B, C>(
-			client.as_ref(),
-			backend.as_ref(),
-			hash,
-		)
-		.await
-		.map_err(|err| internal_err(format!("{:?}", err)))?
-		{
-			Some(hash) => hash,
-			_ => return Ok(None),
-		};
+		let id =
+			match frontier_backend_client::load_hash::<B, C>(client.as_ref(), &self.backend, hash)
+				.await
+				.map_err(|err| internal_err(format!("{:?}", err)))?
+			{
+				Some(hash) => hash,
+				_ => return Ok(None),
+			};
 		let substrate_hash = client
 			.expect_block_hash_from_id(&id)
 			.map_err(|_| internal_err(format!("Expect block number from id: {}", id)))?;
@@ -119,11 +115,10 @@ where
 	) -> Result<Option<RichBlock>> {
 		let client = Arc::clone(&self.client);
 		let block_data_cache = Arc::clone(&self.block_data_cache);
-		let backend = Arc::clone(&self.backend);
 
 		let id = match frontier_backend_client::native_block_id::<B, C>(
 			client.as_ref(),
-			backend.as_ref(),
+			&self.backend,
 			Some(number),
 		)
 		.await?
@@ -186,7 +181,7 @@ where
 	pub async fn block_transaction_count_by_hash(&self, hash: H256) -> Result<Option<U256>> {
 		let id = match frontier_backend_client::load_hash::<B, C>(
 			self.client.as_ref(),
-			self.backend.as_ref(),
+			&self.backend,
 			hash,
 		)
 		.await
@@ -223,7 +218,7 @@ where
 
 		let id = match frontier_backend_client::native_block_id::<B, C>(
 			self.client.as_ref(),
-			self.backend.as_ref(),
+			&self.backend,
 			Some(number),
 		)
 		.await?

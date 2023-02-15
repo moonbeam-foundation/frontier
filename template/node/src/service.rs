@@ -68,7 +68,7 @@ pub fn new_partial<RuntimeApi, Executor, BIQ>(
 			Option<Telemetry>,
 			BoxBlockImport<FullClient<RuntimeApi, Executor>>,
 			GrandpaLinkHalf<FullClient<RuntimeApi, Executor>>,
-			Arc<FrontierBackend>,
+			FrontierBackend,
 		),
 	>,
 	ServiceError,
@@ -86,7 +86,7 @@ where
 		&TaskManager,
 		Option<TelemetryHandle>,
 		GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
-		Arc<FrontierBackend>,
+		FrontierBackend,
 	) -> Result<
 		(
 			BasicImportQueue<FullClient<RuntimeApi, Executor>>,
@@ -138,9 +138,9 @@ where
 
 	let overrides = crate::rpc::overrides_handle(client.clone());
 	let frontier_backend = match frontier_backend_config {
-		FrontierBackendConfig::KeyValue => Arc::new(FrontierBackend::KeyValue(Arc::new(
+		FrontierBackendConfig::KeyValue => FrontierBackend::KeyValue(Arc::new(
 			fc_db::kv::Backend::open(client.clone(), &config.database, &db_config_dir(config))?,
-		))),
+		)),
 		FrontierBackendConfig::Sql {
 			pool_size,
 			num_ops_timeout,
@@ -164,7 +164,7 @@ where
 				overrides,
 			))
 			.expect("indexer pool to be created");
-			Arc::new(FrontierBackend::Sql(Arc::new(backend)))
+			FrontierBackend::Sql(Arc::new(backend))
 		}
 	};
 
@@ -206,7 +206,7 @@ pub fn build_aura_grandpa_import_queue<RuntimeApi, Executor>(
 	task_manager: &TaskManager,
 	telemetry: Option<TelemetryHandle>,
 	grandpa_block_import: GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
-	frontier_backend: Arc<FrontierBackend>,
+	frontier_backend: FrontierBackend,
 ) -> Result<
 	(
 		BasicImportQueue<FullClient<RuntimeApi, Executor>>,
@@ -266,7 +266,7 @@ pub fn build_manual_seal_import_queue<RuntimeApi, Executor>(
 	task_manager: &TaskManager,
 	_telemetry: Option<TelemetryHandle>,
 	_grandpa_block_import: GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
-	frontier_backend: Arc<FrontierBackend>,
+	frontier_backend: FrontierBackend,
 ) -> Result<
 	(
 		BasicImportQueue<FullClient<RuntimeApi, Executor>>,
@@ -694,7 +694,7 @@ pub fn new_chain_ops(
 		Arc<FullBackend>,
 		BasicQueue<Block, PrefixedMemoryDB<BlakeTwo256>>,
 		TaskManager,
-		Arc<FrontierBackend>,
+		FrontierBackend,
 	),
 	ServiceError,
 > {

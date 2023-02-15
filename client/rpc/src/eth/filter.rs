@@ -38,7 +38,7 @@ use crate::{eth::cache::EthBlockDataCacheTask, frontier_backend_client, internal
 
 pub struct EthFilter<B: BlockT, C, BE> {
 	client: Arc<C>,
-	backend: Arc<fc_db::Backend<B>>,
+	backend: fc_db::Backend<B>,
 	filter_pool: FilterPool,
 	max_stored_filters: usize,
 	max_past_logs: u32,
@@ -49,7 +49,7 @@ pub struct EthFilter<B: BlockT, C, BE> {
 impl<B: BlockT, C, BE> EthFilter<B, C, BE> {
 	pub fn new(
 		client: Arc<C>,
-		backend: Arc<fc_db::Backend<B>>,
+		backend: fc_db::Backend<B>,
 		filter_pool: FilterPool,
 		max_stored_filters: usize,
 		max_past_logs: u32,
@@ -361,14 +361,13 @@ where
 	async fn logs(&self, filter: Filter) -> Result<Vec<Log>> {
 		let client = Arc::clone(&self.client);
 		let block_data_cache = Arc::clone(&self.block_data_cache);
-		let backend = Arc::clone(&self.backend);
 		let max_past_logs = self.max_past_logs;
 
 		let mut ret: Vec<Log> = Vec::new();
 		if let Some(hash) = filter.block_hash {
 			let id = match frontier_backend_client::load_hash::<B, C>(
 				client.as_ref(),
-				backend.as_ref(),
+				&self.backend,
 				hash,
 			)
 			.await

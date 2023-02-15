@@ -54,12 +54,11 @@ where
 	pub async fn transaction_by_hash(&self, hash: H256) -> Result<Option<Transaction>> {
 		let client = Arc::clone(&self.client);
 		let block_data_cache = Arc::clone(&self.block_data_cache);
-		let backend = Arc::clone(&self.backend);
 		let graph = Arc::clone(&self.graph);
 
 		let (hash, index) = match frontier_backend_client::load_transactions::<B, C>(
 			client.as_ref(),
-			backend.as_ref(),
+			&self.backend,
 			hash,
 			true,
 		)
@@ -127,17 +126,14 @@ where
 			}
 		};
 
-		let id = match frontier_backend_client::load_hash::<B, C>(
-			client.as_ref(),
-			backend.as_ref(),
-			hash,
-		)
-		.await
-		.map_err(|err| internal_err(format!("{:?}", err)))?
-		{
-			Some(hash) => hash,
-			_ => return Ok(None),
-		};
+		let id =
+			match frontier_backend_client::load_hash::<B, C>(client.as_ref(), &self.backend, hash)
+				.await
+				.map_err(|err| internal_err(format!("{:?}", err)))?
+			{
+				Some(hash) => hash,
+				_ => return Ok(None),
+			};
 		let substrate_hash = client
 			.expect_block_hash_from_id(&id)
 			.map_err(|_| internal_err(format!("Expect block number from id: {}", id)))?;
@@ -170,19 +166,15 @@ where
 	) -> Result<Option<Transaction>> {
 		let client = Arc::clone(&self.client);
 		let block_data_cache = Arc::clone(&self.block_data_cache);
-		let backend = Arc::clone(&self.backend);
 
-		let id = match frontier_backend_client::load_hash::<B, C>(
-			client.as_ref(),
-			backend.as_ref(),
-			hash,
-		)
-		.await
-		.map_err(|err| internal_err(format!("{:?}", err)))?
-		{
-			Some(hash) => hash,
-			_ => return Ok(None),
-		};
+		let id =
+			match frontier_backend_client::load_hash::<B, C>(client.as_ref(), &self.backend, hash)
+				.await
+				.map_err(|err| internal_err(format!("{:?}", err)))?
+			{
+				Some(hash) => hash,
+				_ => return Ok(None),
+			};
 		let substrate_hash = client
 			.expect_block_hash_from_id(&id)
 			.map_err(|_| internal_err(format!("Expect block number from id: {}", id)))?;
@@ -225,11 +217,10 @@ where
 	) -> Result<Option<Transaction>> {
 		let client = Arc::clone(&self.client);
 		let block_data_cache = Arc::clone(&self.block_data_cache);
-		let backend = Arc::clone(&self.backend);
 
 		let id = match frontier_backend_client::native_block_id::<B, C>(
 			client.as_ref(),
-			backend.as_ref(),
+			&self.backend,
 			Some(number),
 		)
 		.await?
@@ -275,11 +266,10 @@ where
 		let client = Arc::clone(&self.client);
 		let overrides = Arc::clone(&self.overrides);
 		let block_data_cache = Arc::clone(&self.block_data_cache);
-		let backend = Arc::clone(&self.backend);
 
 		let (hash, index) = match frontier_backend_client::load_transactions::<B, C>(
 			client.as_ref(),
-			backend.as_ref(),
+			&self.backend,
 			hash,
 			true,
 		)
@@ -290,17 +280,14 @@ where
 			None => return Ok(None),
 		};
 
-		let id = match frontier_backend_client::load_hash::<B, C>(
-			client.as_ref(),
-			backend.as_ref(),
-			hash,
-		)
-		.await
-		.map_err(|err| internal_err(format!("{:?}", err)))?
-		{
-			Some(hash) => hash,
-			_ => return Ok(None),
-		};
+		let id =
+			match frontier_backend_client::load_hash::<B, C>(client.as_ref(), &self.backend, hash)
+				.await
+				.map_err(|err| internal_err(format!("{:?}", err)))?
+			{
+				Some(hash) => hash,
+				_ => return Ok(None),
+			};
 		let substrate_hash = client
 			.expect_block_hash_from_id(&id)
 			.map_err(|_| internal_err(format!("Expect block number from id: {}", id)))?;

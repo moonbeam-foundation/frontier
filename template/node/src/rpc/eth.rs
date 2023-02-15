@@ -40,7 +40,7 @@ pub struct EthDeps<C, P, A: ChainApi, CT, B: BlockT> {
 	/// Network service
 	pub network: Arc<NetworkService<B, B::Hash>>,
 	/// Frontier Backend.
-	pub frontier_backend: Arc<FrontierBackend<B>>,
+	pub frontier_backend: FrontierBackend<B>,
 	/// Ethereum data access overrides.
 	pub overrides: Arc<OverrideHandle<B>>,
 	/// Cache for Ethereum block data.

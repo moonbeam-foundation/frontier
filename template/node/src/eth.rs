@@ -108,7 +108,7 @@ pub fn spawn_frontier_tasks<RuntimeApi, Executor>(
 	task_manager: &TaskManager,
 	client: Arc<FullClient<RuntimeApi, Executor>>,
 	backend: Arc<FullBackend>,
-	frontier_backend: Arc<FrontierBackend>,
+	frontier_backend: FrontierBackend,
 	filter_pool: Option<FilterPool>,
 	overrides: Arc<OverrideHandle<Block>>,
 	fee_history_cache: FeeHistoryCache,
@@ -120,7 +120,7 @@ pub fn spawn_frontier_tasks<RuntimeApi, Executor>(
 		EthCompatRuntimeApiCollection<StateBackend = StateBackendFor<FullBackend, Block>>,
 	Executor: NativeExecutionDispatch + 'static,
 {
-	match frontier_backend.as_ref() {
+	match frontier_backend {
 		fc_db::Backend::KeyValue(frontier_backend_inner) => {
 			task_manager.spawn_essential_handle().spawn(
 				"frontier-mapping-sync-worker",

@@ -100,7 +100,7 @@ where
 
 		let (id, api) = match frontier_backend_client::native_block_id::<B, C>(
 			self.client.as_ref(),
-			self.backend.as_ref(),
+			&self.backend,
 			number,
 		)
 		.await?

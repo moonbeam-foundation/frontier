@@ -68,7 +68,7 @@ where
 
 		if let Ok(Some(id)) = frontier_backend_client::native_block_id::<B, C>(
 			self.client.as_ref(),
-			self.backend.as_ref(),
+			&self.backend,
 			Some(newest_block),
 		)
 		.await
