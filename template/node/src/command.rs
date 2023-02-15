@@ -209,10 +209,10 @@ pub fn run() -> sc_cli::Result<()> {
 			runner.sync_run(|mut config| {
 				let (client, _, _, _, frontier_backend) =
 					service::new_chain_ops(&mut config, &cli.eth)?;
-				let fc_db::Backend::KeyValue(frontier_backend_inner) = frontier_backend else {
+				let fc_db::Backend::KeyValue(frontier_backend_kv) = frontier_backend else {
 					panic!("Only fc_db::Backend::KeyValue supported")
 				};
-				cmd.run(client, frontier_backend_inner.clone())
+				cmd.run(client, frontier_backend_kv.clone())
 			})
 		}
 		None => {

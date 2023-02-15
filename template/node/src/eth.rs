@@ -121,7 +121,7 @@ pub fn spawn_frontier_tasks<RuntimeApi, Executor>(
 	Executor: NativeExecutionDispatch + 'static,
 {
 	match frontier_backend {
-		fc_db::Backend::KeyValue(frontier_backend_inner) => {
+		fc_db::Backend::KeyValue(frontier_backend_kv) => {
 			task_manager.spawn_essential_handle().spawn(
 				"frontier-mapping-sync-worker",
 				Some("frontier"),
@@ -130,7 +130,7 @@ pub fn spawn_frontier_tasks<RuntimeApi, Executor>(
 					Duration::new(6, 0),
 					client.clone(),
 					backend,
-					frontier_backend_inner.clone(),
+					frontier_backend_kv.clone(),
 					3,
 					0,
 					fc_mapping_sync::kv::SyncStrategy::Normal,
@@ -138,14 +138,14 @@ pub fn spawn_frontier_tasks<RuntimeApi, Executor>(
 				.for_each(|()| future::ready(())),
 			);
 		}
-		fc_db::Backend::Sql(frontier_backend_inner) => {
+		fc_db::Backend::Sql(frontier_backend_sql) => {
 			task_manager.spawn_essential_handle().spawn(
 				"frontier-mapping-sync-worker",
 				Some("frontier"),
 				fc_mapping_sync::sql::SyncWorker::run(
 					client.clone(),
 					backend,
-					frontier_backend_inner.clone(),
+					frontier_backend_sql.clone(),
 					client.import_notification_stream(),
 					1000,                              // batch size
 					std::time::Duration::from_secs(1), // interval duration
