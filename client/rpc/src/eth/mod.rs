@@ -39,7 +39,7 @@ use sc_network::NetworkService;
 use sc_network_common::ExHashT;
 use sc_transaction_pool::{ChainApi, Pool};
 use sc_transaction_pool_api::{InPoolTransaction, TransactionPool};
-use sp_api::{Core, HeaderT, ProvideRuntimeApi};
+use sp_api::{CallApiAt, Core, HeaderT, ProvideRuntimeApi};
 use sp_block_builder::BlockBuilder as BlockBuilderApi;
 use sp_blockchain::HeaderBackend;
 use sp_core::hashing::keccak_256;
@@ -159,7 +159,7 @@ impl<B, C, P, CT, BE, H: ExHashT, A, EGA> EthApiServer for Eth<B, C, P, CT, BE, 
 where
 	B: BlockT<Hash = H256> + Send + Sync + 'static,
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE>,
-	C: HeaderBackend<B> + Send + Sync + 'static,
+	C: HeaderBackend<B> + CallApiAt<B> + Send + Sync + 'static,
 	C::Api: BlockBuilderApi<B> + ConvertTransactionRuntimeApi<B> + EthereumRuntimeRPCApi<B>,
 	P: TransactionPool<Block = B> + Send + Sync + 'static,
 	CT: fp_rpc::ConvertTransaction<<B as BlockT>::Extrinsic> + Send + Sync + 'static,
@@ -295,6 +295,7 @@ where
 		number: Option<BlockNumber>,
 		state_override: Option<CallStateOverride>,
 	) -> Result<Bytes> {
+		log::info!("CALL");
 		self.call(request, number, state_override)
 	}
 
@@ -513,7 +514,7 @@ fn pending_runtime_api<'a, B: BlockT, C, BE, A: ChainApi>(
 where
 	B: BlockT<Hash = H256> + Send + Sync + 'static,
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE>,
-	C: HeaderBackend<B> + Send + Sync + 'static,
+	C: HeaderBackend<B> + sp_api::CallApiAt<B> + Send + Sync + 'static,
 	C::Api: BlockBuilderApi<B> + EthereumRuntimeRPCApi<B>,
 	BE: Backend<B> + 'static,
 	BE::State: StateBackend<BlakeTwo256>,

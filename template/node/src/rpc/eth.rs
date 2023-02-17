@@ -121,7 +121,10 @@ pub fn create_eth<C, BE, P, A, CT, B>(
 where
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE> + AuxStore,
 	C: BlockchainEvents<B>,
-	C: HeaderBackend<B> + HeaderMetadata<B, Error = BlockChainError> + 'static,
+	C: HeaderBackend<B>
+		+ sp_api::CallApiAt<B>
+		+ HeaderMetadata<B, Error = BlockChainError>
+		+ 'static,
 	C::Api: sp_block_builder::BlockBuilder<B>,
 	C::Api: fp_rpc::EthereumRuntimeRPCApi<B>,
 	C::Api: fp_rpc::ConvertTransactionRuntimeApi<B>,

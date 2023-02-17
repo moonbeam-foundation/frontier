@@ -48,7 +48,9 @@ where
 	BE::State: StateBackend<BlakeTwo256>,
 	C: ProvideRuntimeApi<Block> + StorageProvider<Block, BE> + AuxStore,
 	C: BlockchainEvents<Block>,
-	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError>,
+	C: HeaderBackend<Block>
+		+ sp_api::CallApiAt<Block>
+		+ HeaderMetadata<Block, Error = BlockChainError>,
 	C: Send + Sync + 'static,
 	C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Index>,
 	C::Api: BlockBuilder<Block>,

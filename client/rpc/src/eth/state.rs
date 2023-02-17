@@ -44,7 +44,7 @@ impl<B, C, P, CT, BE, H: ExHashT, A: ChainApi, EGA> Eth<B, C, P, CT, BE, H, A, E
 where
 	B: BlockT<Hash = H256> + Send + Sync + 'static,
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE>,
-	C: HeaderBackend<B> + Send + Sync + 'static,
+	C: HeaderBackend<B> + sp_api::CallApiAt<B> + Send + Sync + 'static,
 	C::Api: BlockBuilderApi<B> + EthereumRuntimeRPCApi<B>,
 	BE: Backend<B> + 'static,
 	BE::State: StateBackend<BlakeTwo256>,
