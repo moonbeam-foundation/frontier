@@ -49,6 +49,7 @@ fc-rpc-core = { workspace = true }
 fp-ethereum = { workspace = true, features = ["std"] }
 fp-rpc = { workspace = true, features = ["std"] }
 fp-storage = { workspace = true, features = ["std"] }
+fp-evm = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.3.0"
