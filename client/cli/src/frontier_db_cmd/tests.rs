@@ -63,6 +63,41 @@ mod tests {
 				},
 			},
 		)?))
+}
+
+fn storage_prefix_build(module: &[u8], storage: &[u8]) -> Vec<u8> {
+	[twox_128(module), twox_128(storage)].concat().to_vec()
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum TestValue {
+	Schema(HashMap<H256, EthereumStorageSchema>),
+	Tips(Vec<<OpaqueBlock as BlockT>::Hash>),
+	Commitment(<OpaqueBlock as BlockT>::Hash),
+}
+
+fn cmd(key: String, value: Option<PathBuf>, operation: Operation, column: Column) -> FrontierDbCmd {
+	FrontierDbCmd {
+		operation,
+		column,
+		key,
+		value,
+		shared_params: sc_cli::SharedParams {
+			chain: None,
+			dev: true,
+			base_path: None,
+			log: vec![],
+			disable_log_color: true,
+			enable_log_reloading: true,
+			tracing_targets: None,
+			tracing_receiver: sc_cli::arg_enums::TracingReceiver::Log,
+			detailed_log_output: false,
+		},
+		pruning_params: sc_cli::PruningParams {
+			state_pruning: Some(DatabasePruningMode::Archive),
+			blocks_pruning: DatabasePruningMode::Archive,
+		},
 	}
 
 	fn storage_prefix_build(module: &[u8], storage: &[u8]) -> Vec<u8> {
