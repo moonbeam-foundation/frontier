@@ -65,6 +65,10 @@ mod tests {
 		)?))
 	}
 
+	fn storage_prefix_build(module: &[u8], storage: &[u8]) -> Vec<u8> {
+		[twox_128(module), twox_128(storage)].concat().to_vec()
+	}
+
 	#[derive(Debug, Serialize)]
 	#[serde(untagged)]
 	enum TestValue {
