@@ -36,8 +36,40 @@ pub struct IndexedBlocks {
 }
 
 impl IndexedBlocks {
+	/// Create a new instance with a fixed cache size.
+	pub fn new(cache_size: usize) -> Self {
+		IndexedBlocks {
+			cache: Default::default(),
+			cache_size,
+		}
+	}
+
 	/// Retrieves and populates the cache with upto N last indexed blocks, where N is the `cache_size`.
 	pub async fn populate_cache(&mut self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
+		log::debug!(
+			target: "frontier-sql",
+			"populating {}",
+			self.cache_size,
+		);
+		let r = sqlx::query(&format!(
+			"SELECT substrate_block_hash FROM sync_status WHERE status = 1 ORDER BY id DESC LIMIT {}",
+			self.cache_size
+		))
+		.fetch_all(pool)
+		.await;
+		match r {
+			Err(err) => log::debug!(
+				target: "frontier-sql",
+				"r err {:?}",
+				err,
+			),
+			Ok(x) => log::debug!(
+				target: "frontier-sql",
+				"r ok {:?}",
+				x.len(),
+			),
+		};
+
 		sqlx::query(&format!(
 			"SELECT substrate_block_hash FROM sync_status WHERE status = 1 ORDER BY id DESC LIMIT {}",
 			self.cache_size
@@ -46,8 +78,23 @@ impl IndexedBlocks {
 		.await?
 		.iter()
 		.for_each(|any_row| {
+			log::debug!(
+				target: "frontier-sql",
+				"got row",
+			);
 			let hash = H256::from_slice(&any_row.try_get::<Vec<u8>, _>(0).unwrap_or_default()[..]);
+			log::debug!(
+				target: "frontier-sql",
+				"cache len: {:?}, hash: {:?}",
+				self.cache.len(),
+				hash,
+			);
 			self.cache.push_back(hash);
+			log::debug!(
+				target: "frontier-sql",
+				"cache len after: {:?}",
+				self.cache.len(),
+			);
 		});
 		Ok(())
 	}
@@ -98,6 +145,11 @@ impl IndexedBlocks {
 
 	/// Retrieves the most recent indexed block.
 	pub fn last_indexed(&self) -> Option<&H256> {
+		log::debug!(
+			target: "frontier-sql",
+			"cache len: {:?}",
+			self.cache.len(),
+		);
 		self.cache.front()
 	}
 
@@ -176,30 +228,38 @@ where
 			worker.indexed_blocks.last_indexed(),
 		);
 
-		// If there is no data in the db, sync genesis.
-		if worker.indexed_blocks.last_indexed().is_none() {
-			log::info!(
-				target: "frontier-sql",
-				"import genesis",
-			);
-			if let Ok(Some(substrate_genesis_hash)) = indexer_backend
-				.insert_genesis_block_metadata(client.clone())
-				.await
-				.map_err(|e| {
-					log::error!(
-						target: "frontier-sql",
-						"💔  Cannot sync genesis block: {}",
-						e,
-					)
-				}) {
-				log::debug!(
-					target: "frontier-sql",
-					"Imported genesis block {:?}",
-					substrate_genesis_hash,
-				);
-				worker.indexed_blocks.insert(substrate_genesis_hash);
+		// Attempt to resume from last indexed block. If there is no data in the db, sync genesis.
+		match worker.indexed_blocks.last_indexed() {
+			Some(last_block_hash) => {
+				if let Ok(Some(header)) = client.header(*last_block_hash) {
+					let parent_hash = header.parent_hash();
+					worker.current_batch.push(*parent_hash);
+				}
 			}
-		}
+			None => {
+				log::info!(
+					target: "frontier-sql",
+					"import genesis",
+				);
+				if let Ok(Some(substrate_genesis_hash)) = indexer_backend
+					.insert_genesis_block_metadata(client.clone())
+					.await
+					.map_err(|e| {
+						log::error!(
+							target: "frontier-sql",
+							"💔  Cannot sync genesis block: {}",
+							e,
+						)
+					}) {
+					log::debug!(
+						target: "frontier-sql",
+						"Imported genesis block {:?}",
+						substrate_genesis_hash,
+					);
+					worker.indexed_blocks.insert(substrate_genesis_hash);
+				}
+			}
+		};
 
 		// Try firing the interval future first, this isn't guaranteed but is usually desirable.
 		let import_interval = futures_timer::Delay::new(Duration::from_nanos(1));
@@ -207,7 +267,7 @@ where
 		let notifications = import_notifications.fuse();
 		futures::pin_mut!(import_interval, notifications);
 
-		let mut try_create_indexes = true;
+		let mut indexes_created = false;
 		loop {
 			futures::select! {
 				_ = (&mut import_interval).fuse() => {
@@ -217,9 +277,11 @@ where
 					);
 
 					// Index any missing past blocks
-					worker
-					.try_index_past_missing_blocks(client.clone(), indexer_backend.clone(), backend)
-					.await;
+					if indexes_created {
+						worker
+						.try_index_past_missing_blocks(client.clone(), indexer_backend.clone(), backend)
+						.await;
+					}
 
 					let leaves = backend.leaves();
 					if let Ok(mut leaves) = leaves {
@@ -258,9 +320,9 @@ where
 							);
 							Self::canonicalize(Arc::clone(&indexer_backend), tree_route).await;
 						}
-						// On first notification try create indexes
-						if try_create_indexes {
-							try_create_indexes = false;
+						// On first notification create indexes
+						if !indexes_created {
+							indexes_created = true;
 							if (indexer_backend.create_indexes().await).is_ok() {
 								log::debug!(
 									target: "frontier-sql",
@@ -290,7 +352,7 @@ where
 	fn new(batch_size: usize) -> Self {
 		SyncWorker {
 			_phantom: Default::default(),
-			indexed_blocks: Default::default(),
+			indexed_blocks: IndexedBlocks::new(batch_size),
 			current_batch: Default::default(),
 			batch_size,
 		}
