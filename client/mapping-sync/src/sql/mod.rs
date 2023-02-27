@@ -106,11 +106,6 @@ impl IndexedBlocks {
 
 	/// Retrieves the most recent indexed block.
 	pub fn last_indexed(&self) -> Option<&H256> {
-		log::debug!(
-			target: "frontier-sql",
-			"cache len: {:?}",
-			self.cache.len(),
-		);
 		self.cache.front()
 	}
 
