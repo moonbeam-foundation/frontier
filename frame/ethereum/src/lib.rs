@@ -27,17 +27,20 @@
 
 extern crate alloc;
 
+mod catch_exec_info;
 #[cfg(all(feature = "std", test))]
 mod mock;
 #[cfg(all(feature = "std", test))]
 mod tests;
 
 use alloc::{vec, vec::Vec};
+pub use catch_exec_info::catch_exec_info;
 use core::marker::PhantomData;
 pub use ethereum::{
 	AccessListItem, BlockV2 as Block, LegacyTransactionMessage, Log, ReceiptV3 as Receipt,
 	TransactionAction, TransactionV2 as Transaction,
 };
+
 use ethereum_types::{Bloom, BloomInput, H160, H256, H64, U256};
 use evm::ExitReason;
 use scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
@@ -550,8 +553,7 @@ impl<T: Config> Pallet<T> {
 			.map_err(|e| e.0)?;
 
 		use pallet_evm::OnChargeEVMTransaction;
-		let max_withdraw = check_transaction.max_withdraw_amount()
-			.map_err(|e| e.0)?;
+		let max_withdraw = check_transaction.max_withdraw_amount().map_err(|e| e.0)?;
 		<T as pallet_evm::Config>::OnChargeTransaction::can_withdraw(&origin, max_withdraw)
 			.map_err(|_| InvalidTransaction::Payment)?;
 
@@ -608,6 +610,8 @@ impl<T: Config> Pallet<T> {
 		transaction: Transaction,
 	) -> Result<(PostDispatchInfo, CallOrCreateInfo), DispatchErrorWithPostInfo> {
 		let (to, _, info) = Self::execute(source, &transaction, None)?;
+
+		catch_exec_info::fill_exec_info(&info);
 
 		let transaction_hash = transaction.hash();
 		let transaction_index = Pending::<T>::count();
@@ -927,8 +931,7 @@ impl<T: Config> Pallet<T> {
 			.map_err(|e| TransactionValidityError::Invalid(e.0))?;
 
 		use pallet_evm::OnChargeEVMTransaction;
-		let max_withdraw = check_transaction.max_withdraw_amount()
-			.map_err(|e| e.0)?;
+		let max_withdraw = check_transaction.max_withdraw_amount().map_err(|e| e.0)?;
 		<T as pallet_evm::Config>::OnChargeTransaction::can_withdraw(&origin, max_withdraw)
 			.map_err(|_| InvalidTransaction::Payment)?;
 
