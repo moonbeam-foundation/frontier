@@ -151,12 +151,7 @@ pub trait EthApi {
 
 	/// Call contract, returning the output data.
 	#[method(name = "eth_call")]
-	fn call(
-		&self,
-		request: CallRequest,
-		number: Option<BlockNumber>,
-		state_override: Option<CallStateOverride>,
-	) -> Result<Bytes>;
+	fn call(&self, request: CallRequest, number: Option<BlockNumber>) -> Result<Bytes>;
 
 	/// Estimate gas needed for execution of given contract.
 	#[method(name = "eth_estimateGas")]
