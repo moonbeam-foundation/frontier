@@ -74,11 +74,14 @@ runtime-benchmarks = [
 	"frame-system/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-evm/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
 ]
 try-runtime = [
+	"fp-self-contained/try-runtime",
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
 	"pallet-timestamp/try-runtime",
 	"pallet-evm/try-runtime",
+	"sp-runtime/try-runtime",
 ]
 forbid-evm-reentrancy = ["pallet-evm/forbid-evm-reentrancy"]
