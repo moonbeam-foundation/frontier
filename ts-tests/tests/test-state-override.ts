@@ -76,7 +76,7 @@ describeWithFrontier("Frontier RPC (StateOverride)", (context) => {
 				to: contractAddress,
 				data: await contract.methods.getSenderBalance().encodeABI(),
 			},
-			null,
+			"latest",
 			{
 				[GENESIS_ACCOUNT]: {
 					balance: Web3.utils.numberToHex(5000),
@@ -107,7 +107,7 @@ describeWithFrontier("Frontier RPC (StateOverride)", (context) => {
 				to: contractAddress,
 				data: await contract.methods.availableFunds().encodeABI(),
 			},
-			null,
+			"latest",
 			{
 				[contractAddress]: {
 					stateDiff: {
@@ -158,7 +158,7 @@ describeWithFrontier("Frontier RPC (StateOverride)", (context) => {
 				to: contractAddress,
 				data: await contract.methods.allowance(GENESIS_ACCOUNT, otherAddress).encodeABI(),
 			},
-			null,
+			"latest",
 			{
 				[contractAddress]: {
 					stateDiff: {
@@ -198,7 +198,7 @@ describeWithFrontier("Frontier RPC (StateOverride)", (context) => {
 				to: contractAddress,
 				data: await contract.methods.allowance(GENESIS_ACCOUNT, otherAddress).encodeABI(),
 			},
-			null,
+			"latest",
 			{
 				[contractAddress]: {
 					state: {
@@ -215,7 +215,7 @@ describeWithFrontier("Frontier RPC (StateOverride)", (context) => {
 				to: contractAddress,
 				data: await contract.methods.availableFunds().encodeABI(),
 			},
-			null,
+			"latest",
 			{
 				[contractAddress]: {
 					state: {
@@ -235,7 +235,7 @@ describeWithFrontier("Frontier RPC (StateOverride)", (context) => {
 				to: contractAddress,
 				data: await testContract.methods.multiply(5).encodeABI(), // multiplies by 7
 			},
-			null,
+			"latest",
 			{
 				[contractAddress]: {
 					code: Test.deployedBytecode,
