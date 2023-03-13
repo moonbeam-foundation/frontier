@@ -19,14 +19,14 @@ use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_runtime::traits::{BlakeTwo256, Block as BlockT};
 // Runtime
-use fp_rpc::EthereumRuntimeAddressMapper;
+use fp_rpc::EthereumRuntimeAddressMapping;
 use frontier_template_runtime::{opaque::Block, AccountId, Balance, Hash, Index};
 
 mod eth;
 pub use self::eth::{create_eth, overrides_handle, EthDeps};
 
 /// Full client dependencies.
-pub struct FullDeps<C, P, A: ChainApi, CT, M: EthereumRuntimeAddressMapper> {
+pub struct FullDeps<C, P, A: ChainApi, CT, M: EthereumRuntimeAddressMapping> {
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -40,7 +40,7 @@ pub struct FullDeps<C, P, A: ChainApi, CT, M: EthereumRuntimeAddressMapper> {
 }
 
 /// Instantiate all Full RPC extensions.
-pub fn create_full<C, P, BE, A, CT, M: EthereumRuntimeAddressMapper + 'static>(
+pub fn create_full<C, P, BE, A, CT, M: EthereumRuntimeAddressMapping + 'static>(
 	deps: FullDeps<C, P, A, CT, M>,
 	subscription_task_executor: SubscriptionTaskExecutor,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>

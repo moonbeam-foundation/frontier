@@ -50,9 +50,6 @@ pub struct CallRequest {
 	/// EIP-2718 type
 	#[serde(rename = "type")]
 	pub transaction_type: Option<U256>,
-	/// Call state override
-	#[serde(rename = "stateOverrides")]
-	pub state_overrides: Option<BTreeMap<H160, CallStateOverride>>,
 }
 
 // State override

@@ -6,12 +6,7 @@ import { AbiItem } from "web3-utils";
 
 import StateOverrideTest from "../build/contracts/StateOverrideTest.json";
 import Test from "../build/contracts/Test.json";
-import {
-	GENESIS_ACCOUNT,
-	GENESIS_ACCOUNT_PRIVATE_KEY,
-	FIRST_CONTRACT_ADDRESS,
-	GENESIS_ACCOUNT_BALANCE,
-} from "./config";
+import { GENESIS_ACCOUNT, GENESIS_ACCOUNT_PRIVATE_KEY } from "./config";
 import { createAndFinalizeBlock, customRequest, describeWithFrontier } from "./util";
 
 chaiUse(chaiAsPromised);
@@ -80,10 +75,11 @@ describeWithFrontier("Frontier RPC (StateOverride)", (context) => {
 				from: GENESIS_ACCOUNT,
 				to: contractAddress,
 				data: await contract.methods.getSenderBalance().encodeABI(),
-				stateOverrides: {
-					[GENESIS_ACCOUNT]: {
-						balance: Web3.utils.numberToHex(5000),
-					},
+			},
+			null,
+			{
+				[GENESIS_ACCOUNT]: {
+					balance: Web3.utils.numberToHex(5000),
 				},
 			},
 		]);
@@ -110,11 +106,12 @@ describeWithFrontier("Frontier RPC (StateOverride)", (context) => {
 				from: GENESIS_ACCOUNT,
 				to: contractAddress,
 				data: await contract.methods.availableFunds().encodeABI(),
-				stateOverrides: {
-					[contractAddress]: {
-						stateDiff: {
-							[availableFundsKey]: newValue,
-						},
+			},
+			null,
+			{
+				[contractAddress]: {
+					stateDiff: {
+						[availableFundsKey]: newValue,
 					},
 				},
 			},
@@ -160,11 +157,12 @@ describeWithFrontier("Frontier RPC (StateOverride)", (context) => {
 				from: GENESIS_ACCOUNT,
 				to: contractAddress,
 				data: await contract.methods.allowance(GENESIS_ACCOUNT, otherAddress).encodeABI(),
-				stateOverrides: {
-					[contractAddress]: {
-						stateDiff: {
-							[allowanceKey]: newValue,
-						},
+			},
+			null,
+			{
+				[contractAddress]: {
+					stateDiff: {
+						[allowanceKey]: newValue,
 					},
 				},
 			},
@@ -199,11 +197,12 @@ describeWithFrontier("Frontier RPC (StateOverride)", (context) => {
 				from: GENESIS_ACCOUNT,
 				to: contractAddress,
 				data: await contract.methods.allowance(GENESIS_ACCOUNT, otherAddress).encodeABI(),
-				stateOverrides: {
-					[contractAddress]: {
-						state: {
-							[allowanceKey]: newValue,
-						},
+			},
+			null,
+			{
+				[contractAddress]: {
+					state: {
+						[allowanceKey]: newValue,
 					},
 				},
 			},
@@ -215,11 +214,12 @@ describeWithFrontier("Frontier RPC (StateOverride)", (context) => {
 				from: GENESIS_ACCOUNT,
 				to: contractAddress,
 				data: await contract.methods.availableFunds().encodeABI(),
-				stateOverrides: {
-					[contractAddress]: {
-						state: {
-							[allowanceKey]: newValue,
-						},
+			},
+			null,
+			{
+				[contractAddress]: {
+					state: {
+						[allowanceKey]: newValue,
 					},
 				},
 			},
@@ -234,10 +234,11 @@ describeWithFrontier("Frontier RPC (StateOverride)", (context) => {
 				from: GENESIS_ACCOUNT,
 				to: contractAddress,
 				data: await testContract.methods.multiply(5).encodeABI(), // multiplies by 7
-				stateOverrides: {
-					[contractAddress]: {
-						code: Test.deployedBytecode,
-					},
+			},
+			null,
+			{
+				[contractAddress]: {
+					code: Test.deployedBytecode,
 				},
 			},
 		]);

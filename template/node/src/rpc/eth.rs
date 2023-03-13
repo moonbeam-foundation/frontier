@@ -21,11 +21,11 @@ pub use fc_rpc::{
 	SchemaV2Override, SchemaV3Override, StorageOverride,
 };
 pub use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
-use fp_rpc::{EthereumRuntimeAddressMapper, EthereumRuntimeStorageOverride};
+use fp_rpc::{EthereumRuntimeAddressMapping, EthereumRuntimeStorageOverride};
 use fp_storage::EthereumStorageSchema;
 
 /// Extra dependencies for Ethereum compatibility.
-pub struct EthDeps<C, P, A: ChainApi, CT, B: BlockT, M: EthereumRuntimeAddressMapper> {
+pub struct EthDeps<C, P, A: ChainApi, CT, B: BlockT, M: EthereumRuntimeAddressMapping> {
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -62,7 +62,7 @@ pub struct EthDeps<C, P, A: ChainApi, CT, B: BlockT, M: EthereumRuntimeAddressMa
 		Option<Arc<dyn EthereumRuntimeStorageOverride<B, C, AddressMapping = M>>>,
 }
 
-impl<C, P, A: ChainApi, CT: Clone, B: BlockT, M: EthereumRuntimeAddressMapper> Clone
+impl<C, P, A: ChainApi, CT: Clone, B: BlockT, M: EthereumRuntimeAddressMapping> Clone
 	for EthDeps<C, P, A, CT, B, M>
 {
 	fn clone(&self) -> Self {
@@ -120,7 +120,7 @@ where
 }
 
 /// Instantiate Ethereum-compatible RPC extensions.
-pub fn create_eth<C, BE, P, A, CT, B, M: fp_rpc::EthereumRuntimeAddressMapper + 'static>(
+pub fn create_eth<C, BE, P, A, CT, B, M: fp_rpc::EthereumRuntimeAddressMapping + 'static>(
 	mut io: RpcModule<()>,
 	deps: EthDeps<C, P, A, CT, B, M>,
 	subscription_task_executor: SubscriptionTaskExecutor,

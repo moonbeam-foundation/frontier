@@ -254,7 +254,7 @@ where
 }
 
 struct AccountId32AddressMapping;
-impl fp_rpc::EthereumRuntimeAddressMapper for AccountId32AddressMapping {
+impl fp_rpc::EthereumRuntimeAddressMapping for AccountId32AddressMapping {
 	fn into_account_id_bytes(address: H160) -> Vec<u8> {
 		pallet_evm::HashedAddressMapping::<BlakeTwo256>::into_account_id(address).to_raw_vec()
 	}
