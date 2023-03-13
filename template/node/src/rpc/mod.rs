@@ -19,13 +19,14 @@ use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_runtime::traits::{BlakeTwo256, Block as BlockT};
 // Runtime
+use fp_rpc::EthereumRuntimeAddressMapper;
 use frontier_template_runtime::{opaque::Block, AccountId, Balance, Hash, Index};
 
 mod eth;
 pub use self::eth::{create_eth, overrides_handle, EthDeps};
 
 /// Full client dependencies.
-pub struct FullDeps<C, P, A: ChainApi, CT> {
+pub struct FullDeps<C, P, A: ChainApi, CT, M: EthereumRuntimeAddressMapper> {
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -35,12 +36,12 @@ pub struct FullDeps<C, P, A: ChainApi, CT> {
 	/// Manual seal command sink
 	pub command_sink: Option<mpsc::Sender<EngineCommand<Hash>>>,
 	/// Ethereum-compatibility specific dependencies.
-	pub eth: EthDeps<C, P, A, CT, Block>,
+	pub eth: EthDeps<C, P, A, CT, Block, M>,
 }
 
 /// Instantiate all Full RPC extensions.
-pub fn create_full<C, P, BE, A, CT>(
-	deps: FullDeps<C, P, A, CT>,
+pub fn create_full<C, P, BE, A, CT, M: EthereumRuntimeAddressMapper + 'static>(
+	deps: FullDeps<C, P, A, CT, M>,
 	subscription_task_executor: SubscriptionTaskExecutor,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
@@ -86,7 +87,7 @@ where
 	}
 
 	// Ethereum compatibility RPCs
-	let io = create_eth::<_, _, _, _, _, _>(io, eth, subscription_task_executor)?;
+	let io = create_eth::<_, _, _, _, _, _, _>(io, eth, subscription_task_executor)?;
 
 	Ok(io)
 }
