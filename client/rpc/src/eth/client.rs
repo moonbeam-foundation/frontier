@@ -31,11 +31,12 @@ use sp_runtime::{
 };
 // Frontier
 use fc_rpc_core::types::*;
-use fp_rpc::EthereumRuntimeRPCApi;
+use fp_rpc::{EthereumRuntimeAddressMapping, EthereumRuntimeRPCApi};
 
 use crate::{eth::Eth, frontier_backend_client, internal_err};
 
-impl<B, C, P, CT, BE, H: ExHashT, A: ChainApi, EGA> Eth<B, C, P, CT, BE, H, A, EGA>
+impl<B, C, P, CT, BE, H: ExHashT, A: ChainApi, M: EthereumRuntimeAddressMapping, EGA>
+	Eth<B, C, P, CT, BE, H, A, M, EGA>
 where
 	B: BlockT<Hash = H256> + Send + Sync + 'static,
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE>,

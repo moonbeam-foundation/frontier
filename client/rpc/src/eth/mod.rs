@@ -39,7 +39,7 @@ use sc_network::NetworkService;
 use sc_network_common::ExHashT;
 use sc_transaction_pool::{ChainApi, Pool};
 use sc_transaction_pool_api::{InPoolTransaction, TransactionPool};
-use sp_api::{Core, HeaderT, ProvideRuntimeApi};
+use sp_api::{CallApiAt, Core, HeaderT, ProvideRuntimeApi};
 use sp_block_builder::BlockBuilder as BlockBuilderApi;
 use sp_blockchain::HeaderBackend;
 use sp_core::hashing::keccak_256;
@@ -49,7 +49,10 @@ use sp_runtime::{
 };
 // Frontier
 use fc_rpc_core::{types::*, EthApiServer};
-use fp_rpc::{ConvertTransactionRuntimeApi, EthereumRuntimeRPCApi, TransactionStatus};
+use fp_rpc::{
+	ConvertTransactionRuntimeApi, EthereumRuntimeAddressMapping, EthereumRuntimeRPCApi,
+	EthereumRuntimeStorageOverride, TransactionStatus,
+};
 
 use crate::{internal_err, overrides::OverrideHandle, public_key, signer::EthSigner};
 
@@ -60,7 +63,17 @@ pub use self::{
 };
 
 /// Eth API implementation.
-pub struct Eth<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, EGA = ()> {
+pub struct Eth<
+	B: BlockT,
+	C,
+	P,
+	CT,
+	BE,
+	H: ExHashT,
+	A: ChainApi,
+	M: EthereumRuntimeAddressMapping,
+	EGA = (),
+> {
 	pool: Arc<P>,
 	graph: Arc<Pool<A>>,
 	client: Arc<C>,
@@ -76,10 +89,14 @@ pub struct Eth<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, EGA = ()> {
 	/// When using eth_call/eth_estimateGas, the maximum allowed gas limit will be
 	/// block.gas_limit * execute_gas_limit_multiplier
 	execute_gas_limit_multiplier: u64,
+	runtime_state_override:
+		Option<Arc<dyn EthereumRuntimeStorageOverride<B, C, AddressMapping = M>>>,
 	_marker: PhantomData<(B, BE, EGA)>,
 }
 
-impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi> Eth<B, C, P, CT, BE, H, A, ()> {
+impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, M: EthereumRuntimeAddressMapping>
+	Eth<B, C, P, CT, BE, H, A, M, ()>
+{
 	pub fn new(
 		client: Arc<C>,
 		pool: Arc<P>,
@@ -94,6 +111,9 @@ impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi> Eth<B, C, P, CT, BE, H, A
 		fee_history_cache: FeeHistoryCache,
 		fee_history_cache_limit: FeeHistoryCacheLimit,
 		execute_gas_limit_multiplier: u64,
+		runtime_state_override: Option<
+			Arc<dyn EthereumRuntimeStorageOverride<B, C, AddressMapping = M>>,
+		>,
 	) -> Self {
 		Self {
 			client,
@@ -109,15 +129,18 @@ impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi> Eth<B, C, P, CT, BE, H, A
 			fee_history_cache,
 			fee_history_cache_limit,
 			execute_gas_limit_multiplier,
+			runtime_state_override,
 			_marker: PhantomData,
 		}
 	}
 }
 
-impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, EGA> Eth<B, C, P, CT, BE, H, A, EGA> {
+impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, M: EthereumRuntimeAddressMapping, EGA>
+	Eth<B, C, P, CT, BE, H, A, M, EGA>
+{
 	pub fn with_estimate_gas_adapter<EGA2: EstimateGasAdapter>(
 		self,
-	) -> Eth<B, C, P, CT, BE, H, A, EGA2> {
+	) -> Eth<B, C, P, CT, BE, H, A, M, EGA2> {
 		let Self {
 			client,
 			pool,
@@ -132,6 +155,7 @@ impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, EGA> Eth<B, C, P, CT, BE,
 			fee_history_cache,
 			fee_history_cache_limit,
 			execute_gas_limit_multiplier,
+			runtime_state_override,
 			_marker: _,
 		} = self;
 
@@ -149,23 +173,25 @@ impl<B: BlockT, C, P, CT, BE, H: ExHashT, A: ChainApi, EGA> Eth<B, C, P, CT, BE,
 			fee_history_cache,
 			fee_history_cache_limit,
 			execute_gas_limit_multiplier,
+			runtime_state_override,
 			_marker: PhantomData,
 		}
 	}
 }
 
 #[async_trait]
-impl<B, C, P, CT, BE, H: ExHashT, A, EGA> EthApiServer for Eth<B, C, P, CT, BE, H, A, EGA>
+impl<B, C, P, CT, BE, H: ExHashT, A, M, EGA> EthApiServer for Eth<B, C, P, CT, BE, H, A, M, EGA>
 where
 	B: BlockT<Hash = H256> + Send + Sync + 'static,
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE>,
-	C: HeaderBackend<B> + Send + Sync + 'static,
+	C: HeaderBackend<B> + CallApiAt<B> + Send + Sync + 'static,
 	C::Api: BlockBuilderApi<B> + ConvertTransactionRuntimeApi<B> + EthereumRuntimeRPCApi<B>,
 	P: TransactionPool<Block = B> + Send + Sync + 'static,
 	CT: fp_rpc::ConvertTransaction<<B as BlockT>::Extrinsic> + Send + Sync + 'static,
 	BE: Backend<B> + 'static,
 	BE::State: StateBackend<BlakeTwo256>,
 	A: ChainApi<Block = B> + 'static,
+	M: EthereumRuntimeAddressMapping + 'static,
 	EGA: EstimateGasAdapter + Send + Sync + 'static,
 {
 	// ########################################################################
@@ -289,8 +315,13 @@ where
 	// Execute
 	// ########################################################################
 
-	fn call(&self, request: CallRequest, number: Option<BlockNumber>) -> Result<Bytes> {
-		self.call(request, number)
+	fn call(
+		&self,
+		request: CallRequest,
+		number: Option<BlockNumber>,
+		state_overrides: Option<BTreeMap<H160, CallStateOverride>>,
+	) -> Result<Bytes> {
+		self.call(request, number, state_overrides)
 	}
 
 	async fn estimate_gas(
@@ -508,7 +539,7 @@ fn pending_runtime_api<'a, B: BlockT, C, BE, A: ChainApi>(
 where
 	B: BlockT<Hash = H256> + Send + Sync + 'static,
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE>,
-	C: HeaderBackend<B> + Send + Sync + 'static,
+	C: HeaderBackend<B> + sp_api::CallApiAt<B> + Send + Sync + 'static,
 	C::Api: BlockBuilderApi<B> + EthereumRuntimeRPCApi<B>,
 	BE: Backend<B> + 'static,
 	BE::State: StateBackend<BlakeTwo256>,

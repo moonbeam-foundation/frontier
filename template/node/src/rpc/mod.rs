@@ -5,6 +5,7 @@ use std::sync::Arc;
 use futures::channel::mpsc;
 use jsonrpsee::RpcModule;
 // Substrate
+use pallet_evm::AddressMapping;
 use sc_client_api::{
 	backend::{AuxStore, Backend, StateBackend, StorageProvider},
 	client::BlockchainEvents,
@@ -17,12 +18,20 @@ use sc_transaction_pool::ChainApi;
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
+use sp_core::ByteArray;
 use sp_runtime::traits::{BlakeTwo256, Block as BlockT};
 // Runtime
 use frontier_template_runtime::{opaque::Block, AccountId, Balance, Hash, Index};
 
 mod eth;
 pub use self::eth::{create_eth, overrides_handle, EthDeps};
+
+pub struct AccountId32AddressMapping;
+impl fp_rpc::EthereumRuntimeAddressMapping for AccountId32AddressMapping {
+	fn into_account_id_bytes(address: sp_core::H160) -> Vec<u8> {
+		pallet_evm::HashedAddressMapping::<BlakeTwo256>::into_account_id(address).to_raw_vec()
+	}
+}
 
 /// Full client dependencies.
 pub struct FullDeps<C, P, A: ChainApi, CT> {
@@ -48,7 +57,9 @@ where
 	BE::State: StateBackend<BlakeTwo256>,
 	C: ProvideRuntimeApi<Block> + StorageProvider<Block, BE> + AuxStore,
 	C: BlockchainEvents<Block>,
-	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError>,
+	C: HeaderBackend<Block>
+		+ sp_api::CallApiAt<Block>
+		+ HeaderMetadata<Block, Error = BlockChainError>,
 	C: Send + Sync + 'static,
 	C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Index>,
 	C::Api: BlockBuilder<Block>,

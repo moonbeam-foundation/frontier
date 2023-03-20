@@ -43,12 +43,14 @@ sp-core = { workspace = true }
 sp-io = { workspace = true }
 sp-runtime = { workspace = true }
 sp-storage = { workspace = true }
+sp-state-machine = { workspace = true }
 # Frontier
 fc-db = { workspace = true }
 fc-rpc-core = { workspace = true }
 fp-ethereum = { workspace = true, features = ["std"] }
 fp-rpc = { workspace = true, features = ["std"] }
 fp-storage = { workspace = true, features = ["std"] }
+fp-evm = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.3.0"

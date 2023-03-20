@@ -1903,6 +1903,7 @@ dependencies = [
  "fc-db",
  "fc-rpc-core",
  "fp-ethereum",
+ "fp-evm",
  "fp-rpc",
  "fp-storage",
  "futures",
@@ -1931,6 +1932,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
+ "sp-state-machine",
  "sp-storage",
  "substrate-prometheus-endpoint",
  "substrate-test-runtime-client",
@@ -2128,6 +2130,7 @@ dependencies = [
  "sp-api",
  "sp-core",
  "sp-runtime",
+ "sp-state-machine",
  "sp-std",
 ]
 
@@ -2388,6 +2391,7 @@ dependencies = [
  "futures",
  "jsonrpsee",
  "log",
+ "pallet-evm",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
  "pallet-transaction-payment-rpc-runtime-api",

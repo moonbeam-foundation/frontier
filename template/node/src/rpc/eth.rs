@@ -15,12 +15,14 @@ use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_core::H256;
 use sp_runtime::traits::{BlakeTwo256, Block as BlockT, Header as HeaderT};
 // Frontier
+use crate::rpc::AccountId32AddressMapping;
 use fc_db::Backend as FrontierBackend;
 pub use fc_rpc::{
 	EthBlockDataCacheTask, OverrideHandle, RuntimeApiStorageOverride, SchemaV1Override,
 	SchemaV2Override, SchemaV3Override, StorageOverride,
 };
 pub use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
+use fp_rpc::EthereumRuntimeStorageOverride;
 use fp_storage::EthereumStorageSchema;
 
 /// Extra dependencies for Ethereum compatibility.
@@ -56,6 +58,10 @@ pub struct EthDeps<C, P, A: ChainApi, CT, B: BlockT> {
 	/// Maximum allowed gas limit will be ` block.gas_limit * execute_gas_limit_multiplier` when
 	/// using eth_call/eth_estimateGas.
 	pub execute_gas_limit_multiplier: u64,
+	/// Ethereum runtime storage overrider impl.
+	pub runtime_storage_override: Option<
+		Arc<dyn EthereumRuntimeStorageOverride<B, C, AddressMapping = AccountId32AddressMapping>>,
+	>,
 }
 
 impl<C, P, A: ChainApi, CT: Clone, B: BlockT> Clone for EthDeps<C, P, A, CT, B> {
@@ -76,6 +82,7 @@ impl<C, P, A: ChainApi, CT: Clone, B: BlockT> Clone for EthDeps<C, P, A, CT, B> 
 			fee_history_cache: self.fee_history_cache.clone(),
 			fee_history_cache_limit: self.fee_history_cache_limit,
 			execute_gas_limit_multiplier: self.execute_gas_limit_multiplier,
+			runtime_storage_override: self.runtime_storage_override.clone(),
 		}
 	}
 }
@@ -121,7 +128,10 @@ pub fn create_eth<C, BE, P, A, CT, B>(
 where
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE> + AuxStore,
 	C: BlockchainEvents<B>,
-	C: HeaderBackend<B> + HeaderMetadata<B, Error = BlockChainError> + 'static,
+	C: HeaderBackend<B>
+		+ sp_api::CallApiAt<B>
+		+ HeaderMetadata<B, Error = BlockChainError>
+		+ 'static,
 	C::Api: sp_block_builder::BlockBuilder<B>,
 	C::Api: fp_rpc::EthereumRuntimeRPCApi<B>,
 	C::Api: fp_rpc::ConvertTransactionRuntimeApi<B>,
@@ -154,6 +164,7 @@ where
 		fee_history_cache,
 		fee_history_cache_limit,
 		execute_gas_limit_multiplier,
+		runtime_storage_override,
 	} = deps;
 
 	let mut signers = Vec::new();
@@ -176,6 +187,7 @@ where
 			fee_history_cache,
 			fee_history_cache_limit,
 			execute_gas_limit_multiplier,
+			runtime_storage_override,
 		)
 		.into_rpc(),
 	)?;

@@ -51,12 +51,13 @@ pub use fc_rpc_core::{
 pub mod frontier_backend_client {
 	use super::internal_err;
 
-	use ethereum_types::H256;
+	use ethereum_types::{H160, H256, U256};
 	use jsonrpsee::core::RpcResult;
-	use scale_codec::Decode;
+	use scale_codec::{Decode, Encode};
 	// Substrate
 	use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 	use sp_blockchain::HeaderBackend;
+	use sp_io::hashing::{blake2_128, twox_128};
 	use sp_runtime::{
 		generic::BlockId,
 		traits::{BlakeTwo256, Block as BlockT, UniqueSaturatedInto, Zero},
@@ -65,6 +66,52 @@ pub mod frontier_backend_client {
 	// Frontier
 	use fc_rpc_core::types::BlockNumber;
 	use fp_storage::{EthereumStorageSchema, PALLET_ETHEREUM_SCHEMA};
+
+	/// Implements a default runtime storage override.
+	/// It assumes that the balances and nonces are stored in pallet `system.account`, and
+	/// have `nonce: Index` = `u32` for  and `free: Balance` = `u128`.
+	pub struct DefaultEthereumRuntimeStorageOverride<M>(pub std::marker::PhantomData<M>);
+	impl<M, B, C> fp_rpc::EthereumRuntimeStorageOverride<B, C>
+		for DefaultEthereumRuntimeStorageOverride<M>
+	where
+		M: fp_rpc::EthereumRuntimeAddressMapping + Sync + Send,
+		B: BlockT,
+		C: StorageProvider<B, sc_service::TFullBackend<B>>,
+	{
+		type AddressMapping = M;
+
+		fn set_overlayed_changes(
+			&self,
+			client: &C,
+			overlayed_changes: &mut sp_state_machine::OverlayedChanges,
+			block: B::Hash,
+			_version: u32,
+			address: H160,
+			balance: Option<U256>,
+			nonce: Option<U256>,
+		) {
+			let mut key = [twox_128(b"System"), twox_128(b"Account")]
+				.concat()
+				.to_vec();
+			let account_id = Self::AddressMapping::into_account_id_bytes(address);
+			key.extend(blake2_128(&account_id));
+			key.extend(&account_id);
+
+			if let Ok(Some(item)) = client.storage(block, &StorageKey(key.clone())) {
+				let mut new_item = item.0;
+
+				if let Some(nonce) = nonce {
+					new_item.splice(0..4, nonce.low_u32().encode());
+				}
+
+				if let Some(balance) = balance {
+					new_item.splice(16..32, balance.low_u128().encode());
+				}
+
+				overlayed_changes.set_storage(key, Some(new_item));
+			}
+		}
+	}
 
 	pub fn native_block_id<B: BlockT, C>(
 		client: &C,

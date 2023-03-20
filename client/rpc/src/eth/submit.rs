@@ -34,18 +34,22 @@ use sp_runtime::{
 };
 // Frontier
 use fc_rpc_core::types::*;
-use fp_rpc::{ConvertTransaction, ConvertTransactionRuntimeApi, EthereumRuntimeRPCApi};
+use fp_rpc::{
+	ConvertTransaction, ConvertTransactionRuntimeApi, EthereumRuntimeAddressMapping,
+	EthereumRuntimeRPCApi,
+};
 
 use crate::{
 	eth::{format, Eth},
 	internal_err,
 };
 
-impl<B, C, P, CT, BE, H: ExHashT, A: ChainApi, EGA> Eth<B, C, P, CT, BE, H, A, EGA>
+impl<B, C, P, CT, BE, H: ExHashT, A: ChainApi, M: EthereumRuntimeAddressMapping, EGA>
+	Eth<B, C, P, CT, BE, H, A, M, EGA>
 where
 	B: BlockT<Hash = H256> + Send + Sync + 'static,
 	C: ProvideRuntimeApi<B> + StorageProvider<B, BE>,
-	C: HeaderBackend<B> + Send + Sync + 'static,
+	C: HeaderBackend<B> + sp_api::CallApiAt<B> + Send + Sync + 'static,
 	C::Api: BlockBuilderApi<B> + ConvertTransactionRuntimeApi<B> + EthereumRuntimeRPCApi<B>,
 	BE: Backend<B> + 'static,
 	BE::State: StateBackend<BlakeTwo256>,
