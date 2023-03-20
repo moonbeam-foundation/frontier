@@ -15,17 +15,18 @@ use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_core::H256;
 use sp_runtime::traits::{BlakeTwo256, Block as BlockT, Header as HeaderT};
 // Frontier
+use crate::rpc::AccountId32AddressMapping;
 use fc_db::Backend as FrontierBackend;
 pub use fc_rpc::{
 	EthBlockDataCacheTask, OverrideHandle, RuntimeApiStorageOverride, SchemaV1Override,
 	SchemaV2Override, SchemaV3Override, StorageOverride,
 };
 pub use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
-use fp_rpc::{EthereumRuntimeAddressMapping, EthereumRuntimeStorageOverride};
+use fp_rpc::EthereumRuntimeStorageOverride;
 use fp_storage::EthereumStorageSchema;
 
 /// Extra dependencies for Ethereum compatibility.
-pub struct EthDeps<C, P, A: ChainApi, CT, B: BlockT, M: EthereumRuntimeAddressMapping> {
+pub struct EthDeps<C, P, A: ChainApi, CT, B: BlockT> {
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -58,13 +59,12 @@ pub struct EthDeps<C, P, A: ChainApi, CT, B: BlockT, M: EthereumRuntimeAddressMa
 	/// using eth_call/eth_estimateGas.
 	pub execute_gas_limit_multiplier: u64,
 	/// Ethereum runtime storage overrider impl.
-	pub runtime_storage_override:
-		Option<Arc<dyn EthereumRuntimeStorageOverride<B, C, AddressMapping = M>>>,
+	pub runtime_storage_override: Option<
+		Arc<dyn EthereumRuntimeStorageOverride<B, C, AddressMapping = AccountId32AddressMapping>>,
+	>,
 }
 
-impl<C, P, A: ChainApi, CT: Clone, B: BlockT, M: EthereumRuntimeAddressMapping> Clone
-	for EthDeps<C, P, A, CT, B, M>
-{
+impl<C, P, A: ChainApi, CT: Clone, B: BlockT> Clone for EthDeps<C, P, A, CT, B> {
 	fn clone(&self) -> Self {
 		Self {
 			client: self.client.clone(),
@@ -120,9 +120,9 @@ where
 }
 
 /// Instantiate Ethereum-compatible RPC extensions.
-pub fn create_eth<C, BE, P, A, CT, B, M: fp_rpc::EthereumRuntimeAddressMapping + 'static>(
+pub fn create_eth<C, BE, P, A, CT, B>(
 	mut io: RpcModule<()>,
-	deps: EthDeps<C, P, A, CT, B, M>,
+	deps: EthDeps<C, P, A, CT, B>,
 	subscription_task_executor: SubscriptionTaskExecutor,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
