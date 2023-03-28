@@ -253,6 +253,24 @@ where
 	))
 }
 
+use fp_evm::AddressMapping;
+pub struct DefaultAddressMapping;
+impl fp_rpc::RuntimeAddressMapping for DefaultAddressMapping {
+	fn into_account_id_bytes(address: sp_core::H160) -> Vec<u8> {
+		let account_id: sp_core::H160 =
+			pallet_evm::IdentityAddressMapping::into_account_id(address);
+		account_id.as_bytes().to_owned()
+	}
+}
+
+#[derive(Clone)]
+struct DefaultEthConfig;
+
+impl fc_rpc::EthConfig for DefaultEthConfig {
+	type EstimateGasAdapter = ();
+	type RuntimeAddressMapping = DefaultAddressMapping;
+}
+
 /// Builds a new service for a full client.
 pub fn new_full<RuntimeApi, Executor>(
 	mut config: Configuration,
@@ -366,9 +384,12 @@ where
 		fee_history_cache: fee_history_cache.clone(),
 		fee_history_cache_limit,
 		execute_gas_limit_multiplier: eth_config.execute_gas_limit_multiplier,
+		eth_config: DefaultEthConfig,
 		runtime_storage_override: Some(Arc::new(
-			fc_rpc::frontier_backend_client::DefaultEvmRuntimeStorageOverride(
-				std::marker::PhantomData::<crate::rpc::DefaultAddressMapping>::default(),
+			fc_rpc::frontier_backend_client::DefaultRuntimeStorageOverride(
+				std::marker::PhantomData::<
+					<DefaultEthConfig as fc_rpc::EthConfig>::RuntimeAddressMapping,
+				>::default(),
 			),
 		)),
 	};

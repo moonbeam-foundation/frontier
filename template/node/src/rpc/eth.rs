@@ -15,18 +15,19 @@ use sp_block_builder::BlockBuilder as BlockBuilderApi;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_runtime::traits::Block as BlockT;
 // Frontier
-use crate::rpc::DefaultAddressMapping;
+// use crate::rpc::DefaultAddressMapping;
 use fc_db::Backend as FrontierBackend;
-pub use fc_rpc::{EthBlockDataCacheTask, OverrideHandle, StorageOverride};
+pub use fc_rpc::{EthBlockDataCacheTask, EthConfig, OverrideHandle, StorageOverride};
 pub use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
 pub use fc_storage::overrides_handle;
 use fp_rpc::{
-	ConvertTransaction, ConvertTransactionRuntimeApi, EthereumRuntimeRPCApi,
-	EvmRuntimeStorageOverride,
+	ConvertTransaction, ConvertTransactionRuntimeApi, EthereumRuntimeRPCApi, RuntimeStorageOverride,
 };
+use sp_core::{Hasher, H256};
+use sp_runtime::traits::BlakeTwo256;
 
 /// Extra dependencies for Ethereum compatibility.
-pub struct EthDeps<C, P, A: ChainApi, CT, B: BlockT> {
+pub struct EthDeps<C, P, A: ChainApi, CT, B: BlockT, EC: EthConfig<B, C>> {
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -58,12 +59,16 @@ pub struct EthDeps<C, P, A: ChainApi, CT, B: BlockT> {
 	/// Maximum allowed gas limit will be ` block.gas_limit * execute_gas_limit_multiplier` when
 	/// using eth_call/eth_estimateGas.
 	pub execute_gas_limit_multiplier: u64,
+	/// ethconfig
+	pub eth_config: EC,
 	/// Ethereum runtime storage overrider impl.
 	pub runtime_storage_override:
-		Option<Arc<dyn EvmRuntimeStorageOverride<B, C, AddressMapping = DefaultAddressMapping>>>,
+		Option<Arc<dyn RuntimeStorageOverride<B, C, AddressMapping = EC::RuntimeAddressMapping>>>,
 }
 
-impl<C, P, A: ChainApi, CT: Clone, B: BlockT> Clone for EthDeps<C, P, A, CT, B> {
+impl<C, P, A: ChainApi, CT: Clone, B: BlockT, EC: fc_rpc::EthConfig> Clone
+	for EthDeps<C, P, A, CT, B, EC>
+{
 	fn clone(&self) -> Self {
 		Self {
 			client: self.client.clone(),
@@ -81,15 +86,16 @@ impl<C, P, A: ChainApi, CT: Clone, B: BlockT> Clone for EthDeps<C, P, A, CT, B> 
 			fee_history_cache: self.fee_history_cache.clone(),
 			fee_history_cache_limit: self.fee_history_cache_limit,
 			execute_gas_limit_multiplier: self.execute_gas_limit_multiplier,
+			eth_config: self.eth_config.clone(),
 			runtime_storage_override: self.runtime_storage_override.clone(),
 		}
 	}
 }
 
 /// Instantiate Ethereum-compatible RPC extensions.
-pub fn create_eth<C, BE, P, A, CT, B>(
+pub fn create_eth<C, BE, P, A, CT, B, EC>(
 	mut io: RpcModule<()>,
-	deps: EthDeps<C, P, A, CT, B>,
+	deps: EthDeps<C, P, A, CT, B, EC>,
 	subscription_task_executor: SubscriptionTaskExecutor,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
@@ -105,6 +111,7 @@ where
 	P: TransactionPool<Block = B> + 'static,
 	A: ChainApi<Block = B> + 'static,
 	CT: ConvertTransaction<<B as BlockT>::Extrinsic> + Send + Sync + 'static,
+	EC: fc_rpc::EthConfig,
 {
 	use fc_rpc::{
 		Eth, EthApiServer, EthDevSigner, EthFilter, EthFilterApiServer, EthPubSub,
@@ -127,6 +134,7 @@ where
 		fee_history_cache,
 		fee_history_cache_limit,
 		execute_gas_limit_multiplier,
+		eth_config,
 		runtime_storage_override,
 	} = deps;
 
@@ -136,7 +144,7 @@ where
 	}
 
 	io.merge(
-		Eth::new(
+		Eth::<_, _, _, _, _, _, _, EC>::new(
 			client.clone(),
 			pool.clone(),
 			graph,

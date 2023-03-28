@@ -33,11 +33,11 @@ use sp_io::hashing::{blake2_128, twox_128};
 use sp_runtime::{traits::Block as BlockT, SaturatedConversion};
 // Frontier
 use fc_rpc_core::types::*;
-use fp_rpc::{EthereumRuntimeRPCApi, EvmRuntimeAddressMapping};
+use fp_rpc::{EthereumRuntimeRPCApi, RuntimeStorageOverride};
 use fp_storage::{EVM_ACCOUNT_CODES, PALLET_EVM};
 
 use crate::{
-	eth::{pending_runtime_api, Eth},
+	eth::{pending_runtime_api, Eth, EthConfig},
 	frontier_backend_client, internal_err,
 };
 
@@ -62,8 +62,7 @@ impl EstimateGasAdapter for () {
 	}
 }
 
-impl<B, C, P, CT, BE, H: ExHashT, A: ChainApi, M: EvmRuntimeAddressMapping, EGA>
-	Eth<B, C, P, CT, BE, H, A, M, EGA>
+impl<B, C, P, CT, BE, H: ExHashT, A: ChainApi, EC: EthConfig<B, C>> Eth<B, C, P, CT, BE, H, A, EC>
 where
 	B: BlockT,
 	C: ProvideRuntimeApi<B>,
@@ -71,7 +70,6 @@ where
 	C: HeaderBackend<B> + CallApiAt<B> + StorageProvider<B, BE> + 'static,
 	BE: Backend<B> + 'static,
 	A: ChainApi<Block = B> + 'static,
-	EGA: EstimateGasAdapter,
 {
 	pub fn call(
 		&self,
@@ -361,7 +359,7 @@ where
 		let substrate_hash = client.info().best_hash;
 
 		// Adapt request for gas estimation.
-		let request = EGA::adapt_request(request);
+		let request = EC::EstimateGasAdapter::adapt_request(request);
 
 		// For simple transfer to simple account, return MIN_GAS_PER_TX directly
 		let is_simple_transfer = match &request.data {
@@ -751,8 +749,8 @@ where
 		let mut overlayed_changes = sp_api::OverlayedChanges::default();
 		if let Some(state_overrides) = state_overrides {
 			for (address, state_override) in state_overrides {
-				if let Some(runtime_state_override) = self.runtime_state_override.as_ref() {
-					runtime_state_override.set_overlayed_changes(
+				if EC::RuntimeStorageOverride::is_enabled() {
+					EC::RuntimeStorageOverride.set_overlayed_changes(
 						self.client.as_ref(),
 						&mut overlayed_changes,
 						block_hash,
@@ -762,6 +760,19 @@ where
 						state_override.nonce,
 					);
 				}
+
+				// if let Some(runtime_state_override) = self.runtime_state_override.as_ref() {
+
+				// 	runtime_state_override.set_overlayed_changes(
+				// 		self.client.as_ref(),
+				// 		&mut overlayed_changes,
+				// 		block_hash,
+				// 		api_version,
+				// 		address,
+				// 		state_override.balance,
+				// 		state_override.nonce,
+				// 	);
+				// }
 
 				if let Some(code) = &state_override.code {
 					let mut key = [twox_128(PALLET_EVM), twox_128(EVM_ACCOUNT_CODES)]

@@ -24,17 +24,17 @@ use frontier_template_runtime::{opaque::Block, AccountId, Balance, Hash, Index};
 mod eth;
 pub use self::eth::{create_eth, overrides_handle, EthDeps};
 
-pub struct DefaultAddressMapping;
-impl fp_rpc::EvmRuntimeAddressMapping for DefaultAddressMapping {
-	fn into_account_id_bytes(address: sp_core::H160) -> Vec<u8> {
-		let account_id: sp_core::H160 =
-			pallet_evm::IdentityAddressMapping::into_account_id(address);
-		account_id.as_bytes().to_owned()
-	}
-}
+// pub struct DefaultAddressMapping;
+// impl fp_rpc::RuntimeAddressMapping for DefaultAddressMapping {
+// 	fn into_account_id_bytes(address: sp_core::H160) -> Vec<u8> {
+// 		let account_id: sp_core::H160 =
+// 			pallet_evm::IdentityAddressMapping::into_account_id(address);
+// 		account_id.as_bytes().to_owned()
+// 	}
+// }
 
 /// Full client dependencies.
-pub struct FullDeps<C, P, A: ChainApi, CT> {
+pub struct FullDeps<C, P, A: ChainApi, CT, EC: fc_rpc::EthConfig> {
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -44,12 +44,12 @@ pub struct FullDeps<C, P, A: ChainApi, CT> {
 	/// Manual seal command sink
 	pub command_sink: Option<mpsc::Sender<EngineCommand<Hash>>>,
 	/// Ethereum-compatibility specific dependencies.
-	pub eth: EthDeps<C, P, A, CT, Block>,
+	pub eth: EthDeps<C, P, A, CT, Block, EC>,
 }
 
 /// Instantiate all Full RPC extensions.
-pub fn create_full<C, P, BE, A, CT>(
-	deps: FullDeps<C, P, A, CT>,
+pub fn create_full<C, P, BE, A, CT, EC>(
+	deps: FullDeps<C, P, A, CT, EC>,
 	subscription_task_executor: SubscriptionTaskExecutor,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
@@ -68,6 +68,7 @@ where
 	P: TransactionPool<Block = Block> + 'static,
 	A: ChainApi<Block = Block> + 'static,
 	CT: fp_rpc::ConvertTransaction<<Block as BlockT>::Extrinsic> + Send + Sync + 'static,
+	EC: fc_rpc::EthConfig,
 {
 	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
 	use sc_consensus_manual_seal::rpc::{ManualSeal, ManualSealApiServer};
@@ -94,7 +95,7 @@ where
 	}
 
 	// Ethereum compatibility RPCs
-	let io = create_eth::<_, _, _, _, _, _>(io, eth, subscription_task_executor)?;
+	let io = create_eth::<_, _, _, _, _, _, _>(io, eth, subscription_task_executor)?;
 
 	Ok(io)
 }
