@@ -1950,6 +1950,7 @@ dependencies = [
  "fc-rpc-core",
  "fc-storage",
  "fp-ethereum",
+ "fp-evm",
  "fp-rpc",
  "fp-storage",
  "futures",
@@ -1958,6 +1959,7 @@ dependencies = [
  "libsecp256k1",
  "log",
  "lru",
+ "pallet-evm",
  "parity-scale-codec",
  "prometheus",
  "rand 0.8.5",
@@ -1978,6 +1980,8 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
+ "sp-state-machine",
+ "sp-storage",
  "substrate-prometheus-endpoint",
  "substrate-test-runtime-client",
  "tempfile",
@@ -2189,6 +2193,7 @@ dependencies = [
  "sp-api",
  "sp-core",
  "sp-runtime",
+ "sp-state-machine",
  "sp-std",
 ]
 
