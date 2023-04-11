@@ -226,6 +226,10 @@ where
 						),
 					));
 
+					let substrate_hash = self
+						.client
+						.expect_block_hash_from_id(&id)
+						.map_err(|_| internal_err(format!("Expect block hash from id: {}", id)))?;
 					let overlayed_changes = self.create_overrides_overlay(
 						substrate_hash,
 						api_version,
@@ -235,7 +239,7 @@ where
 						sp_api::StorageTransactionCache<B, C::StateBackend>,
 					>::default();
 					let params = sp_api::CallApiAtParams {
-						at: substrate_hash,
+						at: &id,
 						function: "EthereumRuntimeRPCApi_call",
 						arguments: encoded_params,
 						overlayed_changes: &std::cell::RefCell::new(overlayed_changes),
@@ -792,8 +796,7 @@ where
 					// clear all storage
 					if let Ok(all_keys) = self.client.storage_keys(
 						block_hash,
-						Some(&sp_storage::StorageKey(account_storage_key.clone())),
-						None,
+						&sp_storage::StorageKey(account_storage_key.clone()),
 					) {
 						for key in all_keys {
 							overlayed_changes.set_storage(key.0, None);
