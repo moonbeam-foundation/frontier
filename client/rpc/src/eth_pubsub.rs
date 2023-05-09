@@ -36,7 +36,7 @@ use sp_consensus::SyncOracle;
 use sp_core::hashing::keccak_256;
 use sp_runtime::traits::{Block as BlockT, UniqueSaturatedInto};
 // Frontier
-use fc_mapping_sync::kv::{EthereumBlockNotification, EthereumBlockNotificationSinks};
+use fc_mapping_sync::{EthereumBlockNotification, EthereumBlockNotificationSinks};
 use fc_rpc_core::{
 	types::{
 		pubsub::{Kind, Params, PubSubSyncStatus, Result as PubSubResult, SyncStatusMetadata},

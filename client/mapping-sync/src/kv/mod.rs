@@ -17,11 +17,11 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 #![allow(clippy::too_many_arguments)]
-#![deny(unused_crate_dependencies)]
 
 mod worker;
 
-pub use worker::{MappingSyncWorker, SyncStrategy};
+pub use worker::MappingSyncWorker;
+pub use crate::SyncStrategy;
 
 use std::sync::Arc;
 
@@ -35,15 +35,6 @@ use sp_runtime::traits::{Block as BlockT, Header as HeaderT, Zero};
 use fc_storage::OverrideHandle;
 use fp_consensus::{FindLogError, Hashes, Log, PostLog, PreLog};
 use fp_rpc::EthereumRuntimeRPCApi;
-
-pub type EthereumBlockNotificationSinks<T> =
-	parking_lot::Mutex<Vec<sc_utils::mpsc::TracingUnboundedSender<T>>>;
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct EthereumBlockNotification<Block: BlockT> {
-	pub is_new_best: bool,
-	pub hash: Block::Hash,
-}
 
 pub fn sync_block<Block: BlockT, C, BE>(
 	client: &C,
@@ -172,7 +163,7 @@ pub fn sync_one_block<Block: BlockT, C, BE>(
 	strategy: SyncStrategy,
 	sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
 	pubsub_notification_sinks: Arc<
-		EthereumBlockNotificationSinks<EthereumBlockNotification<Block>>,
+		crate::EthereumBlockNotificationSinks<crate::EthereumBlockNotification<Block>>,
 	>,
 ) -> Result<bool, String>
 where
@@ -242,7 +233,7 @@ where
 		if !sync_oracle.is_major_syncing() {
 			let hash = operating_header.hash();
 			let is_new_best = client.info().best_hash == hash;
-			sink.unbounded_send(EthereumBlockNotification { is_new_best, hash })
+			sink.unbounded_send(crate::EthereumBlockNotification { is_new_best, hash })
 				.is_ok()
 		} else {
 			// Remove from the pool if in major syncing.
@@ -262,7 +253,7 @@ pub fn sync_blocks<Block: BlockT, C, BE>(
 	strategy: SyncStrategy,
 	sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
 	pubsub_notification_sinks: Arc<
-		EthereumBlockNotificationSinks<EthereumBlockNotification<Block>>,
+		crate::EthereumBlockNotificationSinks<crate::EthereumBlockNotification<Block>>,
 	>,
 ) -> Result<bool, String>
 where

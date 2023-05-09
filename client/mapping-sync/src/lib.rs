@@ -20,3 +20,18 @@
 
 pub mod kv;
 pub mod sql;
+
+pub type EthereumBlockNotificationSinks<T> =
+	parking_lot::Mutex<Vec<sc_utils::mpsc::TracingUnboundedSender<T>>>;
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct EthereumBlockNotification<Block: sp_runtime::traits::Block> {
+	pub is_new_best: bool,
+	pub hash: Block::Hash,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum SyncStrategy {
+	Normal,
+	Parachain,
+}

@@ -24,6 +24,7 @@ use sp_blockchain::{Backend, HeaderBackend};
 use sp_core::H256;
 use sp_runtime::traits::{BlakeTwo256, Block as BlockT, UniqueSaturatedInto};
 use std::{sync::Arc, time::Duration};
+use crate::SyncStrategy;
 
 /// Defines the commands for the sync worker.
 #[derive(Debug)]
@@ -72,6 +73,10 @@ where
 		client: Arc<Client>,
 		substrate_backend: Arc<Backend>,
 		indexer_backend: Arc<fc_db::sql::Backend<Block>>,
+		sync_oracle: Arc<dyn sp_consensus::SyncOracle + Send + Sync + 'static>,
+		pubsub_notification_sinks: Arc<
+			crate::EthereumBlockNotificationSinks<crate::EthereumBlockNotification<Block>>,
+		>,
 	) -> tokio::sync::mpsc::Sender<WorkerCommand> {
 		let (tx, mut rx) = tokio::sync::mpsc::channel(100);
 		tokio::task::spawn(async move {
@@ -131,6 +136,19 @@ where
 							block_hash,
 						)
 						.await;
+						// Notify on import and remove closed channels.
+						// Only notify when the node is node in major syncing.
+						let sinks = &mut pubsub_notification_sinks.lock();
+						sinks.retain(|sink| {
+							if !sync_oracle.is_major_syncing() {
+								let is_new_best = client.info().best_hash == block_hash;
+								sink.unbounded_send(crate::EthereumBlockNotification { is_new_best, hash: block_hash })
+									.is_ok()
+							} else {
+								// Remove from the pool if in major syncing.
+								false
+							}
+						});
 					}
 					WorkerCommand::Canonicalize {
 						common,
@@ -177,11 +195,18 @@ where
 		indexer_backend: Arc<fc_db::sql::Backend<Block>>,
 		import_notifications: sc_client_api::ImportNotifications<Block>,
 		worker_config: SyncWorkerConfig,
+		strategy: SyncStrategy,
+		sync_oracle: Arc<dyn sp_consensus::SyncOracle + Send + Sync + 'static>,
+		pubsub_notification_sinks: Arc<
+			crate::EthereumBlockNotificationSinks<crate::EthereumBlockNotification<Block>>,
+		>,
 	) {
 		let tx = Self::spawn_worker(
 			client.clone(),
 			substrate_backend.clone(),
 			indexer_backend.clone(),
+			sync_oracle.clone(),
+			pubsub_notification_sinks.clone(),
 		)
 		.await;
 
@@ -217,34 +242,37 @@ where
 						notification.header.parent_hash(),
 						notification.is_new_best,
 					);
-					if notification.is_new_best {
-						if let Some(tree_route) = notification.tree_route {
-							log::debug!(
-								target: "frontier-sql",
-								"🔀  Re-org happened at new best {}, proceeding to canonicalize db",
-								notification.hash
-							);
-							let retracted = tree_route
-								.retracted()
-								.iter()
-								.map(|hash_and_number| hash_and_number.hash)
-								.collect::<Vec<_>>();
-							let enacted = tree_route
-								.enacted()
-								.iter()
-								.map(|hash_and_number| hash_and_number.hash)
-								.collect::<Vec<_>>();
-
-							let common = tree_route.common_block().hash;
-							tx.send(WorkerCommand::Canonicalize {
-								common,
-								enacted,
-								retracted,
-							}).await.ok();
-						}
-
-						tx.send(WorkerCommand::IndexBestBlock(notification.hash)).await.ok();
+					if SyncStrategy::Parachain == strategy
+						&& notification.header.number() > &client.info().best_number
+					{
+						continue;
 					}
+					if let Some(tree_route) = notification.tree_route {
+						log::debug!(
+							target: "frontier-sql",
+							"🔀  Re-org happened at new best {}, proceeding to canonicalize db",
+							notification.hash
+						);
+						let retracted = tree_route
+							.retracted()
+							.iter()
+							.map(|hash_and_number| hash_and_number.hash)
+							.collect::<Vec<_>>();
+						let enacted = tree_route
+							.enacted()
+							.iter()
+							.map(|hash_and_number| hash_and_number.hash)
+							.collect::<Vec<_>>();
+
+						let common = tree_route.common_block().hash;
+						tx.send(WorkerCommand::Canonicalize {
+							common,
+							enacted,
+							retracted,
+						}).await.ok();
+					}
+
+					tx.send(WorkerCommand::IndexBestBlock(notification.hash)).await.ok();
 				}
 			}
 		}
@@ -526,12 +554,28 @@ mod test {
 	use sp_core::{H160, H256, U256};
 	use sp_io::hashing::twox_128;
 	use sp_runtime::generic::Digest;
+	use sp_runtime::traits::BlakeTwo256;
 	use sqlx::Row;
 	use std::{collections::BTreeMap, path::Path, sync::Arc};
 	use substrate_test_runtime_client::{
 		prelude::*, DefaultTestClientBuilderExt, TestClientBuilder, TestClientBuilderExt,
 	};
 	use tempfile::tempdir;
+
+	type OpaqueBlock = sp_runtime::generic::Block<
+		sp_runtime::generic::Header<u64, BlakeTwo256>,
+		substrate_test_runtime_client::runtime::Extrinsic,
+	>;
+
+	struct TestSyncOracleNotSyncing;
+	impl sp_consensus::SyncOracle for TestSyncOracleNotSyncing {
+		fn is_major_syncing(&self) -> bool {
+			false
+		}
+		fn is_offline(&self) -> bool {
+			false
+		}
+	}
 
 	fn storage_prefix_build(module: &[u8], storage: &[u8]) -> Vec<u8> {
 		[twox_128(module), twox_128(storage)].concat().to_vec()
@@ -684,6 +728,12 @@ mod test {
 			));
 		}
 
+		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<
+			crate::EthereumBlockNotification<OpaqueBlock>,
+		> = Default::default();
+		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
+		let not_syncing = TestSyncOracleNotSyncing {};
+
 		// Spawn worker after creating the blocks will resolve the interval future.
 		// Because the SyncWorker is spawned at service level, in the real world this will only
 		// happen when we are in major syncing (where there is lack of import notificatons).
@@ -697,6 +747,9 @@ mod test {
 					read_notification_timeout: Duration::from_secs(1),
 					check_indexed_blocks_interval: Duration::from_secs(60),
 				},
+				SyncStrategy::Normal,
+				Arc::new(not_syncing),
+				pubsub_notification_sinks.clone(),
 			)
 			.await
 		});
@@ -801,6 +854,12 @@ mod test {
 		// Pool
 		let pool = indexer_backend.pool().clone();
 
+		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<
+			crate::EthereumBlockNotification<OpaqueBlock>,
+		> = Default::default();
+		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
+		let not_syncing = TestSyncOracleNotSyncing {};
+
 		// Spawn worker after creating the blocks will resolve the interval future.
 		// Because the SyncWorker is spawned at service level, in the real world this will only
 		// happen when we are in major syncing (where there is lack of import notifications).
@@ -816,6 +875,9 @@ mod test {
 					read_notification_timeout: Duration::from_secs(10),
 					check_indexed_blocks_interval: Duration::from_secs(60),
 				},
+				SyncStrategy::Normal,
+				Arc::new(not_syncing),
+				pubsub_notification_sinks.clone(),
 			)
 			.await
 		});
@@ -995,6 +1057,12 @@ mod test {
 		// Pool
 		let pool = indexer_backend.pool().clone();
 
+		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<
+			crate::EthereumBlockNotification<OpaqueBlock>,
+		> = Default::default();
+		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
+		let not_syncing = TestSyncOracleNotSyncing {};
+
 		// Spawn indexer task
 		let notification_stream = client.clone().import_notification_stream();
 		let client_inner = client.clone();
@@ -1008,6 +1076,9 @@ mod test {
 					read_notification_timeout: Duration::from_secs(10),
 					check_indexed_blocks_interval: Duration::from_secs(60),
 				},
+				SyncStrategy::Normal,
+				Arc::new(not_syncing),
+				pubsub_notification_sinks.clone(),
 			)
 			.await
 		});
@@ -1179,6 +1250,12 @@ mod test {
 			.await
 			.expect("sql query must succeed");
 
+		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<
+			crate::EthereumBlockNotification<OpaqueBlock>,
+		> = Default::default();
+		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
+		let not_syncing = TestSyncOracleNotSyncing {};
+
 		// Spawn indexer task
 		let client_inner = client.clone();
 		tokio::task::spawn(async move {
@@ -1191,6 +1268,9 @@ mod test {
 					read_notification_timeout: Duration::from_secs(10),
 					check_indexed_blocks_interval: Duration::from_secs(60),
 				},
+				SyncStrategy::Normal,
+				Arc::new(not_syncing),
+				pubsub_notification_sinks.clone(),
 			)
 			.await
 		});

@@ -18,6 +18,7 @@
 
 use std::{pin::Pin, sync::Arc, time::Duration};
 
+use crate::SyncStrategy;
 use futures::{
 	prelude::*,
 	task::{Context, Poll},
@@ -37,12 +38,6 @@ use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
 use fc_storage::OverrideHandle;
 use fp_rpc::EthereumRuntimeRPCApi;
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum SyncStrategy {
-	Normal,
-	Parachain,
-}
-
 pub struct MappingSyncWorker<Block: BlockT, C, BE> {
 	import_notifications: ImportNotifications<Block>,
 	timeout: Duration,
@@ -60,7 +55,7 @@ pub struct MappingSyncWorker<Block: BlockT, C, BE> {
 
 	sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
 	pubsub_notification_sinks:
-		Arc<crate::kv::EthereumBlockNotificationSinks<crate::kv::EthereumBlockNotification<Block>>>,
+		Arc<crate::EthereumBlockNotificationSinks<crate::EthereumBlockNotification<Block>>>,
 }
 
 impl<Block: BlockT, C, BE> Unpin for MappingSyncWorker<Block, C, BE> {}
@@ -78,7 +73,7 @@ impl<Block: BlockT, C, BE> MappingSyncWorker<Block, C, BE> {
 		strategy: SyncStrategy,
 		sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
 		pubsub_notification_sinks: Arc<
-			crate::kv::EthereumBlockNotificationSinks<crate::kv::EthereumBlockNotification<Block>>,
+			crate::EthereumBlockNotificationSinks<crate::EthereumBlockNotification<Block>>,
 		>,
 	) -> Self {
 		Self {
@@ -263,9 +258,9 @@ mod tests {
 		});
 
 		let frontier_backend = Arc::new(
-			fc_db::Backend::<OpaqueBlock>::new(
+			fc_db::kv::Backend::<OpaqueBlock>::new(
 				client.clone(),
-				&fc_db::DatabaseSettings {
+				&fc_db::kv::DatabaseSettings {
 					source: sc_client_db::DatabaseSource::RocksDb {
 						path: tmp.path().to_path_buf(),
 						cache_size: 0,
@@ -401,9 +396,9 @@ mod tests {
 		});
 
 		let frontier_backend = Arc::new(
-			fc_db::Backend::<OpaqueBlock>::new(
+			fc_db::kv::Backend::<OpaqueBlock>::new(
 				client.clone(),
-				&fc_db::DatabaseSettings {
+				&fc_db::kv::DatabaseSettings {
 					source: sc_client_db::DatabaseSource::RocksDb {
 						path: tmp.path().to_path_buf(),
 						cache_size: 0,

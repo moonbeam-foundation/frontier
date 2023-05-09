@@ -91,8 +91,8 @@ pub fn create_eth<C, BE, P, A, CT, B, EC: EthConfig<B, C>>(
 	deps: EthDeps<C, P, A, CT, B>,
 	subscription_task_executor: SubscriptionTaskExecutor,
 	pubsub_notification_sinks: Arc<
-		fc_mapping_sync::kv::EthereumBlockNotificationSinks<
-			fc_mapping_sync::kv::EthereumBlockNotification<B>,
+		fc_mapping_sync::EthereumBlockNotificationSinks<
+			fc_mapping_sync::EthereumBlockNotification<B>,
 		>,
 	>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>

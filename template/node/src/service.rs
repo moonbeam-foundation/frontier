@@ -370,8 +370,8 @@ where
 	// Everytime a new subscription is created, a new mpsc channel is added to the sink pool.
 	// The MappingSyncWorker sends through the channel on block import and the subscription emits a notification to the subscriber on receiving a message through this channel.
 	// This way we avoid race conditions when using native substrate block import notification stream.
-	let pubsub_notification_sinks: fc_mapping_sync::kv::EthereumBlockNotificationSinks<
-		fc_mapping_sync::kv::EthereumBlockNotification<Block>,
+	let pubsub_notification_sinks: fc_mapping_sync::EthereumBlockNotificationSinks<
+		fc_mapping_sync::EthereumBlockNotification<Block>,
 	> = Default::default();
 	let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 
