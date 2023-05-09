@@ -247,8 +247,7 @@ where
 						notification.header.parent_hash(),
 						notification.is_new_best,
 					);
-					if SyncStrategy::Parachain == strategy
-						&& notification.header.number() > &client.info().best_number
+					if SyncStrategy::Parachain == strategy && !notification.is_new_best
 					{
 						continue;
 					}
