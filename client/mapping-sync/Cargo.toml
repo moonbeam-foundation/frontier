@@ -15,12 +15,14 @@ futures = "0.3.25"
 futures-timer = "3.0.2"
 log = "0.4.17"
 tokio = { version = "1.19", features = ["macros", "sync"] }
-
+parking_lot = "0.12.1"
 # Substrate
 sc-client-api = { workspace = true }
+sc-utils = { workspace = true }
 sp-api = { workspace = true }
 sp-blockchain = { workspace = true }
 sp-core = { workspace = true }
+sp-consensus = { workspace = true, features = ["default"] }
 sp-runtime = { workspace = true }
 
 # Frontier
@@ -34,14 +36,17 @@ ethereum = { workspace = true }
 scale-codec = { package = "parity-scale-codec", workspace = true }
 sqlx = { features = ["runtime-tokio-native-tls", "sqlite"], git = "https://github.com/launchbadge/sqlx", branch = "main" }
 tempfile = "3.3.0"
+tokio = { version = "1.24", features = ["sync"] }
 # Frontier
 fp-consensus = { workspace = true, features = ["std"] }
 fp-storage = { workspace = true, features = ["std"] }
+frontier-template-runtime = { workspace = true, features = ["default"] }
 # Substrate
 ethereum-types = { workspace = true }
 fc-rpc = { workspace = true }
-frontier-template-runtime = { workspace = true }
 sc-block-builder = { workspace = true }
+sc-client-db = { workspace = true }
 sp-consensus = { workspace = true }
+sp-core = { workspace = true, features = ["default"] }
 sp-io = { workspace = true }
 substrate-test-runtime-client = { workspace = true }
