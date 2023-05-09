@@ -80,7 +80,10 @@ pub trait EthApi {
 
 	/// Returns the number of transactions in a block with given block number.
 	#[method(name = "eth_getBlockTransactionCountByNumber")]
-	async fn block_transaction_count_by_number(&self, number: BlockNumber) -> RpcResult<Option<U256>>;
+	async fn block_transaction_count_by_number(
+		&self,
+		number: BlockNumber,
+	) -> RpcResult<Option<U256>>;
 
 	/// Returns the number of uncles in a block with given hash.
 	#[method(name = "eth_getUncleCountByBlockHash")]
@@ -153,7 +156,11 @@ pub trait EthApi {
 
 	/// Returns the number of transactions sent from given address at given time (block number).
 	#[method(name = "eth_getTransactionCount")]
-	async fn transaction_count(&self, address: H160, number: Option<BlockNumber>) -> RpcResult<U256>;
+	async fn transaction_count(
+		&self,
+		address: H160,
+		number: Option<BlockNumber>,
+	) -> RpcResult<U256>;
 
 	/// Returns the code at given address at given time (block number).
 	#[method(name = "eth_getCode")]

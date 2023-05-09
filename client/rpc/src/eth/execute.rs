@@ -367,7 +367,9 @@ where
 			self.client.as_ref(),
 			self.backend.as_ref(),
 			number,
-		).await? {
+		)
+		.await?
+		{
 			Some(id) => {
 				let hash = client
 					.expect_block_hash_from_id(&id)

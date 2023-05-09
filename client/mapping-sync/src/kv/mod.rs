@@ -20,8 +20,8 @@
 
 mod worker;
 
-pub use worker::MappingSyncWorker;
 pub use crate::SyncStrategy;
+pub use worker::MappingSyncWorker;
 
 use std::sync::Arc;
 

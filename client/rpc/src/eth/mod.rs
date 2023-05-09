@@ -229,7 +229,10 @@ where
 		self.block_transaction_count_by_hash(hash).await
 	}
 
-	async fn block_transaction_count_by_number(&self, number: BlockNumber) -> RpcResult<Option<U256>> {
+	async fn block_transaction_count_by_number(
+		&self,
+		number: BlockNumber,
+	) -> RpcResult<Option<U256>> {
 		self.block_transaction_count_by_number(number).await
 	}
 
@@ -303,7 +306,11 @@ where
 		self.storage_at(address, index, number).await
 	}
 
-	async fn transaction_count(&self, address: H160, number: Option<BlockNumber>) -> RpcResult<U256> {
+	async fn transaction_count(
+		&self,
+		address: H160,
+		number: Option<BlockNumber>,
+	) -> RpcResult<U256> {
 		self.transaction_count(address, number).await
 	}
 

@@ -16,6 +16,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+#![allow(clippy::too_many_arguments)]
+
+use crate::SyncStrategy;
 use fp_rpc::EthereumRuntimeRPCApi;
 use futures::prelude::*;
 use sc_client_api::backend::{Backend as BackendT, StateBackend, StorageProvider};
@@ -24,7 +27,6 @@ use sp_blockchain::{Backend, HeaderBackend};
 use sp_core::H256;
 use sp_runtime::traits::{BlakeTwo256, Block as BlockT, UniqueSaturatedInto};
 use std::{sync::Arc, time::Duration};
-use crate::SyncStrategy;
 
 /// Defines the commands for the sync worker.
 #[derive(Debug)]
@@ -142,8 +144,11 @@ where
 						sinks.retain(|sink| {
 							if !sync_oracle.is_major_syncing() {
 								let is_new_best = client.info().best_hash == block_hash;
-								sink.unbounded_send(crate::EthereumBlockNotification { is_new_best, hash: block_hash })
-									.is_ok()
+								sink.unbounded_send(crate::EthereumBlockNotification {
+									is_new_best,
+									hash: block_hash,
+								})
+								.is_ok()
 							} else {
 								// Remove from the pool if in major syncing.
 								false
@@ -553,8 +558,7 @@ mod test {
 	use sp_consensus::BlockOrigin;
 	use sp_core::{H160, H256, U256};
 	use sp_io::hashing::twox_128;
-	use sp_runtime::generic::Digest;
-	use sp_runtime::traits::BlakeTwo256;
+	use sp_runtime::{generic::Digest, traits::BlakeTwo256};
 	use sqlx::Row;
 	use std::{collections::BTreeMap, path::Path, sync::Arc};
 	use substrate_test_runtime_client::{
