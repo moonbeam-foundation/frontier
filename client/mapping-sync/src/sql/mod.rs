@@ -35,6 +35,8 @@ pub enum WorkerCommand {
 	ResumeSync,
 	/// Index leaves.
 	IndexLeaves(Vec<H256>),
+	/// Index a generic block received via import notifications.
+	IndexBlock(H256),
 	/// Index the best block known so far via import notifications.
 	IndexBestBlock(H256),
 	/// Canonicalize the enacted and retracted blocks reported via import notifications.
@@ -130,6 +132,15 @@ where
 							.await;
 						}
 					}
+					WorkerCommand::IndexBlock(block_hash) => {
+						index_block_and_ancestors(
+							client.clone(),
+							substrate_backend.clone(),
+							indexer_backend.clone(),
+							block_hash,
+						)
+						.await;
+					}
 					WorkerCommand::IndexBestBlock(block_hash) => {
 						index_canonical_block_and_ancestors(
 							client.clone(),
@@ -140,8 +151,7 @@ where
 						.await;
 						// Notify on import and remove closed channels.
 						// Only notify when the node is node in major syncing.
-						let sinks = &mut pubsub_notification_sinks.lock();
-						sinks.retain(|sink| {
+						pubsub_notification_sinks.lock().retain(|sink| {
 							if !sync_oracle.is_major_syncing() {
 								let is_new_best = client.info().best_hash == block_hash;
 								sink.unbounded_send(crate::EthereumBlockNotification {
@@ -239,6 +249,11 @@ where
 					}
 				},
 				notification = notifications.next() => if let Some(notification) = notification {
+					println!("📣  New notification: #{} {:?} (parent {}), best = {}",
+					notification.header.number(),
+					notification.hash,
+					notification.header.parent_hash(),
+					notification.is_new_best,);
 					log::debug!(
 						target: "frontier-sql",
 						"📣  New notification: #{} {:?} (parent {}), best = {}",
@@ -247,10 +262,16 @@ where
 						notification.header.parent_hash(),
 						notification.is_new_best,
 					);
-					if SyncStrategy::Parachain == strategy && !notification.is_new_best
-					{
-						continue;
+					if !notification.is_new_best {
+						// we only sync in parachain mode the best blocks
+						match strategy {
+							SyncStrategy::Parachain => continue,
+							SyncStrategy::Normal => {
+								tx.send(WorkerCommand::IndexBlock(notification.hash)).await.ok();
+							}
+						}
 					}
+
 					if let Some(tree_route) = notification.tree_route {
 						log::debug!(
 							target: "frontier-sql",
@@ -570,10 +591,18 @@ mod test {
 		substrate_test_runtime_client::runtime::Extrinsic,
 	>;
 
-	struct TestSyncOracleNotSyncing;
-	impl sp_consensus::SyncOracle for TestSyncOracleNotSyncing {
+	struct TestSyncOracle(bool);
+	impl TestSyncOracle {
+		fn new(sync_status: bool) -> Self {
+			TestSyncOracle(sync_status)
+		}
+		fn set_sync_status(&mut self, value: bool) {
+			self.0 = value;
+		}
+	}
+	impl sp_consensus::SyncOracle for TestSyncOracle {
 		fn is_major_syncing(&self) -> bool {
-			false
+			self.0
 		}
 		fn is_offline(&self) -> bool {
 			false
@@ -735,7 +764,7 @@ mod test {
 			crate::EthereumBlockNotification<OpaqueBlock>,
 		> = Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
-		let not_syncing = TestSyncOracleNotSyncing {};
+		let not_syncing = TestSyncOracle::new(false);
 
 		// Spawn worker after creating the blocks will resolve the interval future.
 		// Because the SyncWorker is spawned at service level, in the real world this will only
@@ -861,7 +890,7 @@ mod test {
 			crate::EthereumBlockNotification<OpaqueBlock>,
 		> = Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
-		let not_syncing = TestSyncOracleNotSyncing {};
+		let not_syncing = TestSyncOracle::new(false);
 
 		// Spawn worker after creating the blocks will resolve the interval future.
 		// Because the SyncWorker is spawned at service level, in the real world this will only
@@ -1064,7 +1093,7 @@ mod test {
 			crate::EthereumBlockNotification<OpaqueBlock>,
 		> = Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
-		let not_syncing = TestSyncOracleNotSyncing {};
+		let not_syncing = TestSyncOracle::new(false);
 
 		// Spawn indexer task
 		let notification_stream = client.clone().import_notification_stream();
@@ -1257,7 +1286,7 @@ mod test {
 			crate::EthereumBlockNotification<OpaqueBlock>,
 		> = Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
-		let not_syncing = TestSyncOracleNotSyncing {};
+		let not_syncing = TestSyncOracle::new(false);
 
 		// Spawn indexer task
 		let client_inner = client.clone();
@@ -1281,6 +1310,140 @@ mod test {
 		futures_timer::Delay::new(std::time::Duration::from_millis(1500)).await;
 
 		// Test the reorged chain is correctly indexed.
+		let actual_imported_blocks =
+			sqlx::query("SELECT substrate_block_hash, is_canon, block_number FROM blocks")
+				.fetch_all(&pool)
+				.await
+				.expect("test query result")
+				.iter()
+				.map(|row| H256::from_slice(&row.get::<Vec<u8>, _>(0)[..]))
+				.collect::<Vec<H256>>();
+		let expected_imported_blocks = block_hashes.clone();
+		assert_eq!(expected_imported_blocks, actual_imported_blocks);
+	}
+
+	#[tokio::test]
+	async fn indexing_works_for_normal_sync() {
+		use std::sync::Mutex;
+
+		let tmp = tempdir().expect("create a temporary directory");
+		let builder = TestClientBuilder::new().add_extra_storage(
+			PALLET_ETHEREUM_SCHEMA.to_vec(),
+			Encode::encode(&EthereumStorageSchema::V3),
+		);
+		let backend = builder.backend();
+		let (client, _) =
+			builder.build_with_native_executor::<frontier_template_runtime::RuntimeApi, _>(None);
+		let mut client = Arc::new(client);
+		let mut overrides_map = BTreeMap::new();
+		overrides_map.insert(
+			EthereumStorageSchema::V3,
+			Box::new(SchemaV3Override::new(client.clone())) as Box<dyn StorageOverride<_>>,
+		);
+		let overrides = Arc::new(OverrideHandle {
+			schemas: overrides_map,
+			fallback: Box::new(SchemaV3Override::new(client.clone())),
+		});
+		let indexer_backend = fc_db::sql::Backend::new(
+			fc_db::sql::BackendConfig::Sqlite(fc_db::sql::SqliteBackendConfig {
+				path: Path::new("sqlite:///")
+					.join(tmp.path())
+					.join("test.db3")
+					.to_str()
+					.unwrap(),
+				create_if_missing: true,
+				cache_size: 204800,
+				thread_count: 4,
+			}),
+			100,
+			None,
+			overrides.clone(),
+		)
+		.await
+		.expect("indexer pool to be created");
+
+		// Pool
+		let pool = indexer_backend.pool().clone();
+
+		struct TestSyncOracle {
+			sync_status: Arc<Mutex<bool>>
+		};
+		impl sp_consensus::SyncOracle for TestSyncOracle {
+			fn is_major_syncing(&self) -> bool {
+				*self.sync_status.lock().expect("failed getting lock")
+			}
+			fn is_offline(&self) -> bool {
+				false
+			}
+		}
+
+		struct TestSyncOracleWrapper {
+			oracle: Arc<TestSyncOracle>,
+			sync_status: Arc<Mutex<bool>>,
+		};
+		impl TestSyncOracleWrapper {
+			fn new() -> Self {
+				let sync_status = Arc::new(Mutex::new(false));
+				TestSyncOracleWrapper {
+					oracle: Arc::new(TestSyncOracle{ sync_status: sync_status.clone() }),
+					sync_status
+				}
+			}
+			fn set_sync_status(&mut self, value: bool) {
+				*self.sync_status.lock().expect("failed getting lock") = value;
+			}
+		}
+
+		// Spawn indexer task
+		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<
+			crate::EthereumBlockNotification<OpaqueBlock>,
+		> = Default::default();
+		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
+		let mut sync_oracle_wrapper = TestSyncOracleWrapper::new();
+		let sync_oracle = sync_oracle_wrapper.oracle.clone();
+		let client_inner = client.clone();
+		tokio::task::spawn(async move {
+			crate::sql::SyncWorker::run(
+				client_inner.clone(),
+				backend.clone(),
+				Arc::new(indexer_backend),
+				client_inner.import_notification_stream(),
+				SyncWorkerConfig {
+					read_notification_timeout: Duration::from_secs(10),
+					check_indexed_blocks_interval: Duration::from_secs(60),
+				},
+				SyncStrategy::Normal,
+				Arc::new(sync_oracle),
+				pubsub_notification_sinks.clone(),
+			)
+			.await
+		});
+		// Enough time for startup
+		futures_timer::Delay::new(std::time::Duration::from_millis(200)).await;
+
+		// Import 3 blocks as part of initial sync, storing them newest first.
+		sync_oracle_wrapper.set_sync_status(false);
+		let mut parent_hash = client
+			.hash(sp_runtime::traits::Zero::zero())
+			.unwrap()
+			.expect("genesis hash");
+		let mut block_hashes: Vec<H256> = vec![];
+		for _block_number in 1..=3 {
+			let builder = client
+				.new_block_at(parent_hash, ethereum_digest(), false)
+				.unwrap();
+			let block = builder.build().unwrap().block;
+			let block_hash = block.header.hash();
+			executor::block_on(client.import(BlockOrigin::Own, block)).unwrap();
+			block_hashes.insert(0, block_hash.clone());
+			parent_hash = block_hash;
+		}
+
+		// Enough time for indexing
+		futures_timer::Delay::new(std::time::Duration::from_millis(3000)).await;
+
+		println!("{block_hashes:?}");
+		// Test the chain is correctly indexed.
 		let actual_imported_blocks =
 			sqlx::query("SELECT substrate_block_hash, is_canon, block_number FROM blocks")
 				.fetch_all(&pool)
