@@ -31,7 +31,7 @@ sc-utils = { workspace = true }
 [dev-dependencies]
 ethereum = { workspace = true, features = ["with-codec"] }
 ethereum-types = { workspace = true }
-tempfile = "3.3.0"
+tempfile = "3.7.0"
 tokio = { version = "1.24", features = ["sync"] }
 #Frontier
 fp-storage = { workspace = true, features = ["default"] }
