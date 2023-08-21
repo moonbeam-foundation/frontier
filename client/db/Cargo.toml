@@ -31,7 +31,7 @@ default = ["kvdb-rocksdb", "parity-db"]
 
 [dev-dependencies]
 futures = "0.3.25"
-tempfile = "3.3.0"
+tempfile = "3.8.0"
 # Substrate
 sc-block-builder = { workspace = true }
 sp-consensus = { workspace = true }
