@@ -15,7 +15,7 @@ jobs:
     name: 'Run Rust tests'
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Rust Setup
       uses: actions-rs/toolchain@v1
       with:
@@ -34,7 +34,7 @@ jobs:
     name: 'Run integration tests'
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Rust Setup
       uses: actions-rs/toolchain@v1
       with:
@@ -65,7 +65,7 @@ jobs:
     name: 'Run lints'
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Rust Setup
       uses: actions-rs/toolchain@v1
       with:
