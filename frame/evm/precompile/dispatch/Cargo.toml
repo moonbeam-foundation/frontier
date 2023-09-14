@@ -13,6 +13,8 @@ frame-support = { workspace = true }
 # Frontier
 fp-evm = { workspace = true }
 pallet-evm = { workspace = true }
+sp-runtime = { workspace = true }
+scale-codec = { package = "parity-scale-codec", workspace = true }
 
 [dev-dependencies]
 scale-codec = { package = "parity-scale-codec", workspace = true }

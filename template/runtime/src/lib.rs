@@ -232,6 +232,8 @@ impl pallet_grandpa::Config for Runtime {
 
 	type KeyOwnerProof = sp_core::Void;
 	type EquivocationReportSystem = ();
+
+	type MaxNominators = ();
 }
 
 parameter_types! {
@@ -977,7 +979,8 @@ impl_runtime_apis! {
 		fn dispatch_benchmark(
 			config: frame_benchmarking::BenchmarkConfig
 		) -> Result<Vec<frame_benchmarking::BenchmarkBatch>, sp_runtime::RuntimeString> {
-			use frame_benchmarking::{baseline, Benchmarking, BenchmarkBatch, add_benchmark, TrackedStorageKey};
+			use frame_benchmarking::{baseline, Benchmarking, BenchmarkBatch, add_benchmark};
+			use sp_storage::TrackedStorageKey;
 
 			use pallet_evm::Pallet as PalletEvmBench;
 			use pallet_hotfix_sufficients::Pallet as PalletHotfixSufficientsBench;
@@ -988,7 +991,7 @@ impl_runtime_apis! {
 			let whitelist: Vec<TrackedStorageKey> = vec![];
 
 			let mut batches = Vec::<BenchmarkBatch>::new();
-			let params = (&config, &whitelist);
+			let params = (&config, &whitelist[..]);
 
 			add_benchmark!(params, batches, pallet_evm, PalletEvmBench::<Runtime>);
 			add_benchmark!(params, batches, pallet_hotfix_sufficients, PalletHotfixSufficientsBench::<Runtime>);

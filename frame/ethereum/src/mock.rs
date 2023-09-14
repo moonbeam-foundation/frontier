@@ -19,7 +19,6 @@
 
 use ethereum::{TransactionAction, TransactionSignature};
 use frame_support::{
-	dispatch::Dispatchable,
 	parameter_types,
 	traits::{ConstU32, FindAuthor},
 	weights::Weight,

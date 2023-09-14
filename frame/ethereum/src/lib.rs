@@ -44,14 +44,14 @@ use fp_evm::{
 };
 use fp_storage::{EthereumStorageSchema, PALLET_ETHEREUM_SCHEMA};
 use frame_support::{
-	codec::{Decode, Encode, MaxEncodedLen},
 	dispatch::{DispatchInfo, DispatchResultWithPostInfo, Pays, PostDispatchInfo},
-	scale_info::TypeInfo,
+	pallet_prelude::TypeInfo,
 	traits::{EnsureOrigin, Get, PalletInfoAccess, Time},
 	weights::Weight,
 };
 use frame_system::{pallet_prelude::OriginFor, CheckWeight, WeightInfo};
 use pallet_evm::{BlockHashMapping, FeeCalculator, GasWeightMapping, Runner};
+use scale_codec::{Decode, Encode, MaxEncodedLen};
 use sp_runtime::{
 	generic::DigestItem,
 	traits::{DispatchInfoOf, Dispatchable, One, Saturating, UniqueSaturatedInto, Zero},

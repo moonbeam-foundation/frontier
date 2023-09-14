@@ -72,7 +72,8 @@ use impl_trait_for_tuples::impl_for_tuples;
 use scale_info::TypeInfo;
 // Substrate
 use frame_support::{
-	dispatch::{DispatchResultWithPostInfo, MaxEncodedLen, Pays, PostDispatchInfo},
+	dispatch::{DispatchResultWithPostInfo, Pays, PostDispatchInfo},
+	pallet_prelude::MaxEncodedLen,
 	traits::{
 		tokens::{
 			currency::Currency,
