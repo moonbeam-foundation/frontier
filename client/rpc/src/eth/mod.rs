@@ -556,6 +556,35 @@ where
 	}
 }
 
+fn rich_block_with_parent_build(
+	block: EthereumBlock,
+	statuses: Vec<TransactionStatus>,
+	hash: H256,
+	substrate_hash: H256,
+	parent_hashes: &Option<BTreeMap<H256, H256>>,
+	full_transactions: bool,
+	base_fee: Option<U256>,
+	is_pending: bool,
+) -> RichBlock {
+	let mut rich_block = rich_block_build(
+		block,
+		statuses.into_iter().map(Option::Some).collect(),
+		Some(hash),
+		full_transactions,
+		base_fee,
+		is_pending,
+	);
+	let substrate_hash = H256::from_slice(substrate_hash.as_ref());
+
+	if let Some(parent_hash) = parent_hashes
+		.as_ref()
+		.and_then(|parent_hashes| parent_hashes.get(&substrate_hash).cloned())
+	{
+		rich_block.inner.header.parent_hash = parent_hash
+	}
+	rich_block
+}
+
 fn rich_block_build(
 	block: EthereumBlock,
 	statuses: Vec<Option<TransactionStatus>>,

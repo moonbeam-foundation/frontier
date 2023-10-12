@@ -37,6 +37,8 @@ use crate::{
 	frontier_backend_client, internal_err,
 };
 
+use super::rich_block_with_parent_build;
+
 impl<B, C, P, CT, BE, A, CIDP, EC> Eth<B, C, P, CT, BE, A, CIDP, EC>
 where
 	B: BlockT,
@@ -116,24 +118,17 @@ where
 				match (block, statuses) {
 					(Some(block), Some(statuses)) => {
 						let hash = H256::from(keccak_256(&rlp::encode(&block.header)));
-						let mut rich_block = rich_block_build(
+						let substrate_hash = H256::from_slice(substrate_hash.as_ref());
+						let rich_block = rich_block_with_parent_build(
 							block,
-							statuses.into_iter().map(Option::Some).collect(),
-							Some(hash),
+							statuses,
+							hash,
+							substrate_hash,
+							&self.forced_parent_hashes,
 							full,
 							base_fee,
 							false,
 						);
-
-						let substrate_hash = H256::from_slice(substrate_hash.as_ref());
-						if let Some(parent_hash) = self
-							.forced_parent_hashes
-							.as_ref()
-							.and_then(|parent_hashes| parent_hashes.get(&substrate_hash).cloned())
-						{
-							rich_block.inner.header.parent_hash = parent_hash
-						}
-
 						Ok(Some(rich_block))
 					}
 					_ => Ok(None),
@@ -171,14 +166,21 @@ where
 				let base_fee = api.gas_price(best_hash).ok();
 
 				match (block, statuses) {
-					(Some(block), Some(statuses)) => Ok(Some(rich_block_build(
-						block,
-						statuses.into_iter().map(Option::Some).collect(),
-						None,
-						full,
-						base_fee,
-						true,
-					))),
+					(Some(block), Some(statuses)) => {
+						let hash = H256::from(keccak_256(&rlp::encode(&block.header)));
+						let substrate_hash = H256::from_slice(best_hash.as_ref());
+						let rich_block = rich_block_with_parent_build(
+							block,
+							statuses,
+							hash,
+							substrate_hash,
+							&self.forced_parent_hashes,
+							full,
+							base_fee,
+							true,
+						);
+						Ok(Some(rich_block))
+					}
 					_ => Ok(None),
 				}
 			}
