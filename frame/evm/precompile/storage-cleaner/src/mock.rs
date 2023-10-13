@@ -114,6 +114,7 @@ pub type PCall = StorageCleanerPrecompileCall<Runtime>;
 
 const BLOCK_GAS_LIMIT: u64 = 15_000_000;
 const MAX_POV_SIZE: u64 = 5 * 1024 * 1024;
+const MAX_STORAGE_GROWTH: u64 = 400 * 1024;
 
 parameter_types! {
 	pub BlockGasLimit: U256 = U256::from(BLOCK_GAS_LIMIT);
