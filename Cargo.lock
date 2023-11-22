@@ -5882,7 +5882,6 @@ dependencies = [
  "sp-core",
  "sp-inherents",
  "sp-io",
- "sp-runtime",
  "sp-std",
 ]
 
@@ -5951,7 +5950,6 @@ dependencies = [
  "frame-system",
  "parity-scale-codec",
  "scale-info",
- "sp-runtime",
 ]
 
 [[package]]
