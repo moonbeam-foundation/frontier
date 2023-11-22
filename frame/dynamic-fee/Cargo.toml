@@ -27,6 +27,7 @@ fp-evm = { workspace = true }
 # Substrate
 pallet-timestamp = { workspace = true, features = ["default"] }
 sp-io = { workspace = true, features = ["default"] }
+sp-runtime = { workspace = true, features = ["default"] }
 
 [features]
 default = ["std"]
