@@ -83,9 +83,12 @@ impl FindAuthor<H160> for FindAuthorTruncated {
 	}
 }
 
+const BLOCK_GAS_LIMIT: u64 = 150_000_000;
+/// The maximum storage growth per block in bytes.
+const MAX_STORAGE_GROWTH: u64 = 800 * 1024;
 parameter_types! {
 	pub const TransactionByteFee: u64 = 1;
-	pub const GasLimitStorageGrowthRatio: u64 = 0;
+	pub const GasLimitStorageGrowthRatio: u64 = BLOCK_GAS_LIMIT.saturating_div(MAX_STORAGE_GROWTH);
 }
 
 #[derive_impl(pallet_evm::config_preludes::TestDefaultConfig)]

@@ -73,6 +73,7 @@ impl crate::Config for Test {
 	type PrecompilesType = MockPrecompileSet;
 	type PrecompilesValue = MockPrecompiles;
 	type Runner = crate::runner::stack::Runner<Self>;
+	type GasLimitStorageGrowthRatio = GasLimitStorageGrowthRatio;
 	type Timestamp = Timestamp;
 }
 
@@ -82,6 +83,14 @@ impl FeeCalculator for FixedGasPrice {
 		// Return some meaningful gas price and weight
 		(1_000_000_000u128.into(), Weight::from_parts(7u64, 0))
 	}
+}
+
+const BLOCK_GAS_LIMIT: u64 = 150_000_000;
+/// The maximum storage growth per block in bytes.
+const MAX_STORAGE_GROWTH: u64 = 400 * 1024;
+
+parameter_types! {
+	pub const GasLimitStorageGrowthRatio: u64 = BLOCK_GAS_LIMIT.saturating_div(MAX_STORAGE_GROWTH);
 }
 
 /// Example PrecompileSet with only Identity precompile.
