@@ -623,7 +623,6 @@ where
 		)
 	}
 
-
 	fn create_force_address(
 		source: H160,
 		init: Vec<u8>,
@@ -671,8 +670,14 @@ where
 			proof_size_base_cost,
 			|executor| {
 				T::OnCreate::on_create(source, contract_address);
-				let (reason, _) =
-					executor.transact_create_force_address(source, value, init, gas_limit, access_list, contract_address);
+				let (reason, _) = executor.transact_create_force_address(
+					source,
+					value,
+					init,
+					gas_limit,
+					access_list,
+					contract_address,
+				);
 				(reason, contract_address)
 			},
 		)
