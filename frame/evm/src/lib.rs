@@ -77,18 +77,18 @@ use frame_support::{
 	dispatch::{DispatchResultWithPostInfo, Pays, PostDispatchInfo},
 	storage::child::KillStorageResult,
 	traits::{
+		fungible::{Balanced, Credit, Debt},
 		tokens::{
 			currency::Currency,
 			fungible::Inspect,
 			imbalance::{Imbalance, OnUnbalanced, SignedImbalance},
-			ExistenceRequirement, Fortitude, Preservation, WithdrawReasons,
+			ExistenceRequirement, Fortitude, Precision, Preservation, WithdrawConsequence,
+			WithdrawReasons,
 		},
 		FindAuthor, Get, Time,
 	},
 	weights::Weight,
 };
-use frame_support::traits::fungible::{Balanced, Credit, Debt};
-use frame_support::traits::tokens::Precision;
 use frame_system::RawOrigin;
 use sp_core::{H160, H256, U256};
 use sp_runtime::{
@@ -1058,6 +1058,7 @@ where
 		}
 	}
 }
+
 /// Implements transaction payment for a pallet implementing the [`fungible`]
 /// trait (eg. pallet_balances) using an unbalance handler (implementing
 /// [`OnUnbalanced`]).
@@ -1067,11 +1068,11 @@ where
 pub struct EVMFungibleAdapter<F, OU>(sp_std::marker::PhantomData<(F, OU)>);
 
 impl<T, F, OU> OnChargeEVMTransaction<T> for EVMFungibleAdapter<F, OU>
-	where
-		T: Config,
-		F: Balanced<T::AccountId>,
-		OU: OnUnbalanced<Credit<T::AccountId, F>>,
-		U256: UniqueSaturatedInto<<F as Inspect<<T as frame_system::Config>::AccountId>>::Balance>,
+where
+	T: Config,
+	F: Balanced<T::AccountId>,
+	OU: OnUnbalanced<Credit<T::AccountId, F>>,
+	U256: UniqueSaturatedInto<<F as Inspect<<T as frame_system::Config>::AccountId>>::Balance>,
 {
 	// Kept type as Option to satisfy bound of Default
 	type LiquidityInfo = Option<Credit<T::AccountId, F>>;
@@ -1088,8 +1089,17 @@ impl<T, F, OU> OnChargeEVMTransaction<T> for EVMFungibleAdapter<F, OU>
 			Preservation::Preserve,
 			Fortitude::Polite,
 		)
-			.map_err(|_| Error::<T>::BalanceLow)?;
+		.map_err(|_| Error::<T>::BalanceLow)?;
 		Ok(Some(imbalance))
+	}
+
+	fn can_withdraw(who: &H160, amount: U256) -> Result<(), Error<T>> {
+		let account_id = T::AddressMapping::into_account_id(*who);
+		let amount = amount.unique_saturated_into();
+		if let WithdrawConsequence::Success = F::can_withdraw(&account_id, amount) {
+			return Ok(());
+		}
+		Err(Error::<T>::BalanceLow)
 	}
 
 	fn correct_and_deposit_fee(
