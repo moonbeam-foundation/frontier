@@ -940,7 +940,7 @@ pub trait OnChargeEVMTransaction<T: Config> {
 		corrected_fee: U256,
 		base_fee: U256,
 		already_withdrawn: Self::LiquidityInfo,
-	) -> Self::LiquidityInfo;
+	) -> Result<Self::LiquidityInfo, Error<T>>;
 
 	/// Introduced in EIP1559 to handle the priority tip.
 	fn pay_priority_fee(tip: Self::LiquidityInfo);
@@ -1004,7 +1004,7 @@ where
 		corrected_fee: U256,
 		base_fee: U256,
 		already_withdrawn: Self::LiquidityInfo,
-	) -> Self::LiquidityInfo {
+	) -> Result<Self::LiquidityInfo, Error<T>> {
 		if let Some(paid) = already_withdrawn {
 			let account_id = T::AddressMapping::into_account_id(*who);
 
@@ -1040,14 +1040,14 @@ where
 			let adjusted_paid = paid
 				.offset(refund_imbalance)
 				.same()
-				.unwrap_or_else(|_| C::NegativeImbalance::zero());
+				.map_err(|_| Error::<T>::Undefined)?;
 
 			let (base_fee, tip) = adjusted_paid.split(base_fee.unique_saturated_into());
 			// Handle base fee. Can be either burned, rationed, etc ...
 			OU::on_unbalanced(base_fee);
-			return Some(tip);
+			return Ok(Some(tip));
 		}
-		None
+		Ok(None)
 	}
 
 	fn pay_priority_fee(tip: Self::LiquidityInfo) {
@@ -1107,7 +1107,7 @@ where
 		corrected_fee: U256,
 		base_fee: U256,
 		already_withdrawn: Self::LiquidityInfo,
-	) -> Self::LiquidityInfo {
+	) -> Result<Self::LiquidityInfo, Error<T>> {
 		if let Some(paid) = already_withdrawn {
 			let account_id = T::AddressMapping::into_account_id(*who);
 
@@ -1128,9 +1128,9 @@ where
 			let (base_fee, tip) = adjusted_paid.split(base_fee.unique_saturated_into());
 			// Handle base fee. Can be either burned, rationed, etc ...
 			OU::on_unbalanced(base_fee);
-			return Some(tip);
+			return Ok(Some(tip));
 		}
-		None
+		Ok(None)
 	}
 
 	fn pay_priority_fee(tip: Self::LiquidityInfo) {
@@ -1175,7 +1175,7 @@ U256: UniqueSaturatedInto<BalanceOf<T>>,
 		corrected_fee: U256,
 		base_fee: U256,
 		already_withdrawn: Self::LiquidityInfo,
-	) -> Self::LiquidityInfo {
+	) -> Result<Self::LiquidityInfo, Error<T>> {
 		<EVMCurrencyAdapter::<<T as Config>::Currency, ()> as OnChargeEVMTransaction<T>>::correct_and_deposit_fee(who, corrected_fee, base_fee, already_withdrawn)
 	}
 
