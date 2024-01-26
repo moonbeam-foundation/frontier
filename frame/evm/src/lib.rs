@@ -505,6 +505,8 @@ pub mod pallet {
 		Reentrancy,
 		/// EIP-3607,
 		TransactionMustComeFromEOA,
+		/// Invalid Transaction
+		InvalidTransaction,
 		/// Undefined error.
 		Undefined,
 	}
@@ -1040,7 +1042,7 @@ where
 			let adjusted_paid = paid
 				.offset(refund_imbalance)
 				.same()
-				.map_err(|_| Error::<T>::Undefined)?;
+				.map_err(|_| Error::<T>::InvalidTransaction)?;
 
 			let (base_fee, tip) = adjusted_paid.split(base_fee.unique_saturated_into());
 			// Handle base fee. Can be either burned, rationed, etc ...
@@ -1123,7 +1125,7 @@ where
 			let adjusted_paid = paid
 				.offset(refund_imbalance)
 				.same()
-				.unwrap_or_else(|_| Credit::<T::AccountId, F>::zero());
+				.map_err(|_| Error::<T>::InvalidTransaction)?;
 
 			let (base_fee, tip) = adjusted_paid.split(base_fee.unique_saturated_into());
 			// Handle base fee. Can be either burned, rationed, etc ...
