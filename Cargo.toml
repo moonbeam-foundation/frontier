@@ -45,7 +45,7 @@ clap = { version = "4.3", features = ["derive", "deprecated"] }
 environmental = { version = "1.1.4", default-features = false }
 ethereum = { version = "0.14.0", default-features = false }
 ethereum-types = { version = "0.14.1", default-features = false }
-evm = { git = "https://github.com/moonbeam-foundation/evm-private", rev = "e4bab85832d851d0f1678dd1f56b9e8fd8bb8ba7", default-features = false }
+evm = { git = "https://github.com/moonbeam-foundation/evm", rev = "a33ac87ad7462b7e7029d12c385492b2a8311d1c", default-features = false }
 futures = "0.3.28"
 hash-db = { version = "0.16.0", default-features = false }
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
