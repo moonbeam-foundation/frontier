@@ -2291,7 +2291,7 @@ dependencies = [
 [[package]]
 name = "evm"
 version = "0.41.1"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-v1.7.2#d8991ec727ad0fb64fe9957a3cd307387a6701e4"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=v0.4.1-eip1153#f04b630487f63335cc95e33a66be2d83cae2bb70"
 dependencies = [
  "auto_impl",
  "environmental",
@@ -2311,7 +2311,7 @@ dependencies = [
 [[package]]
 name = "evm-core"
 version = "0.41.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-v1.7.2#d8991ec727ad0fb64fe9957a3cd307387a6701e4"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=v0.4.1-eip1153#f04b630487f63335cc95e33a66be2d83cae2bb70"
 dependencies = [
  "parity-scale-codec",
  "primitive-types",
@@ -2322,7 +2322,7 @@ dependencies = [
 [[package]]
 name = "evm-gasometer"
 version = "0.41.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-v1.7.2#d8991ec727ad0fb64fe9957a3cd307387a6701e4"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=v0.4.1-eip1153#f04b630487f63335cc95e33a66be2d83cae2bb70"
 dependencies = [
  "environmental",
  "evm-core",
@@ -2333,7 +2333,7 @@ dependencies = [
 [[package]]
 name = "evm-runtime"
 version = "0.41.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-v1.7.2#d8991ec727ad0fb64fe9957a3cd307387a6701e4"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=v0.4.1-eip1153#f04b630487f63335cc95e33a66be2d83cae2bb70"
 dependencies = [
  "auto_impl",
  "environmental",
