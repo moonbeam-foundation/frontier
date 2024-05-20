@@ -2291,7 +2291,7 @@ dependencies = [
 [[package]]
 name = "evm"
 version = "0.41.1"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=v0.4.1-cancun#cfcc81a1e13f8d6c96b6c0c10015ebf5c85b253a"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=ahmad-cancun-suicide#fe33256a774929aa65d3be2734e1a74da1487ba5"
 dependencies = [
  "auto_impl",
  "environmental",
@@ -2311,7 +2311,7 @@ dependencies = [
 [[package]]
 name = "evm-core"
 version = "0.41.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=v0.4.1-cancun#cfcc81a1e13f8d6c96b6c0c10015ebf5c85b253a"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=ahmad-cancun-suicide#fe33256a774929aa65d3be2734e1a74da1487ba5"
 dependencies = [
  "parity-scale-codec",
  "primitive-types",
@@ -2322,7 +2322,7 @@ dependencies = [
 [[package]]
 name = "evm-gasometer"
 version = "0.41.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=v0.4.1-cancun#cfcc81a1e13f8d6c96b6c0c10015ebf5c85b253a"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=ahmad-cancun-suicide#fe33256a774929aa65d3be2734e1a74da1487ba5"
 dependencies = [
  "environmental",
  "evm-core",
@@ -2333,7 +2333,7 @@ dependencies = [
 [[package]]
 name = "evm-runtime"
 version = "0.41.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=v0.4.1-cancun#cfcc81a1e13f8d6c96b6c0c10015ebf5c85b253a"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=ahmad-cancun-suicide#fe33256a774929aa65d3be2734e1a74da1487ba5"
 dependencies = [
  "auto_impl",
  "environmental",
