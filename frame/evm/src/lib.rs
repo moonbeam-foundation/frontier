@@ -827,8 +827,7 @@ impl<T: Config> Pallet<T> {
 
 		<AccountCodes<T>>::remove(address);
 		<AccountCodesMetadata<T>>::remove(address);
-		#[allow(deprecated)]
-		let _ = <AccountStorages<T>>::remove_prefix(address, None);
+		let _ = <AccountStorages<T>>::clear_prefix(address, u32::max_value(), None);
 	}
 
 	/// Create an account.
