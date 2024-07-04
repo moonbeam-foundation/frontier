@@ -19,7 +19,7 @@
 use scale_codec::{Decode, Encode};
 // Substrate
 use sp_core::{H160, H256};
-use sp_runtime::traits::Block as BlockT;
+use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
 // Frontier
 use fp_storage::EthereumStorageSchema;
 
@@ -55,6 +55,9 @@ pub trait Backend<Block: BlockT>: Send + Sync {
 
 	/// Get the hash of the latest substrate block fully indexed by the backend.
 	async fn latest_block_hash(&self) -> Result<Block::Hash, String>;
+
+	/// Get the block number of the latest synced block.
+	async fn latest_synced_block(&self) -> Result<<Block::Header as HeaderT>::Number, String>;
 }
 
 #[derive(Debug, Eq, PartialEq)]

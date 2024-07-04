@@ -831,6 +831,17 @@ impl<Block: BlockT<Hash = H256>> fc_api::Backend<Block> for Backend<Block> {
 			.map(|row| H256::from_slice(&row.get::<Vec<u8>, _>(0)[..]))
 			.map_err(|e| format!("Failed to fetch best hash: {}", e))
 	}
+
+	async fn latest_synced_block(&self) -> Result<<Block::Header as HeaderT>::Number, String> {
+		sqlx::query("SELECT MAX(id) FROM sync_status")
+		.fetch_one(self.pool())
+		.await
+		.map(|row| {
+			let block_number: u32 = row.get(0);
+			return block_number.into()
+		})
+		.map_err(|e| format!("Failed to fetch block number: {}", e))
+	}
 }
 
 #[async_trait::async_trait]

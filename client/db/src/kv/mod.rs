@@ -33,7 +33,8 @@ pub use sc_client_db::DatabaseSource;
 use sp_blockchain::HeaderBackend;
 use sp_core::{H160, H256};
 pub use sp_database::Database;
-use sp_runtime::traits::Block as BlockT;
+use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
+use sp_runtime::SaturatedConversion;
 // Frontier
 use fc_api::{FilteredLog, TransactionMetadata};
 use fp_storage::{EthereumStorageSchema, PALLET_ETHEREUM_SCHEMA_CACHE};
@@ -92,6 +93,10 @@ impl<Block: BlockT, C: HeaderBackend<Block>> fc_api::Backend<Block> for Backend<
 
 	async fn latest_block_hash(&self) -> Result<Block::Hash, String> {
 		Ok(self.client.info().best_hash)
+	}
+
+	async fn latest_synced_block(&self) -> Result<<Block::Header as HeaderT>::Number, String> {
+		Ok(self.client.info().finalized_number.saturated_into())
 	}
 }
 
