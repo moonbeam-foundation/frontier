@@ -16,6 +16,7 @@ members = [
 	"frame/evm/precompile/dispatch",
 	"frame/evm/precompile/curve25519",
 	"frame/evm/precompile/storage-cleaner",
+	"frame/evm/precompile/secp256r1",
 	"frame/evm-chain-id",
 	"frame/hotfix-sufficients",
 	"client/api",
