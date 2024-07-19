@@ -195,7 +195,7 @@ fn eip7702_transaction_execution() {
 		let initial_bob_balance = Balances::free_balance(&substrate_bob);
 
 		// Execute the transaction using the Ethereum pallet
-		let result = Ethereum::execute(alice.address, &transaction, None);
+		let result = Ethereum::execute(alice.address, &transaction, None, None);
 
 		// Verify transaction execution and state changes
 		let Ok(execution_info) = result else {
@@ -455,7 +455,7 @@ fn gas_cost_calculation_with_authorizations() {
 		.sign(&alice.private_key, Some(ChainId::get()));
 
 		// Execute the transaction and capture gas usage
-		let execution_result = Ethereum::execute(alice.address, &transaction, None);
+		let execution_result = Ethereum::execute(alice.address, &transaction, None, None);
 		assert_ok!(&execution_result);
 
 		let (_, _, call_info) = execution_result.unwrap();
