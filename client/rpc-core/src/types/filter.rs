@@ -30,7 +30,7 @@ use serde_json::{from_value, Value};
 
 use crate::types::{BlockNumberOrHash, Log};
 
-const VARIADIC_MULTIPLE_MAX_SIZE: usize = 1024;
+const VARIADIC_MULTIPLE_MAX_SIZE: usize = 16;
 
 /// Variadic value
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
