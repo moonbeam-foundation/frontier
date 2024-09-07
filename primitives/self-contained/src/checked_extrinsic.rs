@@ -15,7 +15,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use frame_support::dispatch::{DispatchInfo, GetDispatchInfo};
+use frame_support::{
+	dispatch::{DispatchInfo, GetDispatchInfo, PostDispatchInfo},
+	pallet_prelude::Weight,
+};
 use scale_codec::Encode;
 use sp_runtime::{
 	generic::ExtrinsicFormat,
@@ -64,7 +67,7 @@ impl<AccountId, Call, Extension, SelfContainedSignedInfo, Origin> Applyable
 where
 	AccountId: Member + MaybeDisplay,
 	Call: Member
-		+ Dispatchable<RuntimeOrigin = Origin>
+		+ Dispatchable<RuntimeOrigin = Origin, PostInfo = PostDispatchInfo>
 		+ Encode
 		+ SelfContainedCall<SignedInfo = SelfContainedSignedInfo>,
 	Extension: TransactionExtension<Call>,
@@ -151,7 +154,26 @@ where
 					TransactionValidityError::Invalid(InvalidTransaction::BadProof),
 				)?;
 				let mut post_info = match res {
-					Ok(info) => info,
+					Ok(PostDispatchInfo {
+						actual_weight,
+						pays_fee,
+					}) => {
+						if let Some(weight) = &actual_weight {
+							// Ethereum extrinsic size is accounted twice for proof size,
+							// so we need to substract it's size here.
+							PostDispatchInfo {
+								actual_weight: Some(
+									weight.saturating_sub(Weight::from_parts(0, len as u64)),
+								),
+								pays_fee,
+							}
+						} else {
+							PostDispatchInfo {
+								actual_weight,
+								pays_fee,
+							}
+						}
+					}
 					Err(err) => err.post_info,
 				};
 				Extension::bare_post_dispatch(
