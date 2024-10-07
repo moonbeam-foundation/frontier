@@ -50,7 +50,7 @@ use fp_evm::{
 use super::meter::StorageMeter;
 use crate::{
 	runner::Runner as RunnerT, AccountCodes, AccountCodesMetadata, AccountStorages, AddressMapping,
-	BalanceOf, BlockHashMapping, Config, Error, Event, FeeCalculator, OnChargeEVMTransaction,
+	BalanceOf, BlockHashMapping, CodeMetadata, Config, Error, Event, FeeCalculator, OnChargeEVMTransaction,
 	OnCreate, Pallet, RunnerError,
 };
 
