@@ -214,10 +214,10 @@ where
 		//
 		// EIP-3607: https://eips.ethereum.org/EIPS/eip-3607
 		// Do not allow transactions for which `tx.sender` has any code deployed.
-		if is_transactional
-			&& !<AccountCodesMetadata<T>>::get(source)
-				.unwrap_or_default()
-				.size == 0
+		let metadata: CodeMetadata = <AccountCodesMetadata<T>>::get(source)
+			.unwrap_or_default();
+		let code: Vec<u8> = <AccountCodes<T>>::get(source);
+		if is_transactional && (metadata.size != 0 || !code.is_empty())
 		{
 			return Err(RunnerError {
 				error: Error::<T>::TransactionMustComeFromEOA,
