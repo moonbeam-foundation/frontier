@@ -66,6 +66,15 @@ impl Into<U256> for BlockCount {
 	}
 }
 
+impl Into<u64> for BlockCount {
+    fn into(self) -> u64 {
+		match self {
+			BlockCount::U256(n) => n.as_u64(),
+			BlockCount::Num(n) => n
+		}
+	}
+}
+
 impl<'a> Visitor<'a> for BlockCountVisitor {
 	type Value = BlockCount;
 
