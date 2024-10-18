@@ -624,7 +624,6 @@ where
 		)
 	}
 
-
 	fn create_force_address(
 		source: H160,
 		init: Vec<u8>,
@@ -672,8 +671,14 @@ where
 			proof_size_base_cost,
 			|executor| {
 				T::OnCreate::on_create(source, contract_address);
-				let (reason, _) =
-					executor.transact_create_force_address(source, value, init, gas_limit, access_list, contract_address);
+				let (reason, _) = executor.transact_create_force_address(
+					source,
+					value,
+					init,
+					gas_limit,
+					access_list,
+					contract_address,
+				);
 				(reason, contract_address)
 			},
 		)
@@ -770,7 +775,9 @@ impl<'config> SubstrateStackSubstate<'config> {
 		self.deletes.insert(address);
 	}
 
-	pub fn set_created(&mut self, address: H160) { self.creates.insert(address); }
+	pub fn set_created(&mut self, address: H160) {
+		self.creates.insert(address);
+	}
 
 	pub fn log(&mut self, address: H160, topics: Vec<H256>, data: Vec<u8>) {
 		self.logs.push(Log {
@@ -1044,7 +1051,9 @@ where
 		self.substate.set_deleted(address)
 	}
 
-	fn set_created(&mut self, address: H160) { self.substate.set_created(address); }
+	fn set_created(&mut self, address: H160) {
+		self.substate.set_created(address);
+	}
 
 	fn set_code(&mut self, address: H160, code: Vec<u8>) {
 		log::debug!(
