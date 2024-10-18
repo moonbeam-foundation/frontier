@@ -16,8 +16,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{fmt, str::FromStr};
 use std::convert::Into;
+use std::{fmt, str::FromStr};
 
 use ethereum_types::U256;
 use serde::{
@@ -58,19 +58,19 @@ impl Serialize for BlockCount {
 struct BlockCountVisitor;
 
 impl Into<U256> for BlockCount {
-    fn into(self) -> U256 {
+	fn into(self) -> U256 {
 		match self {
 			BlockCount::U256(n) => n,
-			BlockCount::Num(n) => U256::from(n)
+			BlockCount::Num(n) => U256::from(n),
 		}
 	}
 }
 
 impl Into<u64> for BlockCount {
-    fn into(self) -> u64 {
+	fn into(self) -> u64 {
 		match self {
 			BlockCount::U256(n) => n.as_u64(),
-			BlockCount::Num(n) => n
+			BlockCount::Num(n) => n,
 		}
 	}
 }
@@ -90,16 +90,12 @@ impl<'a> Visitor<'a> for BlockCountVisitor {
 		E: Error,
 	{
 		let number = value.parse::<u64>();
-		 match number {
+		match number {
 			Ok(n) => Ok(BlockCount::Num(n)),
-			Err(_) => U256::from_str(value)
-				.map(BlockCount::U256)
-				.map_err(|_| {
-					Error::custom(
-						"Invalid block count: non-decimal or missing 0x prefix".to_string()
-					)
-				})
-		} 
+			Err(_) => U256::from_str(value).map(BlockCount::U256).map_err(|_| {
+				Error::custom("Invalid block count: non-decimal or missing 0x prefix".to_string())
+			}),
+		}
 	}
 
 	fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
@@ -120,7 +116,7 @@ impl<'a> Visitor<'a> for BlockCountVisitor {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	
+
 	fn match_block_number(block_count: BlockCount) -> Option<U256> {
 		match block_count {
 			BlockCount::Num(n) => Some(U256::from(n)),
