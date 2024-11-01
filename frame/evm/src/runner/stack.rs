@@ -186,6 +186,7 @@ where
 		) -> (ExitReason, R),
 		R: Default,
 	{
+		log::info!("PROOF SIZE BASE COST: {:?}", proof_size_base_cost.unwrap_or_default());
 		// Used to record the external costs in the evm through the StackState implementation
 		let maybe_weight_info =
 			WeightInfo::new_from_weight_limit(weight_limit, proof_size_base_cost).map_err(
