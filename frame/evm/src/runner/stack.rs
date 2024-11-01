@@ -325,6 +325,12 @@ where
 					storage_gas,
 				));
 
+				log::info!("ACTUAL PROOF SIZE: {:?}", actual_proof_size);
+				log::info!("POV GAS: {:?}", pov_gas);
+				log::info!("STORAGE GAS: {:?}", storage_gas);
+				log::info!("USED GAS: {:?}", used_gas);
+				log::info!("EFFECTIVE GAS: {:?}", effective_gas);
+
 				(reason, retv, used_gas, effective_gas)
 			});
 
