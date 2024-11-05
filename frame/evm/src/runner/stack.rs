@@ -305,7 +305,7 @@ where
 				log::info!("MEASURED PROOF SIZE BEFORE: {:?}", measured_proof_size_before);
 
 				// Measure actual proof size usage (or get computed proof size)
-/* 				let actual_proof_size = if let Some(measured_proof_size_after) = get_proof_size() {
+ 				let actual_proof_size = if let Some(measured_proof_size_after) = get_proof_size() {
 					measured_proof_size_after.saturating_sub(measured_proof_size_before)
 				} else {
 					executor
@@ -314,14 +314,14 @@ where
 						.unwrap_or_default()
 						.proof_size_usage
 						.unwrap_or_default()
-				}; */
+				};
 
-				let actual_proof_size = executor
+/* 				let actual_proof_size = executor
 					.state()
 					.weight_info()
 					.unwrap_or_default()
 					.proof_size_usage
-					.unwrap_or_default();
+					.unwrap_or_default(); */
 
 				// Post execution.
 				let pov_gas = core::cmp::min(
