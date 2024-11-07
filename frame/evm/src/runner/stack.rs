@@ -315,10 +315,7 @@ where
 				};
 
 				// Post execution.
-				let pov_gas = core::cmp::min(
-					actual_proof_size.saturating_mul(T::GasLimitPovSizeRatio::get()),
-					gas_limit,
-				);
+				let pov_gas = actual_proof_size.saturating_mul(T::GasLimitPovSizeRatio::get());
 				let used_gas = executor.used_gas();
 				let effective_gas = U256::from(core::cmp::max(
 					core::cmp::max(used_gas, pov_gas),
