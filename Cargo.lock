@@ -1748,6 +1748,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "cumulus-primitives-storage-weight-reclaim"
+version = "9.1.0"
+source = "git+https://github.com/moonbeam-foundation/polkadot-sdk?branch=moonbeam-polkadot-stable2412#f1f370819fc24d8d0b60016bc36e0859667a1f38"
+dependencies = [
+ "cumulus-primitives-core",
+ "cumulus-primitives-proof-size-hostfunction",
+ "docify",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-runtime",
+]
+
+[[package]]
 name = "cumulus-relay-chain-interface"
 version = "0.21.0"
 source = "git+https://github.com/moonbeam-foundation/polkadot-sdk?branch=moonbeam-polkadot-stable2412#f1f370819fc24d8d0b60016bc36e0859667a1f38"
@@ -6859,6 +6876,7 @@ dependencies = [
 name = "pallet-evm"
 version = "6.0.0-dev"
 dependencies = [
+ "cumulus-primitives-storage-weight-reclaim",
  "environmental",
  "evm",
  "fp-account",
