@@ -186,7 +186,10 @@ where
 		) -> (ExitReason, R),
 		R: Default,
 	{
-		log::info!("PROOF SIZE BASE COST: {:?}", proof_size_base_cost.unwrap_or_default());
+		log::info!(
+			"PROOF SIZE BASE COST: {:?}",
+			proof_size_base_cost.unwrap_or_default()
+		);
 		// Used to record the external costs in the evm through the StackState implementation
 		let maybe_weight_info =
 			WeightInfo::new_from_weight_limit(weight_limit, proof_size_base_cost).map_err(
@@ -302,26 +305,45 @@ where
 					Some(storage_meter) => storage_meter.storage_to_gas(storage_growth_ratio),
 					None => 0,
 				};
-				log::info!("MEASURED PROOF SIZE BEFORE: {:?}", measured_proof_size_before);
+				log::info!(
+					"MEASURED PROOF SIZE BEFORE: {:?}",
+					measured_proof_size_before
+				);
+
+				let weight_info = executor.state().weight_info().unwrap_or_default();
+
+				let estimated_proof_size = weight_info.proof_size_usage.unwrap_or_default();
 
 				// Measure actual proof size usage (or get computed proof size)
- 				let actual_proof_size = if let Some(measured_proof_size_after) = get_proof_size() {
-					measured_proof_size_after.saturating_sub(measured_proof_size_before)
+				let actual_proof_size = if let Some(measured_proof_size_after) = get_proof_size() {
+					let actual_proof_size =
+						measured_proof_size_after.saturating_sub(measured_proof_size_before);
+
+					if actual_proof_size > estimated_proof_size {
+						let diff = actual_proof_size.saturating_sub(estimated_proof_size);
+						if let Err(e) =
+							executor
+								.state_mut()
+								.record_external_cost(None, Some(diff), None)
+						{
+							log::info!("Error updating proof_size cost in executor: {:?}", e);
+						}
+					} else {
+						let diff = estimated_proof_size.saturating_sub(actual_proof_size);
+						executor.state_mut().refund_external_cost(None, Some(diff));
+					}
+
+					actual_proof_size
 				} else {
-					executor
-						.state()
-						.weight_info()
-						.unwrap_or_default()
-						.proof_size_usage
-						.unwrap_or_default()
+					estimated_proof_size
 				};
 
-/* 				let actual_proof_size = executor
-					.state()
-					.weight_info()
-					.unwrap_or_default()
-					.proof_size_usage
-					.unwrap_or_default(); */
+				/* 				let actual_proof_size = executor
+				.state()
+				.weight_info()
+				.unwrap_or_default()
+				.proof_size_usage
+				.unwrap_or_default(); */
 
 				// Post execution.
 				let pov_gas = core::cmp::min(
