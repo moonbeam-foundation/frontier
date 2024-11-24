@@ -302,27 +302,57 @@ where
 					None => 0,
 				};
 
+				let weight_info = executor.state().weight_info().unwrap_or_default();
+
+				let estimated_proof_size = weight_info.proof_size_usage.unwrap_or_default();
+
 				// Measure actual proof size usage (or get computed proof size)
 				let actual_proof_size = if let Some(measured_proof_size_after) = get_proof_size() {
-					measured_proof_size_after.saturating_sub(measured_proof_size_before)
+					let actual_proof_size =
+						measured_proof_size_after.saturating_sub(measured_proof_size_before);
+
+					if actual_proof_size > estimated_proof_size {
+						let diff = actual_proof_size.saturating_sub(estimated_proof_size);
+						let _ = executor
+							.state_mut()
+							.record_external_cost(None, Some(diff), None);
+					} else {
+						let diff = estimated_proof_size.saturating_sub(actual_proof_size);
+						let _ = executor.state_mut().refund_external_cost(None, Some(diff));
+					}
+
+					actual_proof_size
 				} else {
-					executor
-						.state()
-						.weight_info()
-						.unwrap_or_default()
-						.proof_size_usage
-						.unwrap_or_default()
+					estimated_proof_size
 				};
 
 				// Post execution.
 				let pov_gas = actual_proof_size.saturating_mul(T::GasLimitPovSizeRatio::get());
 				let used_gas = executor.used_gas();
-				let effective_gas = U256::from(core::cmp::max(
-					core::cmp::max(used_gas, pov_gas),
-					storage_gas,
-				));
+				let effective_gas = core::cmp::max(core::cmp::max(used_gas, pov_gas), storage_gas);
 
-				(reason, retv, used_gas, effective_gas)
+				let total_used_gas = executor.state().metadata().gasometer().total_used_gas();
+
+				// Emit refund event if PoV gas is the effective gas,
+				// This is necessary for providing the gas from PoV when using evm-tracing
+				if effective_gas == pov_gas {
+					let diff: i64 = (effective_gas as i64).saturating_sub(total_used_gas as i64);
+					let _ = executor
+						.state_mut()
+						.metadata_mut()
+						.gasometer_mut()
+						.record_refund(diff);
+				}
+
+				log::error!(
+					"\ngas: (pov: {:?}, standard: {:?}, storage: {:?}, estimated_proof_size: {:?})\n",
+					pov_gas,
+					used_gas,
+					storage_gas,
+					estimated_proof_size.saturating_mul(T::GasLimitPovSizeRatio::get()),
+				);
+
+				(reason, retv, used_gas, U256::from(effective_gas))
 			});
 
 		let actual_fee = effective_gas.saturating_mul(total_fee_per_gas);
