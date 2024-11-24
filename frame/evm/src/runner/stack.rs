@@ -344,14 +344,6 @@ where
 						.record_refund(diff);
 				}
 
-				log::error!(
-					"\ngas: (pov: {:?}, standard: {:?}, storage: {:?}, estimated_proof_size: {:?})\n",
-					pov_gas,
-					used_gas,
-					storage_gas,
-					estimated_proof_size.saturating_mul(T::GasLimitPovSizeRatio::get()),
-				);
-
 				(reason, retv, used_gas, U256::from(effective_gas))
 			});
 
