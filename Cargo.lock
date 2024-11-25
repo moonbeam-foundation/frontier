@@ -2441,6 +2441,7 @@ dependencies = [
  "sp-state-machine",
  "sp-storage",
  "sp-timestamp",
+ "sp-trie",
  "substrate-prometheus-endpoint",
  "substrate-test-runtime-client",
  "tempfile",

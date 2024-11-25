@@ -129,9 +129,6 @@ impl WeightInfo {
 			(self.ref_time_usage, self.ref_time_limit)
 		{
 			let ref_time_usage = self.try_consume(cost, ref_time_limit, ref_time_usage)?;
-			if ref_time_usage > ref_time_limit {
-				return Err(ExitError::OutOfGas);
-			}
 			self.ref_time_usage = Some(ref_time_usage);
 		}
 		Ok(())
@@ -142,10 +139,6 @@ impl WeightInfo {
 			(self.proof_size_usage, self.proof_size_limit)
 		{
 			let proof_size_usage = self.try_consume(cost, proof_size_limit, proof_size_usage)?;
-			if proof_size_usage > proof_size_limit {
-				storage_oog::set_storage_oog();
-				return Err(ExitError::OutOfGas);
-			}
 			self.proof_size_usage = Some(proof_size_usage);
 		}
 		Ok(())
