@@ -301,27 +301,55 @@ where
 					None => 0,
 				};
 
-				// Measure actual proof size usage (or get computed proof size)
+				let estimated_proof_size = executor
+					.state()
+					.weight_info()
+					.unwrap_or_default()
+					.proof_size_usage
+					.unwrap_or_default();
+
+				// Obtain the actual proof size usage using the ProofSizeExt host-function or fallback
+				// and use the estimated proof size
 				let actual_proof_size = if let Some(measured_proof_size_after) = get_proof_size() {
-					measured_proof_size_after.saturating_sub(measured_proof_size_before)
+					// actual_proof_size = proof_size_base_cost + proof_size measured with ProofSizeExt
+					let actual_proof_size =
+						proof_size_base_cost.unwrap_or_default().saturating_add(
+							measured_proof_size_after.saturating_sub(measured_proof_size_before),
+						);
+
+					log::trace!(
+						target: "evm",
+						"Proof size computation: (estimated: {}, actual: {})",
+						estimated_proof_size,
+						actual_proof_size
+					);
+
+					// If the proof_size calculated from the host-function gives an higher cost than
+					// the estimated proof_size, we should use the estimated proof_size to compute
+					// the PoV gas.
+					//
+					// TODO: The estimated proof_size should always be an overestimate
+					if actual_proof_size > estimated_proof_size {
+						log::debug!(
+							target: "evm",
+							"Proof size underestimation detected! (estimated: {}, actual: {})",
+							estimated_proof_size,
+							actual_proof_size
+						);
+						estimated_proof_size
+					} else {
+						actual_proof_size
+					}
 				} else {
-					executor
-						.state()
-						.weight_info()
-						.unwrap_or_default()
-						.proof_size_usage
-						.unwrap_or_default()
+					estimated_proof_size
 				};
 
 				// Post execution.
 				let pov_gas = actual_proof_size.saturating_mul(T::GasLimitPovSizeRatio::get());
 				let used_gas = executor.used_gas();
-				let effective_gas = U256::from(core::cmp::max(
-					core::cmp::max(used_gas, pov_gas),
-					storage_gas,
-				));
+				let effective_gas = core::cmp::max(core::cmp::max(used_gas, pov_gas), storage_gas);
 
-				(reason, retv, used_gas, effective_gas)
+				(reason, retv, used_gas, U256::from(effective_gas))
 			});
 
 		let actual_fee = effective_gas.saturating_mul(total_fee_per_gas);
