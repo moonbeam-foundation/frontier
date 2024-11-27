@@ -350,22 +350,6 @@ where
 				let used_gas = executor.used_gas();
 				let effective_gas = core::cmp::max(core::cmp::max(used_gas, pov_gas), storage_gas);
 
-				let total_used_gas = executor.state().metadata().gasometer().total_used_gas();
-
-				// Emit refund event if PoV gas is the effective gas,
-				// This is necessary for providing the gas from PoV when using evm-tracing
-				if effective_gas == pov_gas {
-					// The difference will be:
-					// - [- Negative] if extra gas needs to be accounted
-					// - [+ Positive] if less gas needs to be accounted
-					let diff: i64 = (total_used_gas as i64).saturating_sub(effective_gas as i64);
-					let _ = executor
-						.state_mut()
-						.metadata_mut()
-						.gasometer_mut()
-						.record_refund(diff);
-				}
-
 				(reason, retv, used_gas, U256::from(effective_gas))
 			});
 
