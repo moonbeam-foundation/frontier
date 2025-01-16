@@ -229,6 +229,7 @@ describeWithFrontier("Frontier RPC (Gas limit Weightv2 ref time)", (context) => 
 
 		let nonce = await context.web3.eth.getTransactionCount(GENESIS_ACCOUNT);
 
+		const txHashs = [];
 		for (var i = 0; i < CALLS_PER_BLOCK; i++) {
 			let data = contract.methods.storageLoop(1000, TEST_ACCOUNT, i);
 			let tx = await context.web3.eth.accounts.signTransaction(
@@ -243,6 +244,7 @@ describeWithFrontier("Frontier RPC (Gas limit Weightv2 ref time)", (context) => 
 				GENESIS_ACCOUNT_PRIVATE_KEY
 			);
 			await customRequest(context.web3, "eth_sendRawTransaction", [tx.rawTransaction]);
+			txHashs.push(tx.transactionHash);
 			nonce++;
 		}
 		// because we are using Math.floor for everything, at the end there is room for an additional
@@ -260,14 +262,22 @@ describeWithFrontier("Frontier RPC (Gas limit Weightv2 ref time)", (context) => 
 				GENESIS_ACCOUNT_PRIVATE_KEY
 			);
 			let r = await customRequest(context.web3, "eth_sendRawTransaction", [tx.rawTransaction]);
+			txHashs.push(r.result);
 			nonce++;
 		}
 
 		await createAndFinalizeBlock(context.web3);
 
+		for (let tx of txHashs) {
+			const receipt = await context.web3.eth.getTransactionReceipt(tx);
+			console.log("gas used", receipt.gasUsed);
+		}
+
 		let latest = await context.web3.eth.getBlock("latest");
 		expect(latest.transactions.length).to.be.eq(CALLS_PER_BLOCK + TRANSFERS_PER_BLOCK + 1);
 		expect(latest.gasUsed).to.be.lessThanOrEqual(ETH_BLOCK_GAS_LIMIT);
+		console.log("block gas used", latest.gasUsed);
+		console.log("value tested", ETH_BLOCK_GAS_LIMIT - latest.gasUsed);
 		expect(ETH_BLOCK_GAS_LIMIT - latest.gasUsed).to.be.lessThan(21_000);
 	});
 });
