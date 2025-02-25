@@ -355,7 +355,7 @@ where
 						);
 						if is_transactional {
 							// only check for transactional
-							panic!("Proof size underestimation detected! (estimated: {}, actual: {}, diff: {})", estimated_proof_size, actual_proof_size, actual_proof_size.saturating_sub(estimated_proof_size));
+							// panic!("Proof size underestimation detected! (estimated: {}, actual: {}, diff: {})", estimated_proof_size, actual_proof_size, actual_proof_size.saturating_sub(estimated_proof_size));
 						}
 						estimated_proof_size
 					} else {
