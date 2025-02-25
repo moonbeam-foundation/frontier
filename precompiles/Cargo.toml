@@ -37,6 +37,9 @@ pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
 # Polkadot / XCM
 xcm = { workspace = true, optional = true }
 
+cumulus-primitives-storage-weight-reclaim = { workspace = true, default-features = false }
+
+
 [dev-dependencies]
 hex-literal = { workspace = true }
 xcm = { workspace = true }
@@ -52,6 +55,7 @@ std = [
 	"scale-codec/std",
 	"sp-core/std",
 	"sp-io/std",
+	"cumulus-primitives-storage-weight-reclaim/std",
 	"xcm?/std",
 ]
 codec-xcm = ["xcm"]

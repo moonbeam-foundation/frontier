@@ -26,6 +26,7 @@ mod storage_oog;
 mod validation;
 
 use alloc::{collections::BTreeMap, vec::Vec};
+use cumulus_primitives_storage_weight_reclaim::get_proof_size;
 use frame_support::weights::{constants::WEIGHT_REF_TIME_PER_MILLIS, Weight};
 use scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
@@ -38,7 +39,7 @@ pub use evm::{
 	backend::{Basic as Account, Log},
 	Config, ExitReason, Opcode,
 };
-
+use frame_support::__private::log;
 pub use self::{
 	account_provider::AccountProvider,
 	precompile::{
@@ -88,6 +89,7 @@ pub struct WeightInfo {
 	pub proof_size_limit: Option<u64>,
 	pub ref_time_usage: Option<u64>,
 	pub proof_size_usage: Option<u64>,
+	pub last_actual_proof_size: Option<u64>,
 }
 
 impl WeightInfo {
@@ -105,6 +107,7 @@ impl WeightInfo {
 					proof_size_limit: Some(weight_limit.proof_size()),
 					ref_time_usage: Some(0u64),
 					proof_size_usage: Some(proof_size_base_cost),
+					last_actual_proof_size: get_proof_size(),
 				})
 			}
 			(Some(weight_limit), None) => Some(WeightInfo {
@@ -112,6 +115,7 @@ impl WeightInfo {
 				proof_size_limit: None,
 				ref_time_usage: Some(0u64),
 				proof_size_usage: None,
+				last_actual_proof_size: get_proof_size(),
 			}),
 			_ => return Err("must provide Some valid weight limit or None"),
 		})
@@ -130,8 +134,13 @@ impl WeightInfo {
 		if let (Some(ref_time_usage), Some(ref_time_limit)) =
 			(self.ref_time_usage, self.ref_time_limit)
 		{
-			let ref_time_usage = self.try_consume(cost, ref_time_limit, ref_time_usage)?;
-			self.ref_time_usage = Some(ref_time_usage);
+			match self.try_consume(cost, ref_time_limit, ref_time_usage) {
+				Ok(ref_time_usage) => self.ref_time_usage = Some(ref_time_usage),
+				Err(e) => {
+					self.ref_time_usage = Some(ref_time_limit);
+					return Err(e)
+				},
+			}
 		}
 		Ok(())
 	}
@@ -140,13 +149,24 @@ impl WeightInfo {
 		if let (Some(proof_size_usage), Some(proof_size_limit)) =
 			(self.proof_size_usage, self.proof_size_limit)
 		{
-			let proof_size_usage = self.try_consume(cost, proof_size_limit, proof_size_usage)?;
-			self.proof_size_usage = Some(proof_size_usage);
+			match self.try_consume(cost, proof_size_limit, proof_size_usage) {
+				Ok(proof_size_usage) => self.proof_size_usage = Some(proof_size_usage),
+				Err(e) => {
+					self.proof_size_usage = Some(proof_size_limit);
+					return Err(e)
+				},
+			}
+			let last_proof_size = get_proof_size();
+			let actual_proof_size = last_proof_size.unwrap_or_default() - self.last_actual_proof_size.unwrap_or_default();
+			self.last_actual_proof_size = last_proof_size;
+			log::debug!(target: "evm", "[try_record_proof_size_or_fail] Recording cost: {}, actual cost: {} (limit: {:?})", cost, actual_proof_size, proof_size_limit);
+			log::debug!(target: "evm", "[try_record_proof_size_or_fail] Recorded POV: {}, actual POV: {:?}", proof_size_usage, last_proof_size);
 		}
 		Ok(())
 	}
 
 	pub fn refund_proof_size(&mut self, amount: u64) {
+		log::debug!(target: "evm", "Refunding proof size: {}", amount);
 		if let Some(proof_size_usage) = self.proof_size_usage {
 			let proof_size_usage = proof_size_usage.saturating_sub(amount);
 			self.proof_size_usage = Some(proof_size_usage);

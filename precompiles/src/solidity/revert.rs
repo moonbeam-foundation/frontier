@@ -372,6 +372,12 @@ impl<T> BacktraceExt for MayRevert<T> {
 
 impl From<Revert> for PrecompileFailure {
 	fn from(err: Revert) -> Self {
+		log::debug!(
+			target: "pov",
+			"Revert to PrecompileFailure. Reason: {}, Backtrace: {}",
+			err.reason,
+			err.backtrace,
+		);
 		PrecompileFailure::Revert {
 			exit_status: ExitRevert::Reverted,
 			output: err.to_encoded_bytes(),
