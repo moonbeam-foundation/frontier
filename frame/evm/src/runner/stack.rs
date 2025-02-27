@@ -348,6 +348,14 @@ where
 				let pov_gas = actual_proof_size.saturating_mul(T::GasLimitPovSizeRatio::get());
 				let used_gas = executor.used_gas();
 				let effective_gas = core::cmp::max(core::cmp::max(used_gas, pov_gas), storage_gas);
+				log::debug!(
+					target: "evm",
+					"Calculating effective gas: max(used: {}, pov: {}, storage: {}) = {}",
+					used_gas,
+					pov_gas,
+					storage_gas,
+					effective_gas
+				);
 
 				(reason, retv, used_gas, U256::from(effective_gas))
 			});
