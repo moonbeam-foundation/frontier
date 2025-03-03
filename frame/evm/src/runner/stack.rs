@@ -428,14 +428,6 @@ where
 			// Fee initially withdrawn.
 			fee,
 		);
-		log::debug!(
-			target: "pov",
-			"pay_priority_fee: actual_fee: {}, actual_base_fee: {}, fee: {}, actual_priority_fee: {}",
-			actual_fee,
-			actual_base_fee,
-			fee,
-			actual_priority_fee.peek(),
-		);
 		T::OnChargeTransaction::pay_priority_fee(actual_priority_fee);
 
 		let state = executor.into_state();
