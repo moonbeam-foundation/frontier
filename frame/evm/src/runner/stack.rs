@@ -434,7 +434,7 @@ where
 			actual_fee,
 			actual_base_fee,
 			fee,
-			actual_priority_fee,
+			actual_priority_fee.peek(),
 		);
 		T::OnChargeTransaction::pay_priority_fee(actual_priority_fee);
 
