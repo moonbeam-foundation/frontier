@@ -376,6 +376,13 @@ where
 				// Post execution.
 				let pov_gas = actual_proof_size.saturating_mul(T::GasLimitPovSizeRatio::get());
 				let used_gas = executor.used_gas();
+				log::debug!(
+					target: "pov",
+					"Runner::execute_inner pov_gas: {}, used_gas: {}, storage_gas: {}",
+					pov_gas,
+					used_gas,
+					storage_gas,
+				);
 				let effective_gas = core::cmp::max(core::cmp::max(used_gas, pov_gas), storage_gas);
 
 				(reason, retv, used_gas, U256::from(effective_gas))
