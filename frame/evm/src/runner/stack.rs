@@ -229,11 +229,8 @@ where
 		//
 		// EIP-3607: https://eips.ethereum.org/EIPS/eip-3607
 		// Do not allow transactions for which `tx.sender` has any code deployed.
-		if is_transactional
-			&& <AccountCodesMetadata<T>>::get(source)
-				.unwrap_or_default()
-				.size != 0
-		{
+		let account_code_meta = <AccountCodesMetadata<T>>::get(source);
+		if is_transactional && account_code_meta.unwrap_or_default().size != 0 {
 			return Err(RunnerError {
 				error: Error::<T>::TransactionMustComeFromEOA,
 				weight,
@@ -321,7 +318,8 @@ where
 					.weight_info()
 					.unwrap_or_default()
 					.proof_size_usage
-					.unwrap_or_default() + account_code_metadata_pov + validate_proof_size;
+					.unwrap_or_default() + account_code_metadata_pov
+					+ validate_proof_size;
 
 				// Obtain the actual proof size usage using the ProofSizeExt host-function or fallback
 				// and use the estimated proof size
