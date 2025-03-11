@@ -393,12 +393,13 @@ where
 
 		log::debug!(
 			target: "evm",
-			"Execution {:?} [source: {:?}, value: {}, gas_limit: {}, actual_fee: {}, used_gas: {}, effective_gas: {}, base_fee: {}, total_fee_per_gas: {}, is_transactional: {}]",
+			"Execution {:?} [source: {:?}, value: {}, gas_limit: {}, actual_fee: {}, actual_base_fee: {}, used_gas: {}, effective_gas: {}, base_fee: {}, total_fee_per_gas: {}, is_transactional: {}]",
 			reason,
 			source,
 			value,
 			gas_limit,
 			actual_fee,
+			actual_base_fee,
 			used_gas,
 			effective_gas,
 			base_fee,
