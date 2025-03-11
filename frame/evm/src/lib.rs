@@ -1212,6 +1212,12 @@ where
 				.unwrap_or_else(|_| Credit::<AccountIdOf<T>, F>::zero());
 
 			let (base_fee, tip) = adjusted_paid.split(base_fee.unique_saturated_into());
+			log::debug!(
+				target: "pov",
+				"correct_and_deposit_fee: base_fee: {:?}, tip: {:?}",
+				base_fee.peek(),
+				tip.peek()
+			);
 			// Handle base fee. Can be either burned, rationed, etc ...
 			OU::on_unbalanced(base_fee);
 			return Some(tip);
