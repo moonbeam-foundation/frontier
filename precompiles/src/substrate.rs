@@ -124,11 +124,7 @@ where
 		// the EVM doesn't. It seems this safer to always record the costs to avoid unmetered
 		// computations.
 		let post_dispatch_info = using_precompile_handle(handle, || call.dispatch(origin))
-			.map_err(|e| {
-				log::debug!(target: "pov","Precompile dispatched call failed with error: {:?}", e);
-				TryDispatchError::Substrate(e.error)
-			})?;
-		log::debug!(target: "pov","Precompile dispatched call successful with post dispatch info: {:?}", post_dispatch_info);
+			.map_err(|e| TryDispatchError::Substrate(e.error))?;
 
 		Self::refund_weight_v2_cost(
 			handle,

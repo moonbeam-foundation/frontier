@@ -2686,7 +2686,6 @@ dependencies = [
 name = "fp-evm"
 version = "3.0.0-dev"
 dependencies = [
- "cumulus-primitives-storage-weight-reclaim",
  "environmental",
  "evm",
  "frame-support",
@@ -6720,7 +6719,6 @@ checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
 name = "precompile-utils"
 version = "0.1.0"
 dependencies = [
- "cumulus-primitives-storage-weight-reclaim",
  "derive_more",
  "environmental",
  "evm",

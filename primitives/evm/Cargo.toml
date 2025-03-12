@@ -23,9 +23,6 @@ frame-support = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
 
-# Cumulus
-cumulus-primitives-storage-weight-reclaim = { workspace = true, default-features = false }
-
 [features]
 default = ["std"]
 std = [
@@ -39,7 +36,6 @@ std = [
 	"frame-support/std",
 	"sp-core/std",
 	"sp-runtime/std",
-	"cumulus-primitives-storage-weight-reclaim/std",
 ]
 serde = [
 	"dep:serde",

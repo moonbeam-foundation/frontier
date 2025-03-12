@@ -39,7 +39,6 @@ use frame_support::{
 	},
 	weights::Weight,
 };
-use log::log;
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::UniqueSaturatedInto;
 // Frontier
@@ -83,7 +82,6 @@ where
 		weight_limit: Option<Weight>,
 		proof_size_base_cost: Option<u64>,
 		measured_proof_size_before: u64,
-		validate_proof_size: u64,
 		f: F,
 	) -> Result<ExecutionInfoV2<R>, RunnerError<Error<T>>>
 	where
@@ -115,7 +113,6 @@ where
 			weight_limit,
 			proof_size_base_cost,
 			measured_proof_size_before,
-			validate_proof_size,
 		);
 
 		#[cfg(feature = "forbid-evm-reentrancy")]
@@ -155,7 +152,6 @@ where
 				weight_limit,
 				proof_size_base_cost,
 				measured_proof_size_before,
-				validate_proof_size,
 			)
 		});
 
@@ -178,7 +174,6 @@ where
 		weight_limit: Option<Weight>,
 		proof_size_base_cost: Option<u64>,
 		measured_proof_size_before: u64,
-		validate_proof_size: u64,
 	) -> Result<ExecutionInfoV2<R>, RunnerError<Error<T>>>
 	where
 		F: FnOnce(
@@ -191,7 +186,6 @@ where
 		) -> (ExitReason, R),
 		R: Default,
 	{
-		log::debug!(target: "pov", "Runner::execute_inner[1] [start], get_proof_size(): {:?}", get_proof_size());
 		// Used to record the external costs in the evm through the StackState implementation
 		let maybe_weight_info =
 			WeightInfo::new_from_weight_limit(weight_limit, proof_size_base_cost).map_err(
@@ -220,26 +214,22 @@ where
 			}
 		};
 
-		let account_code_metadata_pov_before = get_proof_size();
-
-		log::debug!(target: "pov", "Runner::execute_inner [before AccountCodesMetadata check], get_proof_size(): {:?}", get_proof_size());
 		// Only check the restrictions of EIP-3607 if the source of the EVM operation is from an external transaction.
 		// If the source of this EVM operation is from an internal call, like from `eth_call` or `eth_estimateGas` RPC,
 		// we will skip the checks for the EIP-3607.
 		//
 		// EIP-3607: https://eips.ethereum.org/EIPS/eip-3607
 		// Do not allow transactions for which `tx.sender` has any code deployed.
-		let account_code_meta = <AccountCodesMetadata<T>>::get(source);
-		if is_transactional && account_code_meta.unwrap_or_default().size != 0 {
+		if is_transactional
+			&& <AccountCodesMetadata<T>>::get(source)
+				.unwrap_or_default()
+				.size != 0
+		{
 			return Err(RunnerError {
 				error: Error::<T>::TransactionMustComeFromEOA,
 				weight,
 			});
 		}
-		log::debug!(target: "pov", "Runner::execute_inner [after AccountCodesMetadata check], get_proof_size(): {:?}", get_proof_size());
-		let account_code_metadata_pov = get_proof_size().unwrap_or_default()
-			- account_code_metadata_pov_before.unwrap_or_default();
-		log::debug!(target: "pov", "Runner::execute_inner account_code_metadata_pov: {:?}", account_code_metadata_pov);
 
 		let total_fee_per_gas = if is_transactional {
 			match (max_fee_per_gas, max_priority_fee_per_gas) {
@@ -287,7 +277,6 @@ where
 			origin: source,
 		};
 
-		log::debug!(target: "pov", "Runner::execute_inner [before GasLimitStorageGrowthRatio], get_proof_size(): {:?}", get_proof_size());
 		// Compute the storage limit based on the gas limit and the storage growth ratio.
 		let storage_growth_ratio = T::GasLimitStorageGrowthRatio::get();
 		let storage_limit = if storage_growth_ratio > 0 {
@@ -301,7 +290,6 @@ where
 		let state = SubstrateStackState::new(&vicinity, metadata, maybe_weight_info, storage_limit);
 		let mut executor = StackExecutor::new_with_precompiles(state, config, precompiles);
 
-		log::debug!(target: "pov", "Runner::execute_inner [before execute], get_proof_size(): {:?}", get_proof_size());
 		// Execute the EVM call.
 		let (reason, retv, used_gas, effective_gas) =
 			fp_evm::handle_storage_oog::<R, _>(gas_limit, || {
@@ -318,8 +306,7 @@ where
 					.weight_info()
 					.unwrap_or_default()
 					.proof_size_usage
-					.unwrap_or_default() + account_code_metadata_pov
-					+ validate_proof_size;
+					.unwrap_or_default();
 
 				// Obtain the actual proof size usage using the ProofSizeExt host-function or fallback
 				// and use the estimated proof size
@@ -345,26 +332,12 @@ where
 					if actual_proof_size > estimated_proof_size {
 						log::debug!(
 							target: "evm",
-							"Proof size underestimation detected! (estimated: {}, actual: {}, diff: {}, base_cost: {})",
+							"Proof size underestimation detected! (estimated: {}, actual: {})",
 							estimated_proof_size,
-							actual_proof_size,
-							actual_proof_size.saturating_sub(estimated_proof_size),
-							proof_size_base_cost.unwrap_or_default(),
+							actual_proof_size
 						);
-						if is_transactional {
-							// only check for transactional
-							// panic!("Proof size underestimation detected! (estimated: {}, actual: {}, diff: {})", estimated_proof_size, actual_proof_size, actual_proof_size.saturating_sub(estimated_proof_size));
-						}
 						estimated_proof_size
 					} else {
-						log::debug!(
-							target: "pov",
-							"Proof size overestimation detected! (estimated: {}, actual: {}, diff: {}, base_cost: {})",
-							estimated_proof_size,
-							actual_proof_size,
-							estimated_proof_size.saturating_sub(actual_proof_size),
-							proof_size_base_cost.unwrap_or_default(),
-						);
 						actual_proof_size
 					}
 				} else {
@@ -374,13 +347,6 @@ where
 				// Post execution.
 				let pov_gas = actual_proof_size.saturating_mul(T::GasLimitPovSizeRatio::get());
 				let used_gas = executor.used_gas();
-				log::debug!(
-					target: "pov",
-					"Runner::execute_inner pov_gas: {}, used_gas: {}, storage_gas: {}",
-					pov_gas,
-					used_gas,
-					storage_gas,
-				);
 				let effective_gas = core::cmp::max(core::cmp::max(used_gas, pov_gas), storage_gas);
 
 				(reason, retv, used_gas, U256::from(effective_gas))
@@ -391,13 +357,12 @@ where
 
 		log::debug!(
 			target: "evm",
-			"Execution {:?} [source: {:?}, value: {}, gas_limit: {}, actual_fee: {}, actual_base_fee: {}, used_gas: {}, effective_gas: {}, base_fee: {}, total_fee_per_gas: {}, is_transactional: {}]",
+			"Execution {:?} [source: {:?}, value: {}, gas_limit: {}, actual_fee: {}, used_gas: {}, effective_gas: {}, base_fee: {}, total_fee_per_gas: {}, is_transactional: {}]",
 			reason,
 			source,
 			value,
 			gas_limit,
 			actual_fee,
-			actual_base_fee,
 			used_gas,
 			effective_gas,
 			base_fee,
@@ -477,45 +442,6 @@ where
 			logs: state.substate.logs,
 		})
 	}
-
-	fn validate_inner(
-		source: H160,
-		target: Option<H160>,
-		input: Vec<u8>,
-		value: U256,
-		gas_limit: u64,
-		max_fee_per_gas: Option<U256>,
-		max_priority_fee_per_gas: Option<U256>,
-		nonce: Option<U256>,
-		access_list: Vec<(H160, Vec<H256>)>,
-		is_transactional: bool,
-		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
-		evm_config: &evm::Config,
-	) -> Result<u64, RunnerError<<Self as RunnerT<T>>::Error>> {
-		let pov_before = get_proof_size();
-		Self::validate(
-			source,
-			target,
-			input,
-			value,
-			gas_limit,
-			max_fee_per_gas,
-			max_priority_fee_per_gas,
-			nonce,
-			access_list,
-			is_transactional,
-			weight_limit,
-			proof_size_base_cost,
-			evm_config,
-		)
-		.map(|_| {
-			let pov_after = get_proof_size();
-			let pov = pov_after.unwrap_or_default() - pov_before.unwrap_or_default();
-			log::debug!(target: "pov", "Runner::validate_inner pov: {:?}", pov);
-			pov
-		})
-	}
 }
 
 impl<T: Config> RunnerT<T> for Runner<T>
@@ -539,7 +465,6 @@ where
 		proof_size_base_cost: Option<u64>,
 		evm_config: &evm::Config,
 	) -> Result<(), RunnerError<Self::Error>> {
-		log::debug!(target: "pov", "Runner::validate");
 		let (base_fee, mut weight) = T::FeeCalculator::min_gas_price();
 		let (source_account, inner_weight) = Pallet::<T>::account_basic(&source);
 		weight = weight.saturating_add(inner_weight);
@@ -591,13 +516,8 @@ where
 		config: &evm::Config,
 	) -> Result<CallInfo, RunnerError<Self::Error>> {
 		let measured_proof_size_before = get_proof_size().unwrap_or_default();
-		log::debug!(target: "pov", "Runner::call: measured_proof_size_before: {:?}", get_proof_size());
-		// log all args with new line between
-		log::debug!(target: "pov", "Runner::call: source: {:?}\ntarget: {:?}\ninput
-			{:?}\nvalue: {:?}\ngas_limit: {:?}\nmax_fee_per_gas: {:?}\nmax_priority_fee_per_gas: {:?}\nnonce: {:?}\naccess_list: {:?}\nis_transactional: {:?}\nvalidate: {:?}\nweight_limit: {:?}\nproof_size_base_cost: {:?}\nconfig: {:?}",
-			source, target, input, value, gas_limit, max_fee_per_gas, max_priority_fee_per_gas, nonce, access_list, is_transactional, validate, weight_limit, proof_size_base_cost, config);
-		let validate_proof_size = if validate {
-			Self::validate_inner(
+		if validate {
+			Self::validate(
 				source,
 				Some(target),
 				input.clone(),
@@ -611,10 +531,8 @@ where
 				weight_limit,
 				proof_size_base_cost,
 				config,
-			)?
-		} else {
-			0
-		};
+			)?;
+		}
 		let precompiles = T::PrecompilesValue::get();
 		Self::execute(
 			source,
@@ -628,7 +546,6 @@ where
 			weight_limit,
 			proof_size_base_cost,
 			measured_proof_size_before,
-			validate_proof_size,
 			|executor| executor.transact_call(source, target, value, input, gas_limit, access_list),
 		)
 	}
@@ -648,10 +565,9 @@ where
 		proof_size_base_cost: Option<u64>,
 		config: &evm::Config,
 	) -> Result<CreateInfo, RunnerError<Self::Error>> {
-		log::debug!(target: "pov", "Runner::create");
 		let measured_proof_size_before = get_proof_size().unwrap_or_default();
-		let validate_proof_size = if validate {
-			Self::validate_inner(
+		if validate {
+			Self::validate(
 				source,
 				None,
 				init.clone(),
@@ -665,10 +581,8 @@ where
 				weight_limit,
 				proof_size_base_cost,
 				config,
-			)?
-		} else {
-			0
-		};
+			)?;
+		}
 		let precompiles = T::PrecompilesValue::get();
 		Self::execute(
 			source,
@@ -682,7 +596,6 @@ where
 			weight_limit,
 			proof_size_base_cost,
 			measured_proof_size_before,
-			validate_proof_size,
 			|executor| {
 				let address = executor.create_address(evm::CreateScheme::Legacy { caller: source });
 				T::OnCreate::on_create(source, address);
@@ -709,10 +622,9 @@ where
 		proof_size_base_cost: Option<u64>,
 		config: &evm::Config,
 	) -> Result<CreateInfo, RunnerError<Self::Error>> {
-		log::debug!(target: "pov", "Runner::create2");
 		let measured_proof_size_before = get_proof_size().unwrap_or_default();
-		let validate_proof_size = if validate {
-			Self::validate_inner(
+		if validate {
+			Self::validate(
 				source,
 				None,
 				init.clone(),
@@ -726,10 +638,8 @@ where
 				weight_limit,
 				proof_size_base_cost,
 				config,
-			)?
-		} else {
-			0
-		};
+			)?;
+		}
 		let precompiles = T::PrecompilesValue::get();
 		let code_hash = H256::from(sp_io::hashing::keccak_256(&init));
 		Self::execute(
@@ -744,7 +654,6 @@ where
 			weight_limit,
 			proof_size_base_cost,
 			measured_proof_size_before,
-			validate_proof_size,
 			|executor| {
 				let address = executor.create_address(evm::CreateScheme::Create2 {
 					caller: source,
@@ -775,10 +684,9 @@ where
 		config: &evm::Config,
 		contract_address: H160,
 	) -> Result<CreateInfo, RunnerError<Self::Error>> {
-		log::debug!(target: "pov", "Runner::create_force_address");
 		let measured_proof_size_before = get_proof_size().unwrap_or_default();
-		let validate_proof_size = if validate {
-			Self::validate_inner(
+		if validate {
+			Self::validate(
 				source,
 				None,
 				init.clone(),
@@ -792,10 +700,8 @@ where
 				weight_limit,
 				proof_size_base_cost,
 				config,
-			)?
-		} else {
-			0
-		};
+			)?;
+		}
 		let precompiles = T::PrecompilesValue::get();
 		Self::execute(
 			source,
@@ -809,7 +715,6 @@ where
 			weight_limit,
 			proof_size_base_cost,
 			measured_proof_size_before,
-			validate_proof_size,
 			|executor| {
 				T::OnCreate::on_create(source, contract_address);
 				let (reason, _) = executor.transact_create_force_address(
@@ -1257,24 +1162,6 @@ where
 
 	fn record_external_operation(&mut self, op: evm::ExternalOperation) -> Result<(), ExitError> {
 		let (weight_info, recorded) = self.info_mut();
-		let op_str = match op {
-			ExternalOperation::AccountBasicRead => "AccountBasicRead",
-			ExternalOperation::AddressCodeRead(_) => "AddressCodeRead",
-			ExternalOperation::IsEmpty => "IsEmpty",
-			ExternalOperation::Write(_) => "Write",
-		};
-		log::debug!(
-			target: "pov",
-			"Recording external operation {:?}",
-			op_str,
-		);
-		log::debug!(
-			target: "pov",
-			"All proof size for {:?} (estimated: {:?}, actual: {:?})",
-			op_str,
-			weight_info.map(|x| x.proof_size_usage),
-			get_proof_size(),
-		);
 
 		if let Some(weight_info) = weight_info {
 			match op {
@@ -1328,7 +1215,6 @@ where
 		gas_cost: GasCost,
 		target: evm::gasometer::StorageTarget,
 	) -> Result<(), ExitError> {
-		log::debug!(target: "pov", "Recording dynamic opcode cost for {:?} with gas cost {:?} and target {:?}", opcode, gas_cost, target);
 		if let Some(storage_meter) = self.storage_meter.as_mut() {
 			storage_meter
 				.record_dynamic_opcode_cost(opcode, gas_cost, target)
@@ -1361,14 +1247,6 @@ where
 		let (weight_info, recorded) = self.info_mut();
 
 		if let Some(weight_info) = weight_info {
-			log::debug!(
-				target: "pov",
-				"All proof size usage for {:?} (estimated: {:?}, actual: {:?})",
-				opcode,
-				weight_info.proof_size_usage,
-				get_proof_size(),
-			);
-
 			// proof_size_limit is None indicates no need to record proof size, return directly.
 			if weight_info.proof_size_limit.is_none() {
 				return Ok(());
@@ -1459,13 +1337,6 @@ where
 		} else {
 			return Ok(());
 		};
-		log::debug!(
-			target: "pov",
-			"record_external_cost for {:?}, all pov(estimated: {:?}, actual: {:?})",
-			proof_size,
-			weight_info.proof_size_usage,
-			get_proof_size(),
-		);
 
 		if let Some(amount) = ref_time {
 			weight_info.try_record_ref_time_or_fail(amount)?;

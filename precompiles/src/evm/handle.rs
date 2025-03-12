@@ -16,7 +16,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use cumulus_primitives_storage_weight_reclaim::get_proof_size;
 use crate::{
 	solidity::{
 		codec::Reader,
@@ -60,7 +59,6 @@ impl<T: PrecompileHandle> PrecompileHandleExt for T {
 	) -> Result<(), evm::ExitError> {
 		self.record_cost(crate::prelude::RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		// TODO: record ref time when precompile will be benchmarked
-		log::debug!(target: "pov", "PrecompileHandle::record_db_read: data_max_encoded_len = {}", data_max_encoded_len);
 		self.record_external_cost(None, Some(data_max_encoded_len as u64), None)
 	}
 

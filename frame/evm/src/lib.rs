@@ -1201,16 +1201,6 @@ where
 			let refund_amount = paid
 				.peek()
 				.saturating_sub(corrected_fee.unique_saturated_into());
-
-			log::debug!(
-				target: "pov",
-				"correct_and_deposit_fee: paid: {:?}, corrected_fee: {:?}, base_fee: {:?} refund_amount: {:?}",
-				paid.peek(),
-				corrected_fee,
-				base_fee,
-				refund_amount,
-			);
-
 			// refund to the account that paid the fees.
 			let refund_imbalance = F::deposit(&account_id, refund_amount, Precision::BestEffort)
 				.unwrap_or_else(|_| Debt::<AccountIdOf<T>, F>::zero());
@@ -1222,12 +1212,6 @@ where
 				.unwrap_or_else(|_| Credit::<AccountIdOf<T>, F>::zero());
 
 			let (base_fee, tip) = adjusted_paid.split(base_fee.unique_saturated_into());
-			log::debug!(
-				target: "pov",
-				"correct_and_deposit_fee: final base_fee: {:?}, tip: {:?}",
-				base_fee.peek(),
-				tip.peek()
-			);
 			// Handle base fee. Can be either burned, rationed, etc ...
 			OU::on_unbalanced(base_fee);
 			return Some(tip);
