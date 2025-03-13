@@ -332,12 +332,20 @@ where
 					if actual_proof_size > estimated_proof_size {
 						log::debug!(
 							target: "evm",
-							"Proof size underestimation detected! (estimated: {}, actual: {})",
+							"Proof size underestimation detected! (estimated: {}, actual: {}, diff: {})",
 							estimated_proof_size,
-							actual_proof_size
+							actual_proof_size,
+							actual_proof_size.saturating_sub(estimated_proof_size)
 						);
 						estimated_proof_size
 					} else {
+						log::debug!(
+							target: "evm",
+							"Proof size overestimation detected! (estimated: {}, actual: {}, diff: {})",
+							estimated_proof_size,
+							actual_proof_size,
+							actual_proof_size.saturating_sub(estimated_proof_size)
+						);
 						actual_proof_size
 					}
 				} else {
