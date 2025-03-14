@@ -187,7 +187,7 @@ where
 		R: Default,
 	{
 		// Used to record the external costs in the evm through the StackState implementation
-		let maybe_weight_info =
+		let mut maybe_weight_info =
 			WeightInfo::new_from_weight_limit(weight_limit, proof_size_base_cost).map_err(
 				|_| RunnerError {
 					error: Error::<T>::GasLimitTooLow,
@@ -231,6 +231,9 @@ where
 		let account_code_metadata_pov = get_proof_size().unwrap_or_default()
 			- account_code_metadata_pov_before.unwrap_or_default();
 
+		if let Some(ref mut weight_info) = maybe_weight_info {
+			weight_info.try_record_proof_size_or_fail(account_code_metadata_pov)?;
+		}
 		let total_fee_per_gas = if is_transactional {
 			match (max_fee_per_gas, max_priority_fee_per_gas) {
 				// Zero max_fee_per_gas for validated transactional calls exist in XCM -> EVM
@@ -306,7 +309,7 @@ where
 					.weight_info()
 					.unwrap_or_default()
 					.proof_size_usage
-					.unwrap_or_default() + account_code_metadata_pov;
+					.unwrap_or_default();
 
 				// Obtain the actual proof size usage using the ProofSizeExt host-function or fallback
 				// and use the estimated proof size
@@ -335,7 +338,7 @@ where
 							"Proof size underestimation detected! (estimated: {}, actual: {}, diff: {})",
 							estimated_proof_size,
 							actual_proof_size,
-							actual_proof_size.saturating_sub(estimated_proof_size)
+							actual_proof_size.saturating_sub(estimated_proof_size),
 						);
 						estimated_proof_size
 					} else {
@@ -344,7 +347,7 @@ where
 							"Proof size overestimation detected! (estimated: {}, actual: {}, diff: {})",
 							estimated_proof_size,
 							actual_proof_size,
-							actual_proof_size.saturating_sub(estimated_proof_size)
+							estimated_proof_size.saturating_sub(actual_proof_size),
 						);
 						actual_proof_size
 					}
