@@ -232,7 +232,12 @@ where
 			- account_code_metadata_pov_before.unwrap_or_default();
 
 		if let Some(ref mut weight_info) = maybe_weight_info {
-			weight_info.try_record_proof_size_or_fail(account_code_metadata_pov)?;
+			weight_info
+				.try_record_proof_size_or_fail(account_code_metadata_pov)
+				.map_err(|_| RunnerError {
+					error: Error::<T>::GasLimitTooLow,
+					weight,
+				})?;
 		}
 		let total_fee_per_gas = if is_transactional {
 			match (max_fee_per_gas, max_priority_fee_per_gas) {
