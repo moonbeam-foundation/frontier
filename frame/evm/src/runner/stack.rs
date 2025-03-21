@@ -214,7 +214,6 @@ where
 			}
 		};
 
-		let account_code_metadata_pov_before = get_proof_size();
 		// Only check the restrictions of EIP-3607 if the source of the EVM operation is from an external transaction.
 		// If the source of this EVM operation is from an internal call, like from `eth_call` or `eth_estimateGas` RPC,
 		// we will skip the checks for the EIP-3607.
@@ -228,12 +227,10 @@ where
 				weight,
 			});
 		}
-		let account_code_metadata_pov = get_proof_size().unwrap_or_default()
-			- account_code_metadata_pov_before.unwrap_or_default();
 
 		if let Some(ref mut weight_info) = maybe_weight_info {
 			weight_info
-				.try_record_proof_size_or_fail(account_code_metadata_pov)
+				.try_record_proof_size_or_fail(ACCOUNT_CODES_METADATA_PROOF_SIZE)
 				.map_err(|_| RunnerError {
 					error: Error::<T>::GasLimitTooLow,
 					weight,
