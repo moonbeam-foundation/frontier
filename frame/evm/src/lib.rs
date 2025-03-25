@@ -696,8 +696,9 @@ pub mod pallet {
 
 				let pov = get_proof_size().unwrap_or_default() - pov_before;
 
-				let total_weight = T::DbWeight::get().reads(1)
+				total_weight = total_weight
 					.saturating_add(Weight::from_parts(0, pov))
+					.saturating_add(T::DbWeight::get().reads(1))
 					.saturating_add(account_basic_weight)
 					.saturating_add(min_gas_weight);
 
