@@ -50,7 +50,7 @@ pub struct CheckEvmTransaction<'config, E: From<TransactionValidationError>> {
 	pub config: CheckEvmTransactionConfig<'config>,
 	pub transaction: CheckEvmTransactionInput,
 	pub weight_limit: Option<Weight>,
-	pub proof_size_base_cost: Option<u64>,
+	pub proof_size_pre_execution: Option<u64>,
 	_marker: core::marker::PhantomData<E>,
 }
 
@@ -88,13 +88,13 @@ impl<'config, E: From<TransactionValidationError>> CheckEvmTransaction<'config, 
 		config: CheckEvmTransactionConfig<'config>,
 		transaction: CheckEvmTransactionInput,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
+		proof_size_pre_execution: Option<u64>,
 	) -> Self {
 		CheckEvmTransaction {
 			config,
 			transaction,
 			weight_limit,
-			proof_size_base_cost,
+			proof_size_pre_execution,
 			_marker: Default::default(),
 		}
 	}
@@ -209,17 +209,6 @@ impl<'config, E: From<TransactionValidationError>> CheckEvmTransaction<'config, 
 
 	pub fn validate_common(&self) -> Result<&Self, E> {
 		if self.config.is_transactional {
-			// Try to subtract the proof_size_base_cost from the Weight proof_size limit or fail.
-			// Validate the weight limit can afford recording the proof size cost.
-			if let (Some(weight_limit), Some(proof_size_base_cost)) =
-				(self.weight_limit, self.proof_size_base_cost)
-			{
-				let _ = weight_limit
-					.proof_size()
-					.checked_sub(proof_size_base_cost)
-					.ok_or(TransactionValidationError::GasLimitTooLow)?;
-			}
-
 			// We must ensure a transaction can pay the cost of its data bytes.
 			// If it can't it should not be included in a block.
 			let mut gasometer = evm::gasometer::Gasometer::new(

@@ -81,6 +81,7 @@ pub enum AccessedStorage {
 	AccountStorages((H160, H256)),
 }
 
+// Retain this structure to maintain API compatibility
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Encode, Decode, Default, TypeInfo)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WeightInfo {

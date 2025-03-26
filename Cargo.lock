@@ -3000,6 +3000,7 @@ version = "0.0.0"
 dependencies = [
  "async-trait",
  "clap",
+ "cumulus-primitives-storage-weight-reclaim",
  "fc-api",
  "fc-cli",
  "fc-consensus",
@@ -3065,6 +3066,7 @@ dependencies = [
 name = "frontier-template-runtime"
 version = "0.0.0"
 dependencies = [
+ "cumulus-primitives-storage-weight-reclaim",
  "fp-account",
  "fp-evm",
  "fp-rpc",
@@ -5878,6 +5880,7 @@ dependencies = [
 name = "pallet-ethereum"
 version = "4.0.0-dev"
 dependencies = [
+ "cumulus-primitives-storage-weight-reclaim",
  "environmental",
  "ethereum",
  "ethereum-types",

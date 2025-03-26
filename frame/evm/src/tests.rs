@@ -101,7 +101,7 @@ mod proof_size_test {
 			true, // transactional
 			true, // must be validated
 			weight_limit,
-			Some(0),
+			0,
 			&<Test as Config>::config().clone(),
 		)
 	}
@@ -122,7 +122,7 @@ mod proof_size_test {
 			true, // non-transactional
 			true, // must be validated
 			weight_limit,
-			Some(0),
+			0,
 			&<Test as Config>::config().clone(),
 		)
 	}
@@ -224,7 +224,7 @@ mod proof_size_test {
 				true, // transactional
 				true, // must be validated
 				Some(weight_limit),
-				Some(0),
+				0,
 				&<Test as Config>::config().clone(),
 			)
 			.expect("call succeeds");
@@ -279,7 +279,7 @@ mod proof_size_test {
 				true, // transactional
 				true, // must be validated
 				Some(weight_limit),
-				Some(0),
+				0,
 				&<Test as Config>::config().clone(),
 			)
 			.expect("call succeeds");
@@ -333,7 +333,7 @@ mod proof_size_test {
 				true, // transactional
 				true, // must be validated
 				Some(weight_limit),
-				Some(0),
+				0,
 				&<Test as Config>::config().clone(),
 			)
 			.expect("call succeeds");
@@ -382,7 +382,7 @@ mod proof_size_test {
 				true, // transactional
 				true, // must be validated
 				Some(weight_limit),
-				Some(0),
+				0,
 				&<Test as Config>::config().clone(),
 			)
 			.expect("call succeeds");
@@ -435,7 +435,7 @@ mod proof_size_test {
 				true, // transactional
 				true, // must be validated
 				Some(weight_limit),
-				Some(0),
+				0,
 				&<Test as Config>::config().clone(),
 			)
 			.expect("call succeeds");
@@ -503,7 +503,7 @@ mod proof_size_test {
 				true, // transactional
 				true, // must be validated
 				Some(weight_limit),
-				Some(0),
+				0,
 				&<Test as Config>::config().clone(),
 			)
 			.expect("call succeeds");
@@ -561,7 +561,7 @@ mod proof_size_test {
 				true, // transactional
 				true, // must be validated
 				Some(weight_limit),
-				Some(0),
+				0,
 				&config,
 			)
 			.expect("call succeeds");
@@ -602,7 +602,7 @@ mod proof_size_test {
 				true, // transactional
 				true, // must be validated
 				Some(weight_limit),
-				Some(0),
+				0,
 				&config,
 			)
 			.expect("call succeeds");
@@ -652,7 +652,7 @@ mod storage_growth_test {
 			Some(FixedGasWeightMapping::<Test>::gas_to_weight(
 				gas_limit, true,
 			)),
-			Some(0),
+			0,
 			<Test as Config>::config(),
 		)
 	}
@@ -677,7 +677,7 @@ mod storage_growth_test {
 			true, // transactional
 			true, // must be validated
 			None,
-			Some(0),
+			0,
 			<Test as Config>::config(),
 		)
 	}
@@ -1296,7 +1296,7 @@ fn runner_non_transactional_calls_with_non_balance_accounts_is_ok_without_gas_pr
 			false, // non-transactional
 			true,  // must be validated
 			None,
-			None,
+			0,
 			&<Test as Config>::config().clone(),
 		)
 		.expect("Non transactional call succeeds");
@@ -1332,7 +1332,7 @@ fn runner_non_transactional_calls_with_non_balance_accounts_is_err_with_gas_pric
 			false, // non-transactional
 			true,  // must be validated
 			None,
-			None,
+			0,
 			&<Test as Config>::config().clone(),
 		);
 		assert!(res.is_err());
@@ -1356,7 +1356,7 @@ fn runner_transactional_call_with_zero_gas_price_fails() {
 			true, // transactional
 			true, // must be validated
 			None,
-			None,
+			0,
 			&<Test as Config>::config().clone(),
 		);
 		assert!(res.is_err());
@@ -1380,7 +1380,7 @@ fn runner_max_fee_per_gas_gte_max_priority_fee_per_gas() {
 			true, // transactional
 			true, // must be validated
 			None,
-			None,
+			0,
 			&<Test as Config>::config().clone(),
 		);
 		assert!(res.is_err());
@@ -1397,7 +1397,7 @@ fn runner_max_fee_per_gas_gte_max_priority_fee_per_gas() {
 			false, // non-transactional
 			true,  // must be validated
 			None,
-			None,
+			0,
 			&<Test as Config>::config().clone(),
 		);
 		assert!(res.is_err());
@@ -1422,7 +1422,7 @@ fn eip3607_transaction_from_contract() {
 			true,  // transactional
 			false, // not sure be validated
 			None,
-			None,
+			0,
 			&<Test as Config>::config().clone(),
 		) {
 			Err(RunnerError {
@@ -1447,7 +1447,7 @@ fn eip3607_transaction_from_contract() {
 			false, // non-transactional
 			true,  // must be validated
 			None,
-			None,
+			0,
 			&<Test as Config>::config().clone(),
 		)
 		.is_ok());
