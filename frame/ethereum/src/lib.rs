@@ -394,7 +394,7 @@ pub mod pallet {
 }
 
 impl<T: Config> Pallet<T> {
-	pub fn transaction_pov(transaction_data: &TransactionData) -> (Option<Weight>, u64){
+	pub fn transaction_pov(transaction_data: &TransactionData) -> (Option<Weight>, Option<u64>){
 		let weight_limit = <T as pallet_evm::Config>::GasWeightMapping::gas_to_weight(
 			transaction_data.gas_limit.unique_saturated_into(),
 			true,
@@ -402,9 +402,9 @@ impl<T: Config> Pallet<T> {
 		let proof_size_pre_execution = get_proof_size().unwrap_or_default();
 
 		if weight_limit.proof_size() > 0 {
-			(Some(weight_limit), proof_size_pre_execution)
+			(Some(weight_limit), Some(proof_size_pre_execution))
 		} else {
-			(None, 0)
+			(None, None)
 		}
 	}
 
@@ -544,7 +544,7 @@ impl<T: Config> Pallet<T> {
 			},
 			transaction_data.clone().into(),
 			weight_limit,
-			Some(proof_size_pre_execution),
+			proof_size_pre_execution,
 		);
 		check_transaction
 			.validate_in_pool_for(&who)
@@ -850,7 +850,7 @@ impl<T: Config> Pallet<T> {
 					is_transactional,
 					validate,
 					weight_limit,
-					proof_size_pre_execution,
+					proof_size_pre_execution.unwrap_or_default(),
 					config.as_ref().unwrap_or_else(|| T::config()),
 				) {
 					Ok(res) => res,
@@ -881,7 +881,7 @@ impl<T: Config> Pallet<T> {
 						is_transactional,
 						validate,
 						weight_limit,
-						proof_size_pre_execution,
+						proof_size_pre_execution.unwrap_or_default(),
 						config.as_ref().unwrap_or_else(|| T::config()),
 						force_address,
 					) {
@@ -909,7 +909,7 @@ impl<T: Config> Pallet<T> {
 						is_transactional,
 						validate,
 						weight_limit,
-						proof_size_pre_execution,
+						proof_size_pre_execution.unwrap_or_default(),
 						config.as_ref().unwrap_or_else(|| T::config()),
 					) {
 						Ok(res) => res,
@@ -953,7 +953,7 @@ impl<T: Config> Pallet<T> {
 			},
 			transaction_data.into(),
 			weight_limit,
-			Some(proof_size_pre_execution),
+			proof_size_pre_execution,
 		);
 		check_transaction
 			.validate_in_block_for(&who)
