@@ -118,7 +118,6 @@ pub use self::{
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use cumulus_primitives_storage_weight_reclaim::get_proof_size;
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
 
@@ -678,35 +677,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	pub type Suicided<T: Config> = StorageMap<_, Blake2_128Concat, H160, (), OptionQuery>;
-
-	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_initialize(_: BlockNumberFor<T>) -> Weight {
-			let mut total_weight = Weight::zero();
-
-			// Do dummy read to populate the pov with the intermediates nodes,
-			// only when proof size recording is enabled.
-			if let Some(pov_before) = get_proof_size() {
-				const ZERO_ACCOUNT: H160 = H160::zero();
-
-				// just a dummy read to populate the pov with the intermediates nodes
-				let _ = AccountCodesMetadata::<T>::get(ZERO_ACCOUNT.clone());
-				let (_, min_gas_weight) = T::FeeCalculator::min_gas_price();
-				let (_, account_basic_weight) = Pallet::<T>::account_basic(&ZERO_ACCOUNT);
-
-				let pov = get_proof_size().unwrap_or_default() - pov_before;
-
-				total_weight = total_weight
-					.saturating_add(Weight::from_parts(0, pov))
-					.saturating_add(T::DbWeight::get().reads(1))
-					.saturating_add(account_basic_weight)
-					.saturating_add(min_gas_weight);
-
-			}
-
-			total_weight
-		}
-	}
 }
 
 /// Utility alias for easy access to the [`AccountProvider::AccountId`] type from a given config.
