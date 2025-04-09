@@ -84,6 +84,10 @@ impl TransactionData {
 	pub fn proof_size_base_cost(&self) -> u64 {
 		self.encode()
 			.len()
+			// The real struct [EIP1559Transaction] doesn't have
+			// Option wrapper for gas_price, max_fee_per_gas and max_priority_fee_per_gas
+			// so we need to remove the size of the Option wrapper
+			.saturating_sub(3)
 			// signature
 			.saturating_add(65)
 			// pallet index
