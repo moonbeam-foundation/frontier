@@ -187,7 +187,7 @@ where
 		R: Default,
 	{
 		// Used to record the external costs in the evm through the StackState implementation
-		let maybe_weight_info =
+		let mut maybe_weight_info =
 			WeightInfo::new_from_weight_limit(weight_limit, proof_size_base_cost).map_err(
 				|_| RunnerError {
 					error: Error::<T>::GasLimitTooLow,
@@ -220,17 +220,22 @@ where
 		//
 		// EIP-3607: https://eips.ethereum.org/EIPS/eip-3607
 		// Do not allow transactions for which `tx.sender` has any code deployed.
-		if is_transactional
-			&& <AccountCodesMetadata<T>>::get(source)
-				.unwrap_or_default()
-				.size != 0
-		{
+		let account_code_metadata = <AccountCodesMetadata<T>>::get(source);
+		if is_transactional && account_code_metadata.unwrap_or_default().size != 0 {
 			return Err(RunnerError {
 				error: Error::<T>::TransactionMustComeFromEOA,
 				weight,
 			});
 		}
 
+		if let Some(ref mut weight_info) = maybe_weight_info {
+			weight_info
+				.try_record_proof_size_or_fail(ACCOUNT_CODES_METADATA_PROOF_SIZE)
+				.map_err(|_| RunnerError {
+					error: Error::<T>::GasLimitTooLow,
+					weight,
+				})?;
+		}
 		let total_fee_per_gas = if is_transactional {
 			match (max_fee_per_gas, max_priority_fee_per_gas) {
 				// Zero max_fee_per_gas for validated transactional calls exist in XCM -> EVM
@@ -332,12 +337,20 @@ where
 					if actual_proof_size > estimated_proof_size {
 						log::debug!(
 							target: "evm",
-							"Proof size underestimation detected! (estimated: {}, actual: {})",
+							"Proof size underestimation detected! (estimated: {}, actual: {}, diff: {})",
 							estimated_proof_size,
-							actual_proof_size
+							actual_proof_size,
+							actual_proof_size.saturating_sub(estimated_proof_size),
 						);
 						estimated_proof_size
 					} else {
+						log::debug!(
+							target: "evm",
+							"Proof size overestimation detected! (estimated: {}, actual: {}, diff: {})",
+							estimated_proof_size,
+							actual_proof_size,
+							estimated_proof_size.saturating_sub(actual_proof_size),
+						);
 						actual_proof_size
 					}
 				} else {
