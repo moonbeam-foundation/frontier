@@ -510,7 +510,8 @@ where
 				.map(|s| s.unique_saturated_into())
 				.unwrap_or(best_number);
 
-			if current_number - from_number > self.max_block_range.into() {
+			let block_range = current_number.saturating_sub(from_number);
+			if block_range > self.max_block_range.into() {
 				return Err(internal_err(format!(
 					"block range is too wide (maximum {})",
 					self.max_block_range
