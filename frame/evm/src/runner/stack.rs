@@ -232,6 +232,7 @@ where
 					weight,
 				})?;
 		}
+
 		let total_fee_per_gas = if is_transactional {
 			match (max_fee_per_gas, max_priority_fee_per_gas) {
 				// Zero max_fee_per_gas for validated transactional calls exist in XCM -> EVM
