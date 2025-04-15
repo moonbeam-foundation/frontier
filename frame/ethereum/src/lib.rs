@@ -399,10 +399,9 @@ impl<T: Config> Pallet<T> {
 			transaction_data.gas_limit.unique_saturated_into(),
 			true,
 		);
-		let proof_size_pre_execution = get_proof_size().unwrap_or_default();
 
 		if weight_limit.proof_size() > 0 {
-			(Some(weight_limit), Some(proof_size_pre_execution))
+			(Some(weight_limit), get_proof_size())
 		} else {
 			(None, None)
 		}
