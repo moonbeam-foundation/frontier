@@ -817,7 +817,7 @@ impl_runtime_apis! {
 				gas_limit.low_u64()
 			};
 			let weight_limit = <Runtime as pallet_evm::Config>::GasWeightMapping::gas_to_weight(gas_limit, true);
-			let proof_size_pre_execution = cumulus_primitives_storage_weight_reclaim::get_proof_size().unwrap_or_default();
+			let proof_size_pre_execution = cumulus_primitives_storage_weight_reclaim::get_proof_size();
 
 			<Runtime as pallet_evm::Config>::Runner::call(
 				from,
@@ -865,7 +865,7 @@ impl_runtime_apis! {
 			};
 
 			let weight_limit = <Runtime as pallet_evm::Config>::GasWeightMapping::gas_to_weight(gas_limit, true);
-			let proof_size_pre_execution = cumulus_primitives_storage_weight_reclaim::get_proof_size().unwrap_or_default();
+			let proof_size_pre_execution = cumulus_primitives_storage_weight_reclaim::get_proof_size();
 
 			<Runtime as pallet_evm::Config>::Runner::create(
 				from,

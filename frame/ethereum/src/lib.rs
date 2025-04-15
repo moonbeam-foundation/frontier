@@ -849,7 +849,7 @@ impl<T: Config> Pallet<T> {
 					is_transactional,
 					validate,
 					weight_limit,
-					proof_size_pre_execution.unwrap_or_default(),
+					proof_size_pre_execution,
 					config.as_ref().unwrap_or_else(|| T::config()),
 				) {
 					Ok(res) => res,
@@ -880,7 +880,7 @@ impl<T: Config> Pallet<T> {
 						is_transactional,
 						validate,
 						weight_limit,
-						proof_size_pre_execution.unwrap_or_default(),
+						proof_size_pre_execution,
 						config.as_ref().unwrap_or_else(|| T::config()),
 						force_address,
 					) {
@@ -908,7 +908,7 @@ impl<T: Config> Pallet<T> {
 						is_transactional,
 						validate,
 						weight_limit,
-						proof_size_pre_execution.unwrap_or_default(),
+						proof_size_pre_execution,
 						config.as_ref().unwrap_or_else(|| T::config()),
 					) {
 						Ok(res) => res,

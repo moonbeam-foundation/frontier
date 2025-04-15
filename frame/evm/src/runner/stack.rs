@@ -80,7 +80,7 @@ where
 		precompiles: &'precompiles T::PrecompilesType,
 		is_transactional: bool,
 		weight_limit: Option<Weight>,
-		proof_size_pre_execution: u64,
+		proof_size_pre_execution: Option<u64>,
 		f: F,
 	) -> Result<ExecutionInfoV2<R>, RunnerError<Error<T>>>
 	where
@@ -169,7 +169,7 @@ where
 		base_fee: U256,
 		weight: Weight,
 		weight_limit: Option<Weight>,
-		proof_size_pre_execution: u64,
+		proof_size_pre_execution: Option<u64>,
 	) -> Result<ExecutionInfoV2<R>, RunnerError<Error<T>>>
 	where
 		F: FnOnce(
@@ -184,12 +184,7 @@ where
 	{
 		// Used to record the external costs in the evm through the StackState implementation
 		let mut maybe_weight_info =
-			WeightInfo::new_from_weight_limit(weight_limit, Some(proof_size_pre_execution)).map_err(
-				|_| RunnerError {
-					error: Error::<T>::GasLimitTooLow,
-					weight,
-				},
-			)?;
+			WeightInfo::new_from_weight_limit(weight_limit);
 		// The precompile check is only used for transactional invocations. However, here we always
 		// execute the check, because the check has side effects.
 		match precompiles.is_precompile(source, gas_limit) {
@@ -477,7 +472,7 @@ where
 		access_list: Vec<(H160, Vec<H256>)>,
 		is_transactional: bool,
 		weight_limit: Option<Weight>,
-		proof_size_pre_execution: u64,
+		proof_size_pre_execution: Option<u64>,
 		evm_config: &evm::Config,
 	) -> Result<(), RunnerError<Self::Error>> {
 		let (base_fee, mut weight) = T::FeeCalculator::min_gas_price();
@@ -505,7 +500,7 @@ where
 				access_list,
 			},
 			weight_limit,
-			Some(proof_size_pre_execution),
+			proof_size_pre_execution,
 		)
 		.validate_in_block_for(&source_account)
 		.and_then(|v| v.with_base_fee())
@@ -527,7 +522,7 @@ where
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
-		proof_size_pre_execution: u64,
+		proof_size_pre_execution: Option<u64>,
 		config: &evm::Config,
 	) -> Result<CallInfo, RunnerError<Self::Error>> {
 		if validate {
@@ -575,7 +570,7 @@ where
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
-		proof_size_pre_execution: u64,
+		proof_size_pre_execution: Option<u64>,
 		config: &evm::Config,
 	) -> Result<CreateInfo, RunnerError<Self::Error>> {
 		if validate {
@@ -630,7 +625,7 @@ where
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
-		proof_size_pre_execution: u64,
+		proof_size_pre_execution: Option<u64>,
 		config: &evm::Config,
 	) -> Result<CreateInfo, RunnerError<Self::Error>> {
 		if validate {
@@ -689,7 +684,7 @@ where
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
-		proof_size_pre_execution: u64,
+		proof_size_pre_execution: Option<u64>,
 		config: &evm::Config,
 		contract_address: H160,
 	) -> Result<CreateInfo, RunnerError<Self::Error>> {
@@ -1412,7 +1407,7 @@ mod tests {
 			&MockPrecompileSet,
 			false,
 			None,
-			0,
+			None,
 			|_| {
 				let res = Runner::<Test>::execute(
 					H160::default(),
@@ -1424,7 +1419,7 @@ mod tests {
 					&MockPrecompileSet,
 					false,
 					None,
-					0,
+					None,
 					|_| (ExitReason::Succeed(ExitSucceed::Stopped), ()),
 				);
 				assert_matches!(
@@ -1456,7 +1451,7 @@ mod tests {
 			&MockPrecompileSet,
 			false,
 			None,
-			0,
+			None,
 			|_| (ExitReason::Succeed(ExitSucceed::Stopped), ()),
 		);
 		assert!(res.is_ok());
