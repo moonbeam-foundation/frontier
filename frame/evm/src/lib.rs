@@ -684,7 +684,7 @@ pub mod pallet {
 		fn on_initialize(_: BlockNumberFor<T>) -> Weight {
 			let mut total_weight = Weight::zero();
 
-			// Do dummy read to populate the pov with the intermediates nodes,
+			// Populate the pov with the intermediates nodes,
 			// only when proof size recording is enabled.
 			if let Some(pov_before) = get_proof_size() {
 				const ZERO_ACCOUNT: H160 = H160::zero();
