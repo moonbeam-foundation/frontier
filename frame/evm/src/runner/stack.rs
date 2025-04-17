@@ -323,7 +323,7 @@ where
 					//
 					// TODO: The estimated proof_size should always be an overestimate
 					if actual_proof_size > estimated_proof_size {
-						log::debug!(
+						log::warn!(
 							target: "evm",
 							"Proof size underestimation detected! (estimated: {}, actual: {}, diff: {})",
 							estimated_proof_size,
