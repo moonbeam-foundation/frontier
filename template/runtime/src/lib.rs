@@ -337,6 +337,7 @@ impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorTruncated<F> {
 	}
 }
 
+/// WARNING! THIS IS JUST AN EXAMPLE AND SHOULD NOT BE USED AS A MEANS TO RETRIEVE SECURE RANDOMNESS
 pub struct RandomnessProvider;
 impl
 	frame_support::traits::Randomness<
