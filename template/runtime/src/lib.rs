@@ -20,7 +20,7 @@ use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_consensus_grandpa::{AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList};
 use sp_core::{
 	crypto::{ByteArray, KeyTypeId},
-	ConstU128, OpaqueMetadata, H160, H256, U256,
+	ConstU128, Hasher, OpaqueMetadata, H160, H256, U256,
 };
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
@@ -50,6 +50,7 @@ use sp_genesis_builder::PresetId;
 use fp_account::EthereumSignature;
 use fp_evm::weight_per_gas;
 use fp_rpc::TransactionStatus;
+use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_ethereum::{Call::transact, PostLogContent, Transaction as EthereumTransaction};
 use pallet_evm::{
 	Account as EVMAccount, EnsureAccountId20, FeeCalculator, IdentityAddressMapping, Runner,
@@ -336,6 +337,25 @@ impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorTruncated<F> {
 	}
 }
 
+pub struct RandomnessProvider;
+impl
+	frame_support::traits::Randomness<
+		<Runtime as frame_system::Config>::Hash,
+		BlockNumberFor<Runtime>,
+	> for RandomnessProvider
+{
+	fn random(
+		subject: &[u8],
+	) -> (
+		<Runtime as frame_system::Config>::Hash,
+		BlockNumberFor<Runtime>,
+	) {
+		let output = <Runtime as frame_system::Config>::Hashing::hash(subject);
+		let block_number = frame_system::Pallet::<Runtime>::block_number();
+		(output, block_number)
+	}
+}
+
 const BLOCK_GAS_LIMIT: u64 = 75_000_000;
 const MAX_POV_SIZE: u64 = 5 * 1024 * 1024;
 /// The maximum storage growth per block in bytes.
@@ -374,6 +394,7 @@ impl pallet_evm::Config for Runtime {
 	type GasLimitStorageGrowthRatio = GasLimitStorageGrowthRatio;
 	type Timestamp = Timestamp;
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Self>;
+	type RandomnessProvider = RandomnessProvider;
 }
 
 parameter_types! {

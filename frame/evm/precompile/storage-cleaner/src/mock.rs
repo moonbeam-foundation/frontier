@@ -19,9 +19,10 @@
 
 use crate::{StorageCleanerPrecompile, StorageCleanerPrecompileCall};
 use frame_support::{parameter_types, weights::Weight};
+use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_evm::{EnsureAddressNever, EnsureAddressRoot, IdentityAddressMapping};
 use precompile_utils::{precompile_set::*, testing::*};
-use sp_core::{ConstU32, H256, U256};
+use sp_core::{ConstU32, Hasher, H256, U256};
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
 	BuildStorage,
@@ -125,6 +126,25 @@ parameter_types! {
 	pub SuicideQuickClearLimit: u32 = 0;
 }
 
+pub struct RandomnessProvider;
+impl
+	frame_support::traits::Randomness<
+		<Runtime as frame_system::Config>::Hash,
+		BlockNumberFor<Runtime>,
+	> for RandomnessProvider
+{
+	fn random(
+		subject: &[u8],
+	) -> (
+		<Runtime as frame_system::Config>::Hash,
+		BlockNumberFor<Runtime>,
+	) {
+		let output = <Runtime as frame_system::Config>::Hashing::hash(subject);
+		let block_number = frame_system::Pallet::<Runtime>::block_number();
+		(output, block_number)
+	}
+}
+
 impl pallet_evm::Config for Runtime {
 	type AccountProvider = pallet_evm::FrameSystemAccountProvider<Self>;
 	type FeeCalculator = ();
@@ -149,6 +169,7 @@ impl pallet_evm::Config for Runtime {
 	type Timestamp = Timestamp;
 	type WeightInfo = ();
 	type SuicideQuickClearLimit = SuicideQuickClearLimit;
+	type RandomnessProvider = RandomnessProvider;
 }
 
 /// Build test externalities, prepopulated with data for testing the precompile.

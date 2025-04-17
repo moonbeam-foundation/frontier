@@ -18,7 +18,8 @@
 //! Test mock for unit tests and benchmarking
 
 use frame_support::{derive_impl, parameter_types, weights::Weight};
-use sp_core::{H160, U256};
+use frame_system::pallet_prelude::BlockNumberFor;
+use sp_core::{Hasher, H160, U256};
 
 use crate::{
 	FeeCalculator, IsPrecompileResult, Precompile, PrecompileHandle, PrecompileResult,
@@ -75,6 +76,18 @@ impl crate::Config for Test {
 	type Runner = crate::runner::stack::Runner<Self>;
 	type GasLimitStorageGrowthRatio = GasLimitStorageGrowthRatio;
 	type Timestamp = Timestamp;
+	type RandomnessProvider = RandomnessProvider;
+}
+
+pub struct RandomnessProvider;
+impl frame_support::traits::Randomness<<Test as frame_system::Config>::Hash, BlockNumberFor<Test>>
+	for RandomnessProvider
+{
+	fn random(subject: &[u8]) -> (<Test as frame_system::Config>::Hash, BlockNumberFor<Test>) {
+		let output = <Test as frame_system::Config>::Hashing::hash(subject);
+		let block_number = frame_system::Pallet::<Test>::block_number();
+		(output, block_number)
+	}
 }
 
 pub struct FixedGasPrice;

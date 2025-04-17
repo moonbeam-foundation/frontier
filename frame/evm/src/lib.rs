@@ -208,6 +208,12 @@ pub mod pallet {
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 
+		#[pallet::no_default]
+		type RandomnessProvider: frame_support::traits::Randomness<
+			sp_core::H256,
+			BlockNumberFor<Self>,
+		>;
+
 		/// EVM config used in the module.
 		fn config() -> &'static EvmConfig {
 			&CANCUN_CONFIG
@@ -701,7 +707,6 @@ pub mod pallet {
 					.saturating_add(T::DbWeight::get().reads(1))
 					.saturating_add(account_basic_weight)
 					.saturating_add(min_gas_weight);
-
 			}
 
 			total_weight
