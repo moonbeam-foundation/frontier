@@ -963,7 +963,13 @@ where
 	}
 
 	fn block_randomness(&self) -> Option<H256> {
-		None
+		use frame_support::traits::Randomness;
+		use scale_codec::Encode;
+
+		let current_block = frame_system::Pallet::<T>::block_number();
+		let output = T::RandomnessProvider::random(&current_block.encode()).0;
+
+		Some(output)
 	}
 
 	fn block_gas_limit(&self) -> U256 {

@@ -27,7 +27,7 @@ use std::{cell::RefCell, rc::Rc};
 use frame_support::{
 	construct_runtime, derive_impl, parameter_types, traits::Everything, weights::Weight,
 };
-use sp_core::{H160, H256, U256};
+use sp_core::{Hasher, H160, H256, U256};
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
 	BuildStorage, Perbill,
@@ -253,6 +253,26 @@ impl pallet_evm::Config for Runtime {
 	type GasLimitStorageGrowthRatio = ();
 	type Timestamp = Timestamp;
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
+	type RandomnessProvider = RandomnessProvider;
+}
+
+pub struct RandomnessProvider;
+impl
+	frame_support::traits::Randomness<
+		<Runtime as frame_system::Config>::Hash,
+		frame_system::pallet_prelude::BlockNumberFor<Runtime>,
+	> for RandomnessProvider
+{
+	fn random(
+		subject: &[u8],
+	) -> (
+		<Runtime as frame_system::Config>::Hash,
+		frame_system::pallet_prelude::BlockNumberFor<Runtime>,
+	) {
+		let output = <Runtime as frame_system::Config>::Hashing::hash(subject);
+		let block_number = frame_system::Pallet::<Runtime>::block_number();
+		(output, block_number)
+	}
 }
 
 parameter_types! {

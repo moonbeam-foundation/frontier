@@ -75,6 +75,8 @@ pub const WRITE_PROOF_SIZE: u64 = 32;
 pub const IS_EMPTY_CHECK_PROOF_SIZE: u64 = 93;
 /// `AccountCodes` key size. 16 (hash) + 20 (key)
 pub const ACCOUNT_CODES_KEY_SIZE: u64 = 36;
+/// System block number.
+pub const SYSTEM_BLOCK_NUMBER_PROOF_SIZE: u64 = 32;
 
 pub enum AccessedStorage {
 	AccountCodes(H160),
