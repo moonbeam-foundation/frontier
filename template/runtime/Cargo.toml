@@ -113,7 +113,7 @@ std = [
 	"pallet-evm-precompile-modexp/std",
 	"pallet-evm-precompile-sha3fips/std",
 	"pallet-evm-precompile-simple/std",
-	"cumulus-primitives-storage-weight-reclaim/std"
+	"cumulus-primitives-storage-weight-reclaim/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",

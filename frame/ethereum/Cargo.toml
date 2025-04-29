@@ -67,7 +67,7 @@ std = [
 	"fp-rpc/std",
 	"fp-storage/std",
 	"pallet-evm/std",
-	"cumulus-primitives-storage-weight-reclaim/std"
+	"cumulus-primitives-storage-weight-reclaim/std",
 ]
 runtime-benchmarks = [
 	"frame-support/runtime-benchmarks",
