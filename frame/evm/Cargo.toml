@@ -42,6 +42,8 @@ hex = { workspace = true }
 pallet-balances = { workspace = true, features = ["default", "insecure_zero_ed"] }
 pallet-evm-precompile-simple = { workspace = true, features = ["default"] }
 pallet-timestamp = { workspace = true, features = ["default"] }
+sp-trie = { workspace = true }
+regex = { version = "1.11.1"}
 
 [features]
 default = ["std"]

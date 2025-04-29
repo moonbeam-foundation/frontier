@@ -17,11 +17,18 @@
 use super::*;
 use crate::mock::*;
 
+use crate::tests::proof_size_test::PROOF_SIZE_TEST_CALLEE_CONTRACT_BYTECODE;
+use cumulus_primitives_storage_weight_reclaim::get_proof_size;
 use frame_support::{
 	assert_ok,
 	traits::{LockIdentifier, LockableCurrency, WithdrawReasons},
 };
+use frame_system::mocking::MockBlock;
+use log::{Level, LevelFilter, Metadata, Record};
+use regex::Regex;
+use sp_runtime::traits::HashingFor;
 use sp_runtime::BuildStorage;
+use std::cell::RefCell;
 use std::{collections::BTreeMap, str::FromStr};
 
 mod proof_size_test {
@@ -857,6 +864,22 @@ type Balances = pallet_balances::Pallet<Test>;
 #[allow(clippy::upper_case_acronyms)]
 type EVM = Pallet<Test>;
 
+#[derive(Clone)]
+struct MockRecorder(Arc<Mutex<usize>>);
+
+impl Default for MockRecorder {
+	fn default() -> Self {
+		MockRecorder(Arc::new(Mutex::new(0)))
+	}
+}
+
+impl ProofSizeProvider for MockRecorder {
+	fn estimate_encoded_size(&self) -> usize {
+		let mut counter = self.0.lock().unwrap();
+		*counter += 1;
+		*counter
+	}
+}
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	let mut t = frame_system::GenesisConfig::<Test>::default()
 		.build_storage()
@@ -913,7 +936,13 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 	.assimilate_storage(&mut t)
 	.unwrap();
 
-	t.into()
+	let mut ext = sp_io::TestExternalities::new(t);
+
+	let recorder: MockRecorder = Default::default();
+	let recorder_ext = sp_trie::proof_size_extension::ProofSizeExt::new(recorder.clone());
+	ext.extensions.register(recorder_ext);
+
+	ext
 }
 
 #[test]
@@ -1488,5 +1517,105 @@ fn metadata_empty_dont_code_gets_cached() {
 		);
 
 		assert!(<AccountCodesMetadata<Test>>::get(address).is_none());
+	});
+}
+
+thread_local! {
+	static OVERESTIMATION: RefCell<Option<bool>> = RefCell::new(None);
+	static ACTUAL_VALUE: RefCell<Option<u32>> = RefCell::new(None);
+}
+
+struct PovDetectorLogger;
+impl log::Log for PovDetectorLogger {
+	fn enabled(&self, metadata: &Metadata) -> bool {
+		true
+	}
+
+	fn log(&self, record: &Record) {
+		use std::borrow::BorrowMut;
+		let re = Regex::new(
+			r"Proof size (over|under)estimation detected! \(estimated: \d+, actual: (\d+), diff: \d+\)",
+		)
+		.expect("Failed to create regex");
+		let log = &format!("{}", record.args()).to_owned();
+		if let Some(caps) = re.captures(log) {
+			println!("{}", log);
+			match &caps[1] {
+				"over" => OVERESTIMATION.with(|o| o.borrow_mut().replace(true)),
+				"under" => OVERESTIMATION.with(|o| o.borrow_mut().replace(false)),
+				_ => return,
+			};
+			let actual_value = caps[2]
+				.parse::<u32>()
+				.expect("Failed to parse actual value");
+			ACTUAL_VALUE.with(|v| v.borrow_mut().replace(actual_value));
+		}
+	}
+
+	fn flush(&self) {}
+}
+
+static POV_DETECTOR_LOGGER: PovDetectorLogger = PovDetectorLogger;
+use sp_trie::ProofSizeProvider;
+use std::borrow::Borrow;
+use std::sync::{Arc, Mutex};
+
+#[test]
+fn test_actual_proof_size_does_not_depend_on_how_many_tx_in_block() {
+	use std::borrow::BorrowMut;
+	println!("Test actual proof size does not depend on how many tx in block");
+
+	log::set_logger(&POV_DETECTOR_LOGGER)
+		.map(|()| log::set_max_level(LevelFilter::Debug))
+		.expect("Failed to set logger");
+
+	new_test_ext().execute_with(|| {
+		let gas_limit: u64 = 1_000_000;
+		let weight_limit = FixedGasWeightMapping::<Test>::gas_to_weight(gas_limit, true);
+
+		<Test as Config>::Runner::create(
+			H160::default(),
+			hex::decode(PROOF_SIZE_TEST_CALLEE_CONTRACT_BYTECODE.trim_end()).unwrap(),
+			U256::zero(),
+			gas_limit,
+			Some(FixedGasPrice::min_gas_price().0),
+			None,
+			None,
+			Vec::new(),
+			true, // transactional
+			true, // must be validated
+			Some(weight_limit),
+			get_proof_size(),
+			&<Test as Config>::config().clone(),
+		)
+		.expect("create should succeed");
+
+		let actual_value = ACTUAL_VALUE.with(|v| v.borrow().clone());
+		assert_eq!(actual_value, Some(1));
+
+		// reset ACTUAL_VALUE
+		ACTUAL_VALUE.with(|v| v.borrow_mut().take());
+		let actual_value = ACTUAL_VALUE.with(|v| v.borrow().clone());
+		assert_eq!(actual_value, None);
+
+		<Test as Config>::Runner::create(
+			H160::default(),
+			hex::decode(PROOF_SIZE_TEST_CALLEE_CONTRACT_BYTECODE.trim_end()).unwrap(),
+			U256::zero(),
+			gas_limit,
+			Some(FixedGasPrice::min_gas_price().0),
+			None,
+			None,
+			Vec::new(),
+			true, // transactional
+			true, // must be validated
+			Some(weight_limit),
+			get_proof_size(),
+			&<Test as Config>::config().clone(),
+		)
+		.expect("create should succeed");
+
+		let actual_value = ACTUAL_VALUE.with(|v| v.borrow().clone());
+		assert_eq!(actual_value, Some(1));
 	});
 }
