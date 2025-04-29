@@ -4,11 +4,11 @@ on:
   push:
     branches:
       - master
-      - 'moonbeam-*'
+      - 'moonbeam-**'
   pull_request:
     branches:
       - master
-      - 'moonbeam-*'
+      - 'moonbeam-**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
