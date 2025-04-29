@@ -4,11 +4,11 @@ on:
   push:
     branches:
       - master
-      - 'polkadot-v**'
+      - 'moonbeam-**'
   pull_request:
     branches:
       - master
-      - 'polkadot-v**'
+      - 'moonbeam-**'
 
 jobs:
   check:
