@@ -35,10 +35,6 @@ use impl_trait_for_tuples::impl_for_tuples;
 use pallet_evm::AddressMapping;
 use sp_core::{H160, H256};
 
-// This is the simplest bytecode to revert without returning any data.
-// (PUSH1 0x00 PUSH1 0x00 REVERT)
-pub const REVERT_BYTECODE: [u8; 5] = [0x60, 0x00, 0x60, 0x00, 0xfd];
-
 /// Trait representing checks that can be made on a precompile call.
 /// Types implementing this trait are made to be chained in a tuple.
 ///
