@@ -320,15 +320,15 @@ pub fn get_address_type<R: pallet_evm::Config>(
 	handle: &mut impl PrecompileHandle,
 	address: H160,
 ) -> Result<AddressType, ExitError> {
-	// Check if address is a precompile
-	if let Ok(true) = is_precompile_or_fail::<R>(address, handle.remaining_gas()) {
-		return Ok(AddressType::Precompile);
-	}
-
 	// It is an Externally Owned Account (EOA)
 	// - When the transaction origin is equal to the address
 	if handle.origin() == address {
 		return Ok(AddressType::EOA);
+	}
+
+	// Check if address is a precompile
+	if let Ok(true) = is_precompile_or_fail::<R>(address, handle.remaining_gas()) {
+		return Ok(AddressType::Precompile);
 	}
 
 	Ok(AddressType::Contract)
