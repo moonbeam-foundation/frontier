@@ -690,7 +690,7 @@ pub mod pallet {
 				const ZERO_ACCOUNT: H160 = H160::zero();
 
 				// just a dummy read to populate the pov with the intermediates nodes
-				let _ = AccountCodesMetadata::<T>::get(ZERO_ACCOUNT.clone());
+				let _ = AccountCodesMetadata::<T>::get(ZERO_ACCOUNT);
 				let (_, min_gas_weight) = T::FeeCalculator::min_gas_price();
 				let (_, account_basic_weight) = Pallet::<T>::account_basic(&ZERO_ACCOUNT);
 
@@ -969,7 +969,7 @@ impl<T: Config> Pallet<T> {
 
 		<AccountCodes<T>>::remove(address);
 		<AccountCodesMetadata<T>>::remove(address);
-		let _ = <AccountStorages<T>>::clear_prefix(address, u32::max_value(), None);
+		let _ = <AccountStorages<T>>::clear_prefix(address, u32::MAX, None);
 	}
 
 	/// Create an account.

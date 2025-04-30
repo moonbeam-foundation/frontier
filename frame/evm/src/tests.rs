@@ -23,10 +23,8 @@ use frame_support::{
 	assert_ok,
 	traits::{LockIdentifier, LockableCurrency, WithdrawReasons},
 };
-use frame_system::mocking::MockBlock;
-use log::{Level, LevelFilter, Metadata, Record};
+use log::{LevelFilter, Metadata, Record};
 use regex::Regex;
-use sp_runtime::traits::HashingFor;
 use sp_runtime::BuildStorage;
 use std::cell::RefCell;
 use std::{collections::BTreeMap, str::FromStr};
@@ -1521,18 +1519,17 @@ fn metadata_empty_dont_code_gets_cached() {
 }
 
 thread_local! {
-	static OVERESTIMATION: RefCell<Option<bool>> = RefCell::new(None);
-	static ACTUAL_VALUE: RefCell<Option<u32>> = RefCell::new(None);
+	static OVERESTIMATION: RefCell<Option<bool>> = const { RefCell::new(None) };
+	static ACTUAL_VALUE: RefCell<Option<u32>> = const { RefCell::new(None) };
 }
 
 struct PovDetectorLogger;
 impl log::Log for PovDetectorLogger {
-	fn enabled(&self, metadata: &Metadata) -> bool {
+	fn enabled(&self, _metadata: &Metadata) -> bool {
 		true
 	}
 
 	fn log(&self, record: &Record) {
-		use std::borrow::BorrowMut;
 		let re = Regex::new(
 			r"Proof size (over|under)estimation detected! \(estimated: \d+, actual: (\d+), diff: \d+\)",
 		)
@@ -1557,12 +1554,10 @@ impl log::Log for PovDetectorLogger {
 
 static POV_DETECTOR_LOGGER: PovDetectorLogger = PovDetectorLogger;
 use sp_trie::ProofSizeProvider;
-use std::borrow::Borrow;
 use std::sync::{Arc, Mutex};
 
 #[test]
 fn test_actual_proof_size_does_not_depend_on_how_many_tx_in_block() {
-	use std::borrow::BorrowMut;
 	println!("Test actual proof size does not depend on how many tx in block");
 
 	log::set_logger(&POV_DETECTOR_LOGGER)
@@ -1590,12 +1585,12 @@ fn test_actual_proof_size_does_not_depend_on_how_many_tx_in_block() {
 		)
 		.expect("create should succeed");
 
-		let actual_value = ACTUAL_VALUE.with(|v| v.borrow().clone());
+		let actual_value = ACTUAL_VALUE.with(|v| *v.borrow());
 		assert_eq!(actual_value, Some(1));
 
 		// reset ACTUAL_VALUE
 		ACTUAL_VALUE.with(|v| v.borrow_mut().take());
-		let actual_value = ACTUAL_VALUE.with(|v| v.borrow().clone());
+		let actual_value = ACTUAL_VALUE.with(|v| *v.borrow());
 		assert_eq!(actual_value, None);
 
 		<Test as Config>::Runner::create(
@@ -1615,7 +1610,7 @@ fn test_actual_proof_size_does_not_depend_on_how_many_tx_in_block() {
 		)
 		.expect("create should succeed");
 
-		let actual_value = ACTUAL_VALUE.with(|v| v.borrow().clone());
+		let actual_value = ACTUAL_VALUE.with(|v| *v.borrow());
 		assert_eq!(actual_value, Some(1));
 	});
 }

@@ -93,15 +93,12 @@ pub struct WeightInfo {
 
 impl WeightInfo {
 	pub fn new_from_weight_limit(weight_limit: Option<Weight>) -> Option<Self> {
-		match weight_limit {
-			None => None,
-			Some(weight_limit) => Some(WeightInfo {
-				ref_time_limit: Some(weight_limit.ref_time()),
-				proof_size_limit: Some(weight_limit.proof_size()),
-				ref_time_usage: Some(0u64),
-				proof_size_usage: Some(0u64),
-			}),
-		}
+		weight_limit.map(|weight_limit| WeightInfo {
+			ref_time_limit: Some(weight_limit.ref_time()),
+			proof_size_limit: Some(weight_limit.proof_size()),
+			ref_time_usage: Some(0u64),
+			proof_size_usage: Some(0u64),
+		})
 	}
 
 	fn try_consume(&self, cost: u64, limit: u64, usage: u64) -> Result<u64, ExitError> {
@@ -161,11 +158,9 @@ impl WeightInfo {
 		}
 	}
 	pub fn remaining_proof_size(&self) -> Option<u64> {
-		if let Some(proof_size_limit) = self.proof_size_limit {
-			Some(proof_size_limit.saturating_sub(self.proof_size_usage.unwrap_or_default()))
-		} else {
-			None
-		}
+		self.proof_size_limit.map(|proof_size_limit| {
+			proof_size_limit.saturating_sub(self.proof_size_usage.unwrap_or_default())
+		})
 	}
 
 	pub fn remaining_ref_time(&self) -> Option<u64> {

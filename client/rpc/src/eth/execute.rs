@@ -47,9 +47,6 @@ use crate::{
 	frontier_backend_client, internal_err,
 };
 
-/// Default JSONRPC error code return by geth
-pub const JSON_RPC_ERROR_DEFAULT: i32 = -32000;
-
 /// The types contained in this module are required for backwards compatility when decoding
 /// results produced by old versions of substrate.
 /// The changes contained in https://github.com/paritytech/substrate/pull/10776 changed the
