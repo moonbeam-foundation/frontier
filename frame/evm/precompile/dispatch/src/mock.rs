@@ -217,6 +217,10 @@ impl PrecompileHandle for MockHandle {
 		&self.context
 	}
 
+	fn origin(&self) -> H160 {
+		unimplemented!()
+	}
+
 	fn is_static(&self) -> bool {
 		unimplemented!()
 	}

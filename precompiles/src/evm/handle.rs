@@ -177,6 +177,10 @@ mod tests {
 			unimplemented!()
 		}
 
+		fn origin(&self) -> sp_core::H160 {
+			unimplemented!()
+		}
+
 		fn is_static(&self) -> bool {
 			true
 		}

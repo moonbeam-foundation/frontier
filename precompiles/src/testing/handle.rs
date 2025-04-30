@@ -77,6 +77,7 @@ pub type SubcallHandle = Box<dyn SubcallTrait>;
 
 /// Mock handle to write tests for precompiles.
 pub struct MockHandle {
+	pub origin: H160,
 	pub gas_limit: u64,
 	pub gas_used: u64,
 	pub logs: Vec<PrettyLog>,
@@ -90,6 +91,7 @@ pub struct MockHandle {
 impl MockHandle {
 	pub fn new(code_address: H160, context: Context) -> Self {
 		Self {
+			origin: context.caller,
 			gas_limit: u64::MAX,
 			gas_used: 0,
 			logs: vec![],
@@ -191,6 +193,10 @@ impl PrecompileHandle for MockHandle {
 	/// Retreive the context in which the precompile is executed.
 	fn context(&self) -> &Context {
 		&self.context
+	}
+
+	fn origin(&self) -> H160 {
+		self.origin
 	}
 
 	/// Is the precompile call is done statically.

@@ -72,6 +72,11 @@ impl<'p, P: PrecompileSet> PrecompilesTester<'p, P> {
 		}
 	}
 
+	pub fn with_origin(mut self, origin: impl Into<H160>) -> Self {
+		self.handle.origin = origin.into();
+		self
+	}
+
 	pub fn with_value(mut self, value: impl Into<U256>) -> Self {
 		self.handle.context.apparent_value = value.into();
 		self

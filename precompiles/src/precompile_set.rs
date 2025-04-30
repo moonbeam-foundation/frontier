@@ -21,7 +21,6 @@
 //! default and must be disabled explicely through type annotations.
 
 use crate::{
-	evm::handle::PrecompileHandleExt,
 	solidity::{codec::String, revert::revert},
 	EvmResult,
 };
@@ -35,6 +34,10 @@ use frame_support::pallet_prelude::Get;
 use impl_trait_for_tuples::impl_for_tuples;
 use pallet_evm::AddressMapping;
 use sp_core::{H160, H256};
+
+// This is the simplest bytecode to revert without returning any data.
+// (PUSH1 0x00 PUSH1 0x00 REVERT)
+pub const REVERT_BYTECODE: [u8; 5] = [0x60, 0x00, 0x60, 0x00, 0xfd];
 
 /// Trait representing checks that can be made on a precompile call.
 /// Types implementing this trait are made to be chained in a tuple.
@@ -304,13 +307,11 @@ impl<T: SelectorFilter> PrecompileChecks for CallableByPrecompile<T> {
 #[derive(PartialEq)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum AddressType {
-	/// The code stored at the address is less than 5 bytes, but not well known.
-	Unknown,
 	/// No code is stored at the address, therefore is EOA.
 	EOA,
 	/// The 5-byte magic constant for a precompile is stored at the address.
 	Precompile,
-	/// The code is greater than 5-bytes, potentially a Smart Contract.
+	/// Every address that is not a EOA or a Precompile it potentially a Smart Contract.
 	Contract,
 }
 
@@ -319,39 +320,18 @@ pub fn get_address_type<R: pallet_evm::Config>(
 	handle: &mut impl PrecompileHandle,
 	address: H160,
 ) -> Result<AddressType, ExitError> {
-	// AccountCodesMetadata:
-	// Blake2128(16) + H160(20) + CodeMetadata(40)
-	handle.record_db_read::<R>(76)?;
-	let code_len = pallet_evm::Pallet::<R>::account_code_metadata(address).size;
-
-	// 0 => either EOA or precompile without dummy code
-	if code_len == 0 {
-		return Ok(AddressType::EOA);
-	}
-
-	// dummy code is 5 bytes long, so any other len means it is a contract.
-	if code_len != 5 {
-		return Ok(AddressType::Contract);
-	}
-
-	// check code matches dummy code
-	handle.record_db_read::<R>(code_len as usize)?;
-	let code = pallet_evm::AccountCodes::<R>::get(address);
-	if code == [0x60, 0x00, 0x60, 0x00, 0xfd] {
+	// Check if address is a precompile
+	if let Ok(true) = is_precompile_or_fail::<R>(address, handle.remaining_gas()) {
 		return Ok(AddressType::Precompile);
 	}
 
-	Ok(AddressType::Unknown)
-}
-
-fn is_address_eoa_or_precompile<R: pallet_evm::Config>(
-	handle: &mut impl PrecompileHandle,
-	address: H160,
-) -> Result<bool, ExitError> {
-	match get_address_type::<R>(handle, address)? {
-		AddressType::EOA | AddressType::Precompile => Ok(true),
-		_ => Ok(false),
+	// It is an Externally Owned Account (EOA)
+	// - When the transaction origin is equal to the address
+	if handle.origin() == address {
+		return Ok(AddressType::EOA);
 	}
+
+	Ok(AddressType::Contract)
 }
 
 /// Common checks for precompile and precompile sets.
@@ -375,17 +355,21 @@ fn common_checks<R: pallet_evm::Config, C: PrecompileChecks>(
 		u32::from_be_bytes(buffer)
 	});
 
-	// Is this selector callable from a smart contract?
-	let callable_by_smart_contract =
-		C::callable_by_smart_contract(caller, selector).unwrap_or(false);
-	if !callable_by_smart_contract && !is_address_eoa_or_precompile::<R>(handle, caller)? {
-		return Err(revert("Function not callable by smart contracts"));
-	}
+	let caller_address_type = get_address_type::<R>(handle, caller)?;
 
 	// Is this selector callable from a precompile?
 	let callable_by_precompile = C::callable_by_precompile(caller, selector).unwrap_or(false);
-	if !callable_by_precompile && is_precompile_or_fail::<R>(caller, handle.remaining_gas())? {
+	let is_precompile = caller_address_type == AddressType::Precompile;
+	if !callable_by_precompile && is_precompile {
 		return Err(revert("Function not callable by precompiles"));
+	}
+
+	// Is this selector callable from a smart contract?
+	let callable_by_smart_contract =
+		C::callable_by_smart_contract(caller, selector).unwrap_or(false);
+	let is_smart_contract = caller_address_type == AddressType::Contract;
+	if !callable_by_smart_contract && is_smart_contract {
+		return Err(revert("Function not callable by smart contracts"));
 	}
 
 	Ok(())
@@ -461,6 +445,10 @@ impl<'a, H: PrecompileHandle> PrecompileHandle for RestrictiveHandle<'a, H> {
 
 	fn context(&self) -> &evm::Context {
 		self.handle.context()
+	}
+
+	fn origin(&self) -> H160 {
+		self.handle.origin()
 	}
 
 	fn is_static(&self) -> bool {
