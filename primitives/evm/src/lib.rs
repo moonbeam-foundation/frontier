@@ -92,9 +92,7 @@ pub struct WeightInfo {
 }
 
 impl WeightInfo {
-	pub fn new_from_weight_limit(
-		weight_limit: Option<Weight>,
-	) -> Option<Self> {
+	pub fn new_from_weight_limit(weight_limit: Option<Weight>) -> Option<Self> {
 		match weight_limit {
 			None => None,
 			Some(weight_limit) => Some(WeightInfo {

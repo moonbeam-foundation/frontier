@@ -394,7 +394,7 @@ pub mod pallet {
 }
 
 impl<T: Config> Pallet<T> {
-	pub fn transaction_pov(transaction_data: &TransactionData) -> (Option<Weight>, Option<u64>){
+	pub fn transaction_pov(transaction_data: &TransactionData) -> (Option<Weight>, Option<u64>) {
 		let weight_limit = <T as pallet_evm::Config>::GasWeightMapping::gas_to_weight(
 			transaction_data.gas_limit.unique_saturated_into(),
 			true,
