@@ -3,7 +3,7 @@ pragma solidity >=0.8.2 <0.9.0;
 
 contract StorageLoop {
     mapping(address => uint) public map;
-    
+
     // n=1      30k
     // n=10     37k
     // n=100    100k
