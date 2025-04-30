@@ -159,7 +159,7 @@ substrate-wasm-builder = { git = "https://github.com/moonbeam-foundation/polkado
 
 # Cumulus primitives
 cumulus-primitives-storage-weight-reclaim = { git = "https://github.com/moonbeam-foundation/polkadot-sdk", branch = "moonbeam-polkadot-stable2409", default-features = false }
-
+cumulus-primitives-proof-size-hostfunction = { git = "https://github.com/moonbeam-foundation/polkadot-sdk", branch = "moonbeam-polkadot-stable2409", default-features = false }
 # XCM
 xcm = { package = "staging-xcm", git = "https://github.com/moonbeam-foundation/polkadot-sdk", branch = "moonbeam-polkadot-stable2409", default-features = false }
 

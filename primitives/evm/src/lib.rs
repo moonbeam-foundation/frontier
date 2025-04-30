@@ -92,10 +92,17 @@ pub struct WeightInfo {
 }
 
 impl WeightInfo {
-	pub fn new_from_weight_limit(weight_limit: Option<Weight>) -> Option<Self> {
+	pub fn new_from_weight_limit(
+		weight_limit: Option<Weight>,
+		recording_proof_size: bool,
+	) -> Option<Self> {
 		weight_limit.map(|weight_limit| WeightInfo {
 			ref_time_limit: Some(weight_limit.ref_time()),
-			proof_size_limit: Some(weight_limit.proof_size()),
+			proof_size_limit: if recording_proof_size {
+				Some(weight_limit.proof_size())
+			} else {
+				None
+			},
 			ref_time_usage: Some(0u64),
 			proof_size_usage: Some(0u64),
 		})
