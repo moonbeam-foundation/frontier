@@ -46,6 +46,7 @@ pub struct MockHandle {
 	pub context: Context,
 	pub is_static: bool,
 	pub gas_used: u64,
+	pub contracts_being_constructed: Vec<H160>,
 }
 
 impl MockHandle {
@@ -56,6 +57,7 @@ impl MockHandle {
 			context,
 			is_static: false,
 			gas_used: 0,
+			contracts_being_constructed: Default::default(),
 		}
 	}
 }
@@ -111,12 +113,20 @@ impl PrecompileHandle for MockHandle {
 		&self.context
 	}
 
+	fn origin(&self) -> H160 {
+		unimplemented!()
+	}
+
 	fn is_static(&self) -> bool {
 		self.is_static
 	}
 
 	fn gas_limit(&self) -> Option<u64> {
 		self.gas_limit
+	}
+
+	fn is_contract_being_constructed(&self, _address: H160) -> bool {
+		unimplemented!()
 	}
 }
 
