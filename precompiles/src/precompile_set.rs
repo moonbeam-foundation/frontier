@@ -332,7 +332,7 @@ pub fn get_address_type<R: pallet_evm::Config>(
 	handle.record_db_read::<R>(ACCOUNT_CODES_METADATA_PROOF_SIZE as usize)?;
 	let code_len = pallet_evm::Pallet::<R>::account_code_metadata(address).size;
 
-	// 0 => either EOA or precompile without dummy code
+	// Having no code at this point means that the address is an EOA
 	if code_len == 0 {
 		return Ok(AddressType::EOA);
 	}
