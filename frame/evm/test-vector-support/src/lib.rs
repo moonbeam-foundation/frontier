@@ -46,7 +46,6 @@ pub struct MockHandle {
 	pub context: Context,
 	pub is_static: bool,
 	pub gas_used: u64,
-	pub contracts_being_constructed: Vec<H160>,
 }
 
 impl MockHandle {
@@ -57,7 +56,6 @@ impl MockHandle {
 			context,
 			is_static: false,
 			gas_used: 0,
-			contracts_being_constructed: Default::default(),
 		}
 	}
 }
