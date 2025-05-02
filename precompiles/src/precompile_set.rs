@@ -307,7 +307,7 @@ pub enum AddressType {
 	EOA,
 	/// The 5-byte magic constant for a precompile is stored at the address.
 	Precompile,
-	/// Every address that is not a EOA or a Precompile it potentially a Smart Contract.
+	/// Every address that is not a EOA or a Precompile is potentially a Smart Contract.
 	Contract,
 }
 
