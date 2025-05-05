@@ -24,7 +24,8 @@ use frame_support::{
 	weights::Weight,
 	ConsensusEngineId,
 };
-use sp_core::{H160, H256, U256};
+use frame_system::pallet_prelude::BlockNumberFor;
+use sp_core::{Hasher, H160, H256, U256};
 use sp_runtime::traits::{BlakeTwo256, IdentityLookup};
 
 use fp_evm::{ExitError, ExitReason, Transfer};
@@ -135,6 +136,18 @@ parameter_types! {
 	pub WeightPerGas: Weight = Weight::from_parts(20_000, 0);
 	pub SuicideQuickClearLimit: u32 = 0;
 }
+
+pub struct RandomnessProvider;
+impl frame_support::traits::Randomness<<Test as frame_system::Config>::Hash, BlockNumberFor<Test>>
+	for RandomnessProvider
+{
+	fn random(subject: &[u8]) -> (<Test as frame_system::Config>::Hash, BlockNumberFor<Test>) {
+		let output = <Test as frame_system::Config>::Hashing::hash(subject);
+		let block_number = frame_system::Pallet::<Test>::block_number();
+		(output, block_number)
+	}
+}
+
 impl pallet_evm::Config for Test {
 	type AccountProvider = pallet_evm::FrameSystemAccountProvider<Self>;
 	type FeeCalculator = FixedGasPrice;
@@ -162,6 +175,7 @@ impl pallet_evm::Config for Test {
 	type GasLimitStorageGrowthRatio = ();
 	type Timestamp = Timestamp;
 	type WeightInfo = ();
+	type RandomnessProvider = RandomnessProvider;
 }
 
 pub(crate) struct MockHandle {

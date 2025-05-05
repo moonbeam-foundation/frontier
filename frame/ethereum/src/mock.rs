@@ -18,10 +18,11 @@
 //! Test utilities
 
 use ethereum::{TransactionAction, TransactionSignature};
+use frame_system::pallet_prelude::BlockNumberFor;
 use rlp::RlpStream;
 // Substrate
 use frame_support::{derive_impl, parameter_types, traits::FindAuthor, ConsensusEngineId};
-use sp_core::{hashing::keccak_256, H160, H256, U256};
+use sp_core::{hashing::keccak_256, Hasher, H160, H256, U256};
 use sp_runtime::{
 	traits::{Dispatchable, IdentityLookup},
 	AccountId32, BuildStorage,
@@ -91,6 +92,17 @@ parameter_types! {
 	pub const GasLimitStorageGrowthRatio: u64 = BLOCK_GAS_LIMIT.saturating_div(MAX_STORAGE_GROWTH);
 }
 
+pub struct RandomnessProvider;
+impl frame_support::traits::Randomness<<Test as frame_system::Config>::Hash, BlockNumberFor<Test>>
+	for RandomnessProvider
+{
+	fn random(subject: &[u8]) -> (<Test as frame_system::Config>::Hash, BlockNumberFor<Test>) {
+		let output = <Test as frame_system::Config>::Hashing::hash(subject);
+		let block_number = frame_system::Pallet::<Test>::block_number();
+		(output, block_number)
+	}
+}
+
 #[derive_impl(pallet_evm::config_preludes::TestDefaultConfig)]
 impl pallet_evm::Config for Test {
 	type AccountProvider = pallet_evm::FrameSystemAccountProvider<Self>;
@@ -102,6 +114,7 @@ impl pallet_evm::Config for Test {
 	type FindAuthor = FindAuthorTruncated;
 	type GasLimitStorageGrowthRatio = GasLimitStorageGrowthRatio;
 	type Timestamp = Timestamp;
+	type RandomnessProvider = RandomnessProvider;
 }
 
 #[derive_impl(crate::config_preludes::TestDefaultConfig)]

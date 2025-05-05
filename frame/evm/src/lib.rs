@@ -208,6 +208,12 @@ pub mod pallet {
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 
+		#[pallet::no_default]
+		type RandomnessProvider: frame_support::traits::Randomness<
+			sp_core::H256,
+			BlockNumberFor<Self>,
+		>;
+
 		/// EVM config used in the module.
 		fn config() -> &'static EvmConfig {
 			&CANCUN_CONFIG
