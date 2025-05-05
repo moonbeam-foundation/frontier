@@ -44,7 +44,7 @@ pub trait Runner<T: Config> {
 		access_list: Vec<(H160, Vec<H256>)>,
 		is_transactional: bool,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
+		proof_size_pre_execution: Option<u64>,
 		evm_config: &evm::Config,
 	) -> Result<(), RunnerError<Self::Error>>;
 
@@ -61,7 +61,7 @@ pub trait Runner<T: Config> {
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
+		proof_size_pre_execution: Option<u64>,
 		config: &evm::Config,
 	) -> Result<CallInfo, RunnerError<Self::Error>>;
 
@@ -77,7 +77,7 @@ pub trait Runner<T: Config> {
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
+		proof_size_pre_execution: Option<u64>,
 		config: &evm::Config,
 	) -> Result<CreateInfo, RunnerError<Self::Error>>;
 
@@ -94,7 +94,7 @@ pub trait Runner<T: Config> {
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
+		proof_size_pre_execution: Option<u64>,
 		config: &evm::Config,
 	) -> Result<CreateInfo, RunnerError<Self::Error>>;
 
@@ -110,7 +110,7 @@ pub trait Runner<T: Config> {
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
+		proof_size_pre_execution: Option<u64>,
 		config: &evm::Config,
 		contract_address: H160,
 	) -> Result<CreateInfo, RunnerError<Self::Error>>;

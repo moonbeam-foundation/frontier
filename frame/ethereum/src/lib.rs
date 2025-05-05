@@ -36,6 +36,7 @@ mod tests;
 use alloc::{vec, vec::Vec};
 pub use catch_exec_info::catch_exec_info;
 use core::marker::PhantomData;
+use cumulus_primitives_storage_weight_reclaim::get_proof_size;
 pub use ethereum::{
 	AccessListItem, BlockV2 as Block, LegacyTransactionMessage, Log, ReceiptV3 as Receipt,
 	TransactionAction, TransactionV2 as Transaction,
@@ -393,16 +394,16 @@ pub mod pallet {
 }
 
 impl<T: Config> Pallet<T> {
-	pub fn transaction_weight(transaction_data: &TransactionData) -> (Option<Weight>, Option<u64>) {
-		match <T as pallet_evm::Config>::GasWeightMapping::gas_to_weight(
+	pub fn transaction_pov(transaction_data: &TransactionData) -> (Option<Weight>, Option<u64>) {
+		let weight_limit = <T as pallet_evm::Config>::GasWeightMapping::gas_to_weight(
 			transaction_data.gas_limit.unique_saturated_into(),
 			true,
-		) {
-			weight_limit if weight_limit.proof_size() > 0 => (
-				Some(weight_limit),
-				Some(transaction_data.proof_size_base_cost()),
-			),
-			_ => (None, None),
+		);
+
+		if weight_limit.proof_size() > 0 {
+			(Some(weight_limit), get_proof_size())
+		} else {
+			(None, None)
 		}
 	}
 
@@ -528,7 +529,7 @@ impl<T: Config> Pallet<T> {
 	) -> TransactionValidity {
 		let transaction_data: TransactionData = transaction.into();
 		let transaction_nonce = transaction_data.nonce;
-		let (weight_limit, proof_size_base_cost) = Self::transaction_weight(&transaction_data);
+		let (weight_limit, proof_size_pre_execution) = Self::transaction_pov(&transaction_data);
 		let (base_fee, _) = T::FeeCalculator::min_gas_price();
 		let (who, _) = pallet_evm::Pallet::<T>::account_basic(&origin);
 
@@ -542,7 +543,7 @@ impl<T: Config> Pallet<T> {
 			},
 			transaction_data.clone().into(),
 			weight_limit,
-			proof_size_base_cost,
+			proof_size_pre_execution,
 		);
 		check_transaction
 			.validate_in_pool_for(&who)
@@ -769,7 +770,7 @@ impl<T: Config> Pallet<T> {
 		maybe_force_create_address: Option<H160>,
 	) -> Result<(Option<H160>, Option<H160>, CallOrCreateInfo), DispatchErrorWithPostInfo> {
 		let transaction_data: TransactionData = transaction.into();
-		let (weight_limit, proof_size_base_cost) = Self::transaction_weight(&transaction_data);
+		let (weight_limit, proof_size_pre_execution) = Self::transaction_pov(&transaction_data);
 		let is_transactional = true;
 		let validate = false;
 
@@ -848,7 +849,7 @@ impl<T: Config> Pallet<T> {
 					is_transactional,
 					validate,
 					weight_limit,
-					proof_size_base_cost,
+					proof_size_pre_execution,
 					config.as_ref().unwrap_or_else(|| T::config()),
 				) {
 					Ok(res) => res,
@@ -879,7 +880,7 @@ impl<T: Config> Pallet<T> {
 						is_transactional,
 						validate,
 						weight_limit,
-						proof_size_base_cost,
+						proof_size_pre_execution,
 						config.as_ref().unwrap_or_else(|| T::config()),
 						force_address,
 					) {
@@ -907,7 +908,7 @@ impl<T: Config> Pallet<T> {
 						is_transactional,
 						validate,
 						weight_limit,
-						proof_size_base_cost,
+						proof_size_pre_execution,
 						config.as_ref().unwrap_or_else(|| T::config()),
 					) {
 						Ok(res) => res,
@@ -937,7 +938,7 @@ impl<T: Config> Pallet<T> {
 		transaction: &Transaction,
 	) -> Result<(), TransactionValidityError> {
 		let transaction_data: TransactionData = transaction.into();
-		let (weight_limit, proof_size_base_cost) = Self::transaction_weight(&transaction_data);
+		let (weight_limit, proof_size_pre_execution) = Self::transaction_pov(&transaction_data);
 		let (base_fee, _) = T::FeeCalculator::min_gas_price();
 		let (who, _) = pallet_evm::Pallet::<T>::account_basic(&origin);
 
@@ -951,7 +952,7 @@ impl<T: Config> Pallet<T> {
 			},
 			transaction_data.into(),
 			weight_limit,
-			proof_size_base_cost,
+			proof_size_pre_execution,
 		);
 		check_transaction
 			.validate_in_block_for(&who)

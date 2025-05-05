@@ -42,6 +42,8 @@ hex = { workspace = true }
 pallet-balances = { workspace = true, features = ["default", "insecure_zero_ed"] }
 pallet-evm-precompile-simple = { workspace = true, features = ["default"] }
 pallet-timestamp = { workspace = true, features = ["default"] }
+regex = { version = "1.11.1" }
+sp-trie = { workspace = true }
 
 [features]
 default = ["std"]
@@ -54,7 +56,7 @@ std = [
 	"scale-codec/std",
 	"scale-info/std",
 	# Cumulus
-    "cumulus-primitives-storage-weight-reclaim/std",
+	"cumulus-primitives-storage-weight-reclaim/std",
 	# Substrate
 	"frame-benchmarking?/std",
 	"frame-support/std",

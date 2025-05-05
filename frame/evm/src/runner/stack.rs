@@ -80,8 +80,7 @@ where
 		precompiles: &'precompiles T::PrecompilesType,
 		is_transactional: bool,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
-		measured_proof_size_before: u64,
+		proof_size_pre_execution: Option<u64>,
 		f: F,
 	) -> Result<ExecutionInfoV2<R>, RunnerError<Error<T>>>
 	where
@@ -111,8 +110,7 @@ where
 			base_fee,
 			weight,
 			weight_limit,
-			proof_size_base_cost,
-			measured_proof_size_before,
+			proof_size_pre_execution,
 		);
 
 		#[cfg(feature = "forbid-evm-reentrancy")]
@@ -150,8 +148,7 @@ where
 				base_fee,
 				weight,
 				weight_limit,
-				proof_size_base_cost,
-				measured_proof_size_before,
+				proof_size_pre_execution,
 			)
 		});
 
@@ -172,8 +169,7 @@ where
 		base_fee: U256,
 		weight: Weight,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
-		measured_proof_size_before: u64,
+		proof_size_pre_execution: Option<u64>,
 	) -> Result<ExecutionInfoV2<R>, RunnerError<Error<T>>>
 	where
 		F: FnOnce(
@@ -187,13 +183,9 @@ where
 		R: Default,
 	{
 		// Used to record the external costs in the evm through the StackState implementation
+		let recording_proof_size = proof_size_pre_execution.is_some();
 		let mut maybe_weight_info =
-			WeightInfo::new_from_weight_limit(weight_limit, proof_size_base_cost).map_err(
-				|_| RunnerError {
-					error: Error::<T>::GasLimitTooLow,
-					weight,
-				},
-			)?;
+			WeightInfo::new_from_weight_limit(weight_limit, recording_proof_size);
 		// The precompile check is only used for transactional invocations. However, here we always
 		// execute the check, because the check has side effects.
 		match precompiles.is_precompile(source, gas_limit) {
@@ -236,6 +228,7 @@ where
 					weight,
 				})?;
 		}
+
 		let total_fee_per_gas = if is_transactional {
 			match (max_fee_per_gas, max_priority_fee_per_gas) {
 				// Zero max_fee_per_gas for validated transactional calls exist in XCM -> EVM
@@ -315,12 +308,9 @@ where
 
 				// Obtain the actual proof size usage using the ProofSizeExt host-function or fallback
 				// and use the estimated proof size
-				let actual_proof_size = if let Some(measured_proof_size_after) = get_proof_size() {
-					// actual_proof_size = proof_size_base_cost + proof_size measured with ProofSizeExt
-					let actual_proof_size =
-						proof_size_base_cost.unwrap_or_default().saturating_add(
-							measured_proof_size_after.saturating_sub(measured_proof_size_before),
-						);
+				let actual_proof_size = if let Some(proof_size_post_execution) = get_proof_size() {
+					let actual_proof_size = proof_size_post_execution
+						.saturating_sub(proof_size_pre_execution.unwrap_or_default());
 
 					log::trace!(
 						target: "evm",
@@ -335,7 +325,7 @@ where
 					//
 					// TODO: The estimated proof_size should always be an overestimate
 					if actual_proof_size > estimated_proof_size {
-						log::debug!(
+						log::warn!(
 							target: "evm",
 							"Proof size underestimation detected! (estimated: {}, actual: {}, diff: {})",
 							estimated_proof_size,
@@ -483,7 +473,7 @@ where
 		access_list: Vec<(H160, Vec<H256>)>,
 		is_transactional: bool,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
+		proof_size_pre_execution: Option<u64>,
 		evm_config: &evm::Config,
 	) -> Result<(), RunnerError<Self::Error>> {
 		let (base_fee, mut weight) = T::FeeCalculator::min_gas_price();
@@ -511,7 +501,7 @@ where
 				access_list,
 			},
 			weight_limit,
-			proof_size_base_cost,
+			proof_size_pre_execution,
 		)
 		.validate_in_block_for(&source_account)
 		.and_then(|v| v.with_base_fee())
@@ -533,10 +523,9 @@ where
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
+		proof_size_pre_execution: Option<u64>,
 		config: &evm::Config,
 	) -> Result<CallInfo, RunnerError<Self::Error>> {
-		let measured_proof_size_before = get_proof_size().unwrap_or_default();
 		if validate {
 			Self::validate(
 				source,
@@ -550,7 +539,7 @@ where
 				access_list.clone(),
 				is_transactional,
 				weight_limit,
-				proof_size_base_cost,
+				proof_size_pre_execution,
 				config,
 			)?;
 		}
@@ -565,8 +554,7 @@ where
 			&precompiles,
 			is_transactional,
 			weight_limit,
-			proof_size_base_cost,
-			measured_proof_size_before,
+			proof_size_pre_execution,
 			|executor| executor.transact_call(source, target, value, input, gas_limit, access_list),
 		)
 	}
@@ -583,10 +571,9 @@ where
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
+		proof_size_pre_execution: Option<u64>,
 		config: &evm::Config,
 	) -> Result<CreateInfo, RunnerError<Self::Error>> {
-		let measured_proof_size_before = get_proof_size().unwrap_or_default();
 		if validate {
 			Self::validate(
 				source,
@@ -600,7 +587,7 @@ where
 				access_list.clone(),
 				is_transactional,
 				weight_limit,
-				proof_size_base_cost,
+				proof_size_pre_execution,
 				config,
 			)?;
 		}
@@ -615,8 +602,7 @@ where
 			&precompiles,
 			is_transactional,
 			weight_limit,
-			proof_size_base_cost,
-			measured_proof_size_before,
+			proof_size_pre_execution,
 			|executor| {
 				let address = executor.create_address(evm::CreateScheme::Legacy { caller: source });
 				T::OnCreate::on_create(source, address);
@@ -640,10 +626,9 @@ where
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
+		proof_size_pre_execution: Option<u64>,
 		config: &evm::Config,
 	) -> Result<CreateInfo, RunnerError<Self::Error>> {
-		let measured_proof_size_before = get_proof_size().unwrap_or_default();
 		if validate {
 			Self::validate(
 				source,
@@ -657,7 +642,7 @@ where
 				access_list.clone(),
 				is_transactional,
 				weight_limit,
-				proof_size_base_cost,
+				proof_size_pre_execution,
 				config,
 			)?;
 		}
@@ -673,8 +658,7 @@ where
 			&precompiles,
 			is_transactional,
 			weight_limit,
-			proof_size_base_cost,
-			measured_proof_size_before,
+			proof_size_pre_execution,
 			|executor| {
 				let address = executor.create_address(evm::CreateScheme::Create2 {
 					caller: source,
@@ -701,11 +685,10 @@ where
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
+		proof_size_pre_execution: Option<u64>,
 		config: &evm::Config,
 		contract_address: H160,
 	) -> Result<CreateInfo, RunnerError<Self::Error>> {
-		let measured_proof_size_before = get_proof_size().unwrap_or_default();
 		if validate {
 			Self::validate(
 				source,
@@ -719,7 +702,7 @@ where
 				access_list.clone(),
 				is_transactional,
 				weight_limit,
-				proof_size_base_cost,
+				proof_size_pre_execution,
 				config,
 			)?;
 		}
@@ -734,8 +717,7 @@ where
 			&precompiles,
 			is_transactional,
 			weight_limit,
-			proof_size_base_cost,
-			measured_proof_size_before,
+			proof_size_pre_execution,
 			|executor| {
 				T::OnCreate::on_create(source, contract_address);
 				let (reason, _) = executor.transact_create_force_address(
@@ -1427,7 +1409,6 @@ mod tests {
 			false,
 			None,
 			None,
-			0,
 			|_| {
 				let res = Runner::<Test>::execute(
 					H160::default(),
@@ -1440,7 +1421,6 @@ mod tests {
 					false,
 					None,
 					None,
-					0,
 					|_| (ExitReason::Succeed(ExitSucceed::Stopped), ()),
 				);
 				assert_matches!(
@@ -1473,7 +1453,6 @@ mod tests {
 			false,
 			None,
 			None,
-			0,
 			|_| (ExitReason::Succeed(ExitSucceed::Stopped), ()),
 		);
 		assert!(res.is_ok());

@@ -81,6 +81,7 @@ pub enum AccessedStorage {
 	AccountStorages((H160, H256)),
 }
 
+// Retain this structure to maintain API compatibility
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Encode, Decode, Default, TypeInfo)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WeightInfo {
@@ -93,27 +94,17 @@ pub struct WeightInfo {
 impl WeightInfo {
 	pub fn new_from_weight_limit(
 		weight_limit: Option<Weight>,
-		proof_size_base_cost: Option<u64>,
-	) -> Result<Option<Self>, &'static str> {
-		Ok(match (weight_limit, proof_size_base_cost) {
-			(None, _) => None,
-			(Some(weight_limit), Some(proof_size_base_cost))
-				if weight_limit.proof_size() >= proof_size_base_cost =>
-			{
-				Some(WeightInfo {
-					ref_time_limit: Some(weight_limit.ref_time()),
-					proof_size_limit: Some(weight_limit.proof_size()),
-					ref_time_usage: Some(0u64),
-					proof_size_usage: Some(proof_size_base_cost),
-				})
-			}
-			(Some(weight_limit), None) => Some(WeightInfo {
-				ref_time_limit: Some(weight_limit.ref_time()),
-				proof_size_limit: None,
-				ref_time_usage: Some(0u64),
-				proof_size_usage: None,
-			}),
-			_ => return Err("must provide Some valid weight limit or None"),
+		recording_proof_size: bool,
+	) -> Option<Self> {
+		weight_limit.map(|weight_limit| WeightInfo {
+			ref_time_limit: Some(weight_limit.ref_time()),
+			proof_size_limit: if recording_proof_size {
+				Some(weight_limit.proof_size())
+			} else {
+				None
+			},
+			ref_time_usage: Some(0u64),
+			proof_size_usage: Some(0u64),
 		})
 	}
 
@@ -174,11 +165,9 @@ impl WeightInfo {
 		}
 	}
 	pub fn remaining_proof_size(&self) -> Option<u64> {
-		if let Some(proof_size_limit) = self.proof_size_limit {
-			Some(proof_size_limit.saturating_sub(self.proof_size_usage.unwrap_or_default()))
-		} else {
-			None
-		}
+		self.proof_size_limit.map(|proof_size_limit| {
+			proof_size_limit.saturating_sub(self.proof_size_usage.unwrap_or_default())
+		})
 	}
 
 	pub fn remaining_ref_time(&self) -> Option<u64> {

@@ -490,40 +490,6 @@ fn validated_transaction_apply_zero_gas_price_works() {
 }
 
 #[test]
-fn proof_size_weight_limit_validation_works() {
-	use pallet_evm::GasWeightMapping;
-
-	let (pairs, mut ext) = new_test_ext(1);
-	let alice = &pairs[0];
-
-	ext.execute_with(|| {
-		let mut tx = LegacyUnsignedTransaction {
-			nonce: U256::from(2),
-			gas_price: U256::from(1),
-			gas_limit: U256::from(0x100000),
-			action: ethereum::TransactionAction::Call(alice.address),
-			value: U256::from(1),
-			input: Vec::new(),
-		};
-
-		let gas_limit: u64 = 1_000_000;
-		tx.gas_limit = U256::from(gas_limit);
-
-		let weight_limit =
-			<Test as pallet_evm::Config>::GasWeightMapping::gas_to_weight(gas_limit, true);
-
-		// Gas limit cannot afford the extra byte and thus is expected to exhaust.
-		tx.input = vec![0u8; (weight_limit.proof_size() + 1) as usize];
-		let tx = tx.sign(&alice.private_key);
-
-		// Execute
-		assert!(
-			Ethereum::transact(RawOrigin::EthereumTransaction(alice.address).into(), tx,).is_err()
-		);
-	});
-}
-
-#[test]
 fn proof_size_base_cost_should_keep_the_same_in_execution_and_estimate() {
 	let (pairs, mut ext) = new_test_ext(1);
 	let alice = &pairs[0];
