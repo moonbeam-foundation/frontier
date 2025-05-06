@@ -12,10 +12,14 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 environmental = { workspace = true }
+<<<<<<< HEAD
 ethereum = { workspace = true, features = ["with-codec"] }
+=======
+ethereum = { workspace = true, features = ["with-scale"] }
+>>>>>>> moonbeam-polkadot-stable2412
 ethereum-types = { workspace = true }
-evm = { workspace = true, features = ["with-codec"] }
-scale-codec = { package = "parity-scale-codec", workspace = true }
+evm = { workspace = true, features = ["with-codec", "allow_explicit_address"] }
+scale-codec = { workspace = true }
 scale-info = { workspace = true }
 # Substrate
 frame-support = { workspace = true }

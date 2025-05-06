@@ -11,7 +11,7 @@ repository = { workspace = true }
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-ethereum = { workspace = true, features = ["with-codec"] }
+ethereum = { workspace = true, features = ["with-scale"] }
 ethereum-types = { workspace = true }
 evm = { workspace = true }
 futures = { workspace = true }
@@ -22,28 +22,27 @@ log = { workspace = true }
 prometheus = { version = "0.13.4", default-features = false }
 rand = "0.8"
 rlp = { workspace = true }
-scale-codec = { package = "parity-scale-codec", workspace = true }
-schnellru = "0.2.3"
-serde = { workspace = true }
+scale-codec = { workspace = true }
+schnellru = "0.2.4"
+serde = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 
 # Substrate
 prometheus-endpoint = { workspace = true }
 sc-client-api = { workspace = true }
-sc-consensus-aura = { workspace = true }
+sc-consensus-aura = { workspace = true, optional = true }
 sc-network = { workspace = true }
 sc-network-sync = { workspace = true }
 sc-rpc = { workspace = true }
 sc-service = { workspace = true }
-sc-transaction-pool = { workspace = true }
 sc-transaction-pool-api = { workspace = true }
 sc-utils = { workspace = true }
 sp-api = { workspace = true, features = ["default"] }
 sp-block-builder = { workspace = true, features = ["default"] }
 sp-blockchain = { workspace = true }
 sp-consensus = { workspace = true }
-sp-consensus-aura = { workspace = true, features = ["default"] }
+sp-consensus-aura = { workspace = true, features = ["default"], optional = true }
 sp-core = { workspace = true, features = ["default"] }
 sp-externalities = { workspace = true, features = ["default"] }
 sp-inherents = { workspace = true, features = ["default"] }
@@ -51,7 +50,11 @@ sp-io = { workspace = true, features = ["default"] }
 sp-runtime = { workspace = true, features = ["default"] }
 sp-state-machine = { workspace = true, features = ["default"] }
 sp-storage = { workspace = true, features = ["default"] }
+<<<<<<< HEAD
 sp-timestamp = { workspace = true, features = ["default"] }
+=======
+sp-timestamp = { workspace = true, features = ["default"], optional = true }
+>>>>>>> moonbeam-polkadot-stable2412
 sp-trie = { workspace = true, features = ["default"] }
 # Frontier
 fc-api = { workspace = true }
@@ -64,7 +67,7 @@ fp-storage = { workspace = true, features = ["default"] }
 pallet-evm = { workspace = true, features = ["default"] }
 
 [dev-dependencies]
-tempfile = "3.10.1"
+tempfile = "3.14.0"
 # Substrate
 sc-block-builder = { workspace = true }
 sc-client-db = { workspace = true, features = ["rocksdb"] }
@@ -74,11 +77,16 @@ substrate-test-runtime-client = { workspace = true }
 fc-db = { workspace = true }
 
 [features]
-default = ["rocksdb"]
+default = ["aura", "rocksdb"]
+aura = [
+	"sc-consensus-aura",
+	"sp-consensus-aura",
+	"sp-timestamp",
+]
 rocksdb = [
 	"sc-service/rocksdb",
 	"fc-db/rocksdb",
 	"fc-mapping-sync/rocksdb",
 ]
-txpool = ["fc-rpc-core/txpool"]
+txpool = ["fc-rpc-core/txpool", "serde"]
 rpc-binary-search-estimate = []

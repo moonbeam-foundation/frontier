@@ -175,9 +175,7 @@ impl Codec for U256 {
 	}
 
 	fn write(writer: &mut Writer, value: Self) {
-		let mut buffer = [0u8; 32];
-		value.to_big_endian(&mut buffer);
-		writer.data.extend_from_slice(&buffer);
+		writer.data.extend_from_slice(&value.to_big_endian());
 	}
 
 	fn has_static_size() -> bool {
@@ -322,7 +320,7 @@ impl<T: Codec, S: Get<u32>> Codec for BoundedVec<T, S> {
 
 		for inner in value {
 			// Any offset in items are relative to the start of the item instead of the
-			// start of the array. However if there is offseted data it must but appended after
+			// start of the array. However if there is offset data it must but appended after
 			// all items (offsets) are written. We thus need to rely on `compute_offsets` to do
 			// that, and must store a "shift" to correct the offsets.
 			let shift = inner_writer.data.len();
@@ -393,5 +391,9 @@ impl<T, S> Default for BoundedVec<T, S> {
 impl<T, S> BoundedVec<T, S> {
 	pub fn len(&self) -> usize {
 		self.inner.len()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.inner.is_empty()
 	}
 }

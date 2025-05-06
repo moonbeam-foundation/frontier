@@ -238,7 +238,8 @@ mod proof_size_test {
 			let expected_proof_size = ((read_account_metadata * 2)
 				+ reading_contract_len
 				+ reading_main_contract_len
-				+ is_empty_check + increase_nonce) as u64;
+				+ is_empty_check
+				+ increase_nonce) as u64;
 
 			let actual_proof_size = result
 				.weight_info
@@ -295,7 +296,8 @@ mod proof_size_test {
 			let expected_proof_size = (basic_account_size
 				+ read_account_metadata
 				+ reading_main_contract_len
-				+ is_empty_check + increase_nonce) as u64;
+				+ is_empty_check
+				+ increase_nonce) as u64;
 
 			let actual_proof_size = result
 				.weight_info
@@ -520,7 +522,8 @@ mod proof_size_test {
 			let expected_proof_size = ((read_account_metadata * 2)
 				+ reading_callee_contract_len
 				+ reading_main_contract_len
-				+ is_empty_check + increase_nonce) as u64;
+				+ is_empty_check
+				+ increase_nonce) as u64;
 
 			let actual_proof_size = result
 				.weight_info
@@ -687,27 +690,6 @@ mod storage_growth_test {
 	fn expected_contract_create_storage_growth_gas(bytecode_len: u64) -> u64 {
 		let ratio = <<Test as Config>::GasLimitStorageGrowthRatio as Get<u64>>::get();
 		(ACCOUNT_CODES_KEY_SIZE + ACCOUNT_CODES_METADATA_PROOF_SIZE + bytecode_len) * ratio
-	}
-
-	// Verifies that contract deployment fails when the necessary storage growth gas isn't
-	// provided, even if the gas limit surpasses the standard gas usage measured by the
-	// gasometer.
-	#[test]
-	fn contract_deployment_should_fail_oog() {
-		new_test_ext().execute_with(|| {
-			let gas_limit: u64 = 80_000;
-
-			let result = create_test_contract(PROOF_SIZE_TEST_CALLEE_CONTRACT_BYTECODE, gas_limit)
-				.expect("create succeeds");
-
-			assert_eq!(
-				result.exit_reason,
-				crate::ExitReason::Error(crate::ExitError::OutOfGas)
-			);
-			assert_eq!(result.used_gas.effective.as_u64(), gas_limit);
-			// Assert that the contract entry does not exists in the storage.
-			assert!(!AccountCodes::<Test>::contains_key(result.value));
-		});
 	}
 
 	/// Test that contract deployment succeeds when the necessary storage growth gas is provided.

@@ -12,7 +12,7 @@ use sc_executor::HostFunctions as HostFunctionsT;
 use sc_network_sync::strategy::warp::{WarpSyncConfig, WarpSyncProvider};
 use sc_service::{error::Error as ServiceError, Configuration, PartialComponents, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker};
-use sc_transaction_pool::FullPool;
+use sc_transaction_pool::TransactionPoolHandle;
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_api::ConstructRuntimeApi;
 use sp_consensus_aura::sr25519::{AuthorityId as AuraId, AuthorityPair as AuraPair};
@@ -66,7 +66,7 @@ pub fn new_partial<B, RA, HF, BIQ>(
 		FullBackend<B>,
 		FullSelectChain<B>,
 		BasicQueue<B>,
-		FullPool<B, FullClient<B, RA, HF>>,
+		sc_transaction_pool::TransactionPoolHandle<B, FullClient<B, RA, HF>>,
 		(
 			Option<Telemetry>,
 			BoxBlockImport<B>,
@@ -167,12 +167,15 @@ where
 		grandpa_block_import,
 	)?;
 
-	let transaction_pool = sc_transaction_pool::BasicPool::new_full(
-		config.transaction_pool.clone(),
-		config.role.is_authority().into(),
-		config.prometheus_registry(),
-		task_manager.spawn_essential_handle(),
-		client.clone(),
+	let transaction_pool = Arc::from(
+		sc_transaction_pool::Builder::new(
+			task_manager.spawn_essential_handle(),
+			client.clone(),
+			config.role.is_authority().into(),
+		)
+		.with_options(config.transaction_pool.clone())
+		.with_prometheus(config.prometheus_registry())
+		.build(),
 	);
 
 	Ok(PartialComponents {
@@ -320,7 +323,9 @@ where
 
 	let grandpa_protocol_name = sc_consensus_grandpa::protocol_standard_name(
 		&client
-			.block_hash(0u32.into())?
+			.block_hash(0u32.into())
+			.ok()
+			.flatten()
 			.expect("Genesis block exists; qed"),
 		&config.chain_spec,
 	);
@@ -360,9 +365,7 @@ where
 		})?;
 
 	if config.offchain_worker.enabled {
-		task_manager.spawn_handle().spawn(
-			"offchain-workers-runner",
-			"offchain-worker",
+		let offchain_workers =
 			sc_offchain::OffchainWorkers::new(sc_offchain::OffchainWorkerOptions {
 				runtime_api_provider: client.clone(),
 				is_validator: config.role.is_authority(),
@@ -374,9 +377,13 @@ where
 				network_provider: Arc::new(network.clone()),
 				enable_http_requests: true,
 				custom_extensions: |_| vec![],
-			})
-			.run(client.clone(), task_manager.spawn_handle())
-			.boxed(),
+			})?;
+		task_manager.spawn_handle().spawn(
+			"offchain-workers-runner",
+			"offchain-worker",
+			offchain_workers
+				.run(client.clone(), task_manager.spawn_handle())
+				.boxed(),
 		);
 	}
 
@@ -444,7 +451,7 @@ where
 			let eth_deps = crate::rpc::EthDeps {
 				client: client.clone(),
 				pool: pool.clone(),
-				graph: pool.pool().clone(),
+				graph: pool.clone(),
 				converter: Some(TransactionConverter::<B>::default()),
 				is_authority,
 				enable_dev_signer,
@@ -636,7 +643,7 @@ fn run_manual_seal_authorship<B, RA, HF>(
 	eth_config: &EthConfiguration,
 	sealing: Sealing,
 	client: Arc<FullClient<B, RA, HF>>,
-	transaction_pool: Arc<FullPool<B, FullClient<B, RA, HF>>>,
+	transaction_pool: Arc<TransactionPoolHandle<B, FullClient<B, RA, HF>>>,
 	select_chain: FullSelectChain<B>,
 	block_import: BoxBlockImport<B>,
 	task_manager: &TaskManager,

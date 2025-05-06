@@ -1204,6 +1204,19 @@ where
 
 						if let Some(meta) = <AccountCodesMetadata<T>>::get(address) {
 							weight_info.try_record_proof_size_or_fail(meta.size)?;
+						} else if let Some(remaining_proof_size) =
+							weight_info.remaining_proof_size()
+						{
+							let pre_size = remaining_proof_size.min(size_limit);
+							weight_info.try_record_proof_size_or_fail(pre_size)?;
+
+							let actual_size = Pallet::<T>::account_code_metadata(address).size;
+							if actual_size > pre_size {
+								fp_evm::set_storage_oog();
+								return Err(ExitError::OutOfGas);
+							}
+							// Refund unused proof size
+							weight_info.refund_proof_size(pre_size.saturating_sub(actual_size));
 						}
 
 						recorded.account_codes.push(address);

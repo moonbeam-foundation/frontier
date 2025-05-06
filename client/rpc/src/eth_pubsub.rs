@@ -87,7 +87,7 @@ impl<B: BlockT, P, C, BE> Clone for EthPubSub<B, P, C, BE> {
 
 impl<B: BlockT, P, C, BE> EthPubSub<B, P, C, BE>
 where
-	P: TransactionPool<Block = B> + 'static,
+	P: TransactionPool<Block = B, Hash = B::Hash> + 'static,
 	C: ProvideRuntimeApi<B>,
 	C::Api: EthereumRuntimeRPCApi<B>,
 	C: HeaderBackend<B> + StorageProvider<B, BE>,
@@ -165,7 +165,7 @@ where
 				return future::ready(None);
 			};
 
-			let xts = vec![xt.data().clone()];
+			let xts = vec![xt.data().as_ref().clone()];
 
 			let txs: Option<Vec<EthereumTransaction>> = if api_version > 1 {
 				api.extrinsic_filter(best_block, xts).ok()
@@ -221,7 +221,7 @@ where
 impl<B: BlockT, P, C, BE> EthPubSubApiServer for EthPubSub<B, P, C, BE>
 where
 	B: BlockT,
-	P: TransactionPool<Block = B> + 'static,
+	P: TransactionPool<Block = B, Hash = B::Hash> + 'static,
 	C: ProvideRuntimeApi<B>,
 	C::Api: EthereumRuntimeRPCApi<B>,
 	C: BlockchainEvents<B> + 'static,

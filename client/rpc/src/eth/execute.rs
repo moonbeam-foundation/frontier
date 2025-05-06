@@ -24,7 +24,7 @@ use jsonrpsee::{core::RpcResult, types::error::CALL_EXECUTION_FAILED_CODE};
 use scale_codec::{Decode, Encode};
 // Substrate
 use sc_client_api::backend::{Backend, StorageProvider};
-use sc_transaction_pool::ChainApi;
+use sc_transaction_pool_api::TransactionPool;
 use sp_api::{ApiExt, CallApiAt, CallApiAtParams, CallContext, ProvideRuntimeApi};
 use sp_block_builder::BlockBuilder as BlockBuilderApi;
 use sp_blockchain::HeaderBackend;
@@ -187,16 +187,16 @@ impl EstimateGasAdapter for () {
 	}
 }
 
-impl<B, C, P, CT, BE, A, CIDP, EC> Eth<B, C, P, CT, BE, A, CIDP, EC>
+impl<B, C, P, CT, BE, CIDP, EC> Eth<B, C, P, CT, BE, CIDP, EC>
 where
 	B: BlockT,
 	C: CallApiAt<B> + ProvideRuntimeApi<B>,
 	C::Api: BlockBuilderApi<B> + EthereumRuntimeRPCApi<B>,
 	C: HeaderBackend<B> + StorageProvider<B, BE> + 'static,
 	BE: Backend<B> + 'static,
-	A: ChainApi<Block = B>,
 	CIDP: CreateInherentDataProviders<B, ()> + Send + 'static,
 	EC: EthConfig<B, C>,
+	P: TransactionPool<Block = B, Hash = B::Hash> + 'static,
 {
 	pub async fn call(
 		&self,
@@ -1176,8 +1176,8 @@ pub fn error_on_execution_failure(reason: &ExitReason, data: &[u8]) -> RpcResult
 			// A minimum size of error function selector (4) + offset (32) + string length (32)
 			// should contain a utf-8 encoded revert reason.
 			if data.len() > MESSAGE_START {
-				let message_len =
-					U256::from(&data[LEN_START..MESSAGE_START]).saturated_into::<usize>();
+				let message_len = U256::from_big_endian(&data[LEN_START..MESSAGE_START])
+					.saturated_into::<usize>();
 				let message_end = MESSAGE_START.saturating_add(message_len);
 
 				if data.len() >= message_end {

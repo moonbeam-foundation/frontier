@@ -66,9 +66,15 @@ where
 					if vec.len() <= VARIADIC_MULTIPLE_MAX_SIZE {
 						Ok(VariadicValue::Multiple(vec))
 					} else {
+<<<<<<< HEAD
 						Err(D::Error::custom(format!(
 							"Invalid variadic value type: too big array"
 						)))
+=======
+						Err(D::Error::custom(
+							"Invalid variadic value type: too big array".to_string(),
+						))
+>>>>>>> moonbeam-polkadot-stable2412
 					}
 				}
 				Err(err) => Err(D::Error::custom(format!(

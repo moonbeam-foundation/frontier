@@ -13,12 +13,12 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 environmental = { workspace = true, optional = true }
-evm = { workspace = true, features = ["with-codec"] }
+evm = { workspace = true, features = ["with-codec", "allow_explicit_address"] }
 hash-db = { workspace = true }
 hex-literal = { workspace = true }
-impl-trait-for-tuples = "0.2.2"
+impl-trait-for-tuples = "0.2.3"
 log = { workspace = true }
-scale-codec = { package = "parity-scale-codec", workspace = true }
+scale-codec = { workspace = true }
 scale-info = { workspace = true }
 
 # Cumulus
@@ -48,7 +48,7 @@ default = ["std"]
 std = [
 	"environmental?/std",
 	"evm/std",
-	"evm/with-serde",
+	"evm/serde",
 	"hex/std",
 	"log/std",
 	"scale-codec/std",
