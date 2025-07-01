@@ -409,6 +409,26 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn recover_signer(transaction: &Transaction) -> Option<H160> {
+		/// The order of the secp256k1 curve, divided by two.
+		///
+		/// Signatures that should be checked according to EIP-2 should have an S value less than or equal to this:
+		///
+		/// `57896044618658097711785492504343953926418782139537452191302581570759080747168`
+		const SECP256K1N_HALF: H256 = H256([
+			0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+			0xff, 0xff, 0x5d, 0x57, 0x6e, 0x73, 0x57, 0xa4, 0x50, 0x1d, 0xdf, 0xe9, 0x2f, 0x46,
+			0x68, 0x1b, 0x20, 0xa0,
+		]);
+		let s_value = match transaction {
+			Transaction::Legacy(t) => *t.signature.s(),
+			Transaction::EIP2930(t) => t.s,
+			Transaction::EIP1559(t) => t.s,
+		};
+
+		if s_value > SECP256K1N_HALF {
+			return None;
+		}
+
 		let mut sig = [0u8; 65];
 		let mut msg = [0u8; 32];
 		match transaction {
