@@ -13,6 +13,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 environmental = { workspace = true, optional = true }
+ethereum = { workspace = true }
 evm = { workspace = true, features = ["with-codec", "allow_explicit_address"] }
 hash-db = { workspace = true }
 hex-literal = { workspace = true }
@@ -47,6 +48,7 @@ pallet-timestamp = { workspace = true, features = ["default"] }
 default = ["std"]
 std = [
 	"environmental?/std",
+	"ethereum/std",
 	"evm/std",
 	"evm/serde",
 	"hex/std",
@@ -54,7 +56,7 @@ std = [
 	"scale-codec/std",
 	"scale-info/std",
 	# Cumulus
-    "cumulus-primitives-storage-weight-reclaim/std",
+	"cumulus-primitives-storage-weight-reclaim/std",
 	# Substrate
 	"frame-benchmarking?/std",
 	"frame-support/std",

@@ -1988,7 +1988,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 2.0.101",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -2444,13 +2444,15 @@ dependencies = [
 
 [[package]]
 name = "ethereum"
-version = "0.15.0"
-source = "git+https://github.com/rust-ethereum/ethereum?rev=3be0d8fd4c2ad1ba216b69ef65b9382612efc8ba#3be0d8fd4c2ad1ba216b69ef65b9382612efc8ba"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ee371ebb7479ed3258617557ab0b3247e741075cb6b02b820d188f68da44441"
 dependencies = [
  "bytes",
  "ethereum-types",
  "hash-db",
  "hash256-std-hasher",
+ "k256",
  "parity-scale-codec",
  "rlp",
  "scale-info",
@@ -2515,7 +2517,7 @@ dependencies = [
 [[package]]
 name = "evm"
 version = "0.42.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2412#b6a1aefabe4d6866992ed3b7ba2e7403baa70534"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2412#44aa6b59e07f96d4b962813f74e08bcfdd94e2c6"
 dependencies = [
  "auto_impl",
  "environmental",
@@ -2535,7 +2537,7 @@ dependencies = [
 [[package]]
 name = "evm-core"
 version = "0.42.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2412#b6a1aefabe4d6866992ed3b7ba2e7403baa70534"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2412#44aa6b59e07f96d4b962813f74e08bcfdd94e2c6"
 dependencies = [
  "parity-scale-codec",
  "primitive-types 0.13.1",
@@ -2546,7 +2548,7 @@ dependencies = [
 [[package]]
 name = "evm-gasometer"
 version = "0.42.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2412#b6a1aefabe4d6866992ed3b7ba2e7403baa70534"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2412#44aa6b59e07f96d4b962813f74e08bcfdd94e2c6"
 dependencies = [
  "environmental",
  "evm-core",
@@ -2557,7 +2559,7 @@ dependencies = [
 [[package]]
 name = "evm-runtime"
 version = "0.42.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2412#b6a1aefabe4d6866992ed3b7ba2e7403baa70534"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2412#44aa6b59e07f96d4b962813f74e08bcfdd94e2c6"
 dependencies = [
  "auto_impl",
  "environmental",
@@ -3514,6 +3516,7 @@ dependencies = [
 name = "frontier-template-runtime"
 version = "0.0.0"
 dependencies = [
+ "ethereum",
  "fp-account",
  "fp-evm",
  "fp-rpc",
@@ -6583,7 +6586,7 @@ version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af1844ef2428cc3e1cb900be36181049ef3d3193c63e43026cfe202983b27a56"
 dependencies = [
- "proc-macro-crate 3.3.0",
+ "proc-macro-crate 1.1.3",
  "proc-macro2",
  "quote",
  "syn 2.0.101",
@@ -6878,6 +6881,7 @@ version = "6.0.0-dev"
 dependencies = [
  "cumulus-primitives-storage-weight-reclaim",
  "environmental",
+ "ethereum",
  "evm",
  "fp-account",
  "fp-evm",
