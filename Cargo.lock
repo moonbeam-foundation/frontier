@@ -2177,7 +2177,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1145d32e826a7748b69ee8fc62d3e6355ff7f1051df53141e7048162fc90481b"
 dependencies = [
  "data-encoding",
- "syn 2.0.101",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -2749,7 +2749,7 @@ dependencies = [
 [[package]]
 name = "evm"
 version = "0.43.4"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#57843f91cdd8694c2b01785e6940b1e64f93d424"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#ddce592c2fc93fe1ae791d6c596dd74e472e02de"
 dependencies = [
  "auto_impl",
  "environmental",
@@ -2769,7 +2769,7 @@ dependencies = [
 [[package]]
 name = "evm-core"
 version = "0.43.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#57843f91cdd8694c2b01785e6940b1e64f93d424"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#ddce592c2fc93fe1ae791d6c596dd74e472e02de"
 dependencies = [
  "parity-scale-codec",
  "primitive-types",
@@ -2780,7 +2780,7 @@ dependencies = [
 [[package]]
 name = "evm-gasometer"
 version = "0.43.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#57843f91cdd8694c2b01785e6940b1e64f93d424"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#ddce592c2fc93fe1ae791d6c596dd74e472e02de"
 dependencies = [
  "environmental",
  "evm-core",
@@ -2791,7 +2791,7 @@ dependencies = [
 [[package]]
 name = "evm-runtime"
 version = "0.43.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#57843f91cdd8694c2b01785e6940b1e64f93d424"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#ddce592c2fc93fe1ae791d6c596dd74e472e02de"
 dependencies = [
  "auto_impl",
  "environmental",
