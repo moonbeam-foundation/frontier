@@ -474,7 +474,7 @@ describeWithFrontier("Frontier RPC (EIP-7702 Set Code Authorization)", (context:
 		if (!contractAddress) {
 			// Deploy a simple contract for testing if not already deployed
 			const tx = await signer.sendTransaction({
-				data: "0x" + SIMPLE_CONTRACT_CREATION,
+				data: "0x",
 				gasLimit: "0x100000",
 				gasPrice: "0x3B9ACA00",
 			});
@@ -733,7 +733,7 @@ describeWithFrontier("Frontier RPC (EIP-7702 Set Code Authorization)", (context:
 		if (!contractAddress) {
 			// Deploy a simple contract for testing if not already deployed
 			const tx = await signer.sendTransaction({
-				data: "0x" + SIMPLE_CONTRACT_CREATION,
+				data: "0x",
 				gasLimit: "0x100000",
 				gasPrice: "0x3B9ACA00",
 			});
