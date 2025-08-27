@@ -105,6 +105,7 @@ impl sp_runtime::traits::Convert<H160, MockAccount> for MockAccount {
 	Clone,
 	Encode,
 	Decode,
+	DecodeWithMemTracking,
 	sp_core::RuntimeDebug,
 	TypeInfo,
 	Serialize,
