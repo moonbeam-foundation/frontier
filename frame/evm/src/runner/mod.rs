@@ -20,7 +20,6 @@ pub mod stack;
 
 use crate::{Config, Weight};
 use alloc::vec::Vec;
-use ethereum::AuthorizationList;
 use fp_evm::{CallInfo, CreateInfo};
 use sp_core::{H160, H256, U256};
 
@@ -43,7 +42,6 @@ pub trait Runner<T: Config> {
 		max_priority_fee_per_gas: Option<U256>,
 		nonce: Option<U256>,
 		access_list: Vec<(H160, Vec<H256>)>,
-		authorization_list: Vec<(U256, H160, U256, Option<H160>)>,
 		is_transactional: bool,
 		weight_limit: Option<Weight>,
 		proof_size_base_cost: Option<u64>,
@@ -60,7 +58,6 @@ pub trait Runner<T: Config> {
 		max_priority_fee_per_gas: Option<U256>,
 		nonce: Option<U256>,
 		access_list: Vec<(H160, Vec<H256>)>,
-		authorization_list: AuthorizationList,
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
@@ -77,7 +74,6 @@ pub trait Runner<T: Config> {
 		max_priority_fee_per_gas: Option<U256>,
 		nonce: Option<U256>,
 		access_list: Vec<(H160, Vec<H256>)>,
-		authorization_list: AuthorizationList,
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,
@@ -95,7 +91,6 @@ pub trait Runner<T: Config> {
 		max_priority_fee_per_gas: Option<U256>,
 		nonce: Option<U256>,
 		access_list: Vec<(H160, Vec<H256>)>,
-		authorization_list: AuthorizationList,
 		is_transactional: bool,
 		validate: bool,
 		weight_limit: Option<Weight>,

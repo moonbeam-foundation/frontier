@@ -18,7 +18,7 @@
 
 use std::sync::Arc;
 
-use ethereum::TransactionV3 as EthereumTransaction;
+use ethereum::TransactionV2 as EthereumTransaction;
 use ethereum_types::{H256, U256, U64};
 use jsonrpsee::core::RpcResult;
 // Substrate
@@ -222,12 +222,12 @@ where
 					if !block_info.is_eip1559 {
 						// Pre-london frontier update stored receipts require cumulative gas calculation.
 						match receipt {
-							ethereum::ReceiptV4::Legacy(ref d) => {
+							ethereum::ReceiptV3::Legacy(ref d) => {
 								let index = core::cmp::min(receipts.len(), index + 1);
 								let cumulative_gas: u32 = receipts[..index]
 									.iter()
 									.map(|r| match r {
-										ethereum::ReceiptV4::Legacy(d) => Ok(d.used_gas.as_u32()),
+										ethereum::ReceiptV3::Legacy(d) => Ok(d.used_gas.as_u32()),
 										_ => Err(internal_err(format!(
 											"Unknown receipt for request {}",
 											hash
@@ -251,18 +251,16 @@ where
 						}
 					} else {
 						match receipt {
-							ethereum::ReceiptV4::Legacy(ref d)
-							| ethereum::ReceiptV4::EIP2930(ref d)
-							| ethereum::ReceiptV4::EIP1559(ref d)
-							| ethereum::ReceiptV4::EIP7702(ref d) => {
+							ethereum::ReceiptV3::Legacy(ref d)
+							| ethereum::ReceiptV3::EIP2930(ref d)
+							| ethereum::ReceiptV3::EIP1559(ref d) => {
 								let cumulative_gas = d.used_gas;
 								let gas_used = if index > 0 {
 									let previous_receipt = receipts[index - 1].clone();
 									let previous_gas_used = match previous_receipt {
-										ethereum::ReceiptV4::Legacy(d)
-										| ethereum::ReceiptV4::EIP2930(d)
-										| ethereum::ReceiptV4::EIP1559(d)
-										| ethereum::ReceiptV4::EIP7702(d) => d.used_gas,
+										ethereum::ReceiptV3::Legacy(d)
+										| ethereum::ReceiptV3::EIP2930(d)
+										| ethereum::ReceiptV3::EIP1559(d) => d.used_gas,
 									};
 									cumulative_gas.saturating_sub(previous_gas_used)
 								} else {
@@ -283,9 +281,10 @@ where
 				let mut cumulative_receipts = receipts;
 				cumulative_receipts.truncate((status.transaction_index + 1) as usize);
 				let transaction = block.transactions[index].clone();
-				// Helper closure for EIP1559-style effective gas price calculation (used by EIP1559 and EIP7702)
-				let calculate_eip1559_effective_gas_price =
-					|max_priority_fee_per_gas: U256, max_fee_per_gas: U256| async move {
+				let effective_gas_price = match transaction {
+					EthereumTransaction::Legacy(t) => t.gas_price,
+					EthereumTransaction::EIP2930(t) => t.gas_price,
+					EthereumTransaction::EIP1559(t) => {
 						let parent_eth_hash = block.header.parent_hash;
 						let base_fee_block_substrate_hash = if parent_eth_hash.is_zero() {
 							substrate_hash
@@ -302,36 +301,13 @@ where
 							))?
 						};
 
-						let base_fee = self
-							.client
+						self.client
 							.runtime_api()
 							.gas_price(base_fee_block_substrate_hash)
-							.unwrap_or_default();
-
-						Ok::<ethereum_types::U256, jsonrpsee::types::error::ErrorObjectOwned>(
-							base_fee
-								.checked_add(max_priority_fee_per_gas)
-								.unwrap_or_else(U256::max_value)
-								.min(max_fee_per_gas),
-						)
-					};
-
-				let effective_gas_price = match &transaction {
-					EthereumTransaction::Legacy(t) => t.gas_price,
-					EthereumTransaction::EIP2930(t) => t.gas_price,
-					EthereumTransaction::EIP1559(t) => {
-						calculate_eip1559_effective_gas_price(
-							t.max_priority_fee_per_gas,
-							t.max_fee_per_gas,
-						)
-						.await?
-					}
-					EthereumTransaction::EIP7702(t) => {
-						calculate_eip1559_effective_gas_price(
-							t.max_priority_fee_per_gas,
-							t.max_fee_per_gas,
-						)
-						.await?
+							.unwrap_or_default()
+							.checked_add(t.max_priority_fee_per_gas)
+							.unwrap_or_else(U256::max_value)
+							.min(t.max_fee_per_gas)
 					}
 				};
 
@@ -353,10 +329,9 @@ where
 								cumulative_receipts
 									.iter()
 									.map(|r| match r {
-										ethereum::ReceiptV4::Legacy(d)
-										| ethereum::ReceiptV4::EIP2930(d)
-										| ethereum::ReceiptV4::EIP1559(d)
-										| ethereum::ReceiptV4::EIP7702(d) => d.logs.len() as u32,
+										ethereum::ReceiptV3::Legacy(d)
+										| ethereum::ReceiptV3::EIP2930(d)
+										| ethereum::ReceiptV3::EIP1559(d) => d.logs.len() as u32,
 									})
 									.sum::<u32>(),
 							);
@@ -384,10 +359,9 @@ where
 					state_root: None,
 					effective_gas_price,
 					transaction_type: match receipt {
-						ethereum::ReceiptV4::Legacy(_) => U256::from(0),
-						ethereum::ReceiptV4::EIP2930(_) => U256::from(1),
-						ethereum::ReceiptV4::EIP1559(_) => U256::from(2),
-						ethereum::ReceiptV4::EIP7702(_) => U256::from(4),
+						ethereum::ReceiptV3::Legacy(_) => U256::from(0),
+						ethereum::ReceiptV3::EIP2930(_) => U256::from(1),
+						ethereum::ReceiptV3::EIP1559(_) => U256::from(2),
 					},
 				}));
 			}
