@@ -3055,6 +3055,7 @@ dependencies = [
  "rustc-hex",
  "serde",
  "serde_json",
+ "sp-core",
  "sp-crypto-hashing 0.1.0 (git+https://github.com/moonbeam-foundation/polkadot-sdk?branch=moonbeam-polkadot-stable2503)",
 ]
 
