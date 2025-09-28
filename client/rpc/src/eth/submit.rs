@@ -267,7 +267,10 @@ where
 						.convert_transaction_before_version_2(block_hash, legacy_transaction)
 					{
 						Ok(extrinsic) => Ok(extrinsic),
-						Err(_) => Err(internal_err("cannot access `ConvertTransactionRuntimeApi`")),
+						Err(err) => Err(internal_err(format!(
+							"cannot convert transaction_before_version_2: {}",
+							err
+						))),
 					}
 				} else {
 					Err(internal_err(

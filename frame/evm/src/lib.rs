@@ -87,13 +87,13 @@ use frame_support::{
 			currency::Currency,
 			fungible::Inspect,
 			imbalance::{Imbalance, OnUnbalanced, SignedImbalance},
-			ExistenceRequirement, Fortitude, Precision, Preservation, WithdrawReasons,
+			ExistenceRequirement, Fortitude, Precision, Preservation, WithdrawConsequence,
+			WithdrawReasons,
 		},
 		FindAuthor, Get, Time,
 	},
 	weights::Weight,
 };
-use frame_support::traits::tokens::WithdrawConsequence;
 use frame_system::RawOrigin;
 use sp_core::{H160, H256, U256};
 use sp_runtime::{
@@ -717,7 +717,6 @@ pub mod pallet {
 					.saturating_add(T::DbWeight::get().reads(1))
 					.saturating_add(account_basic_weight)
 					.saturating_add(min_gas_weight);
-
 			}
 
 			total_weight
