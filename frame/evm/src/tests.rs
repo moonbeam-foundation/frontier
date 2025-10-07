@@ -536,6 +536,7 @@ mod proof_size_test {
 
 	#[test]
 	fn proof_size_breaks_standard_transfer() {
+		frame_support::__private::sp_tracing::init_for_tests();
 		new_test_ext().execute_with(|| {
 			// In this test we do a simple transfer to an address with an stored code which is
 			// greater in size (and thus load cost) than the transfer flat fee of 21_000.
