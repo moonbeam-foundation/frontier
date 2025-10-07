@@ -7195,6 +7195,7 @@ dependencies = [
 name = "pallet-ethereum"
 version = "4.0.0-dev"
 dependencies = [
+ "environmental",
  "ethereum",
  "ethereum-types",
  "evm",
