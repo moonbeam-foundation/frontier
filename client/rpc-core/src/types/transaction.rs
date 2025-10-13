@@ -17,7 +17,7 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use ethereum::{
-	AccessListItem, AuthorizationListItem, TransactionAction, TransactionV3 as EthereumTransaction,
+	AccessListItem, AuthorizationList, TransactionAction, TransactionV3 as EthereumTransaction
 };
 use ethereum_types::{H160, H256, U256, U64};
 use serde::{ser::SerializeStruct, Serialize, Serializer};
@@ -70,7 +70,7 @@ pub struct Transaction {
 	pub access_list: Option<Vec<AccessListItem>>,
 	/// EIP-7702 authorization list.
 	#[serde(skip_serializing_if = "Option::is_none")]
-	pub authorization_list: Option<Vec<AuthorizationListItem>>,
+	pub authorization_list: Option<AuthorizationList>,
 	/// The parity (0 for even, 1 for odd) of the y-value of the secp256k1 signature.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub y_parity: Option<U256>,
