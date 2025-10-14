@@ -17,8 +17,8 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use ethereum::{
-	AccessListItem, AuthorizationListItem, EIP1559TransactionMessage, EIP2930TransactionMessage,
-	EIP7702TransactionMessage, LegacyTransactionMessage, TransactionAction,
+	AuthorizationListItem,
+	AccessListItem, AuthorizationList, EIP1559TransactionMessage, EIP2930TransactionMessage, EIP7702TransactionMessage, LegacyTransactionMessage, TransactionAction
 };
 use ethereum_types::{H160, U256, U64};
 use serde::{Deserialize, Deserializer};
@@ -107,9 +107,11 @@ mod authorization_list_item_camelcase {
 	#[derive(Deserialize)]
 	#[serde(rename_all = "camelCase")]
 	struct AuthorizationListItemDef {
+		#[serde(with = "ethereum::util::hex_u64")]
 		chain_id: u64,
 		address: Address,
 		nonce: ethereum_types::U256,
+		#[serde(with = "ethereum::util::hex_bool")]
 		y_parity: bool,
 		r: H256,
 		s: H256,

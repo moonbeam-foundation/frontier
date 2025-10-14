@@ -104,9 +104,13 @@ where
 {
 	pub fn query<T: Decode>(&self, at: B::Hash, key: &StorageKey) -> Option<T> {
 		if let Ok(Some(data)) = self.client.storage(at, key) {
-			if let Ok(result) = Decode::decode(&mut &data.0[..]) {
-				return Some(result);
-			}
+			return match Decode::decode(&mut &data.0[..]) {
+				Ok(value) => Some(value),
+				Err(err) => {
+					log::error!("Could not decode storage: {}", err);
+					None
+				},
+			};
 		}
 		None
 	}

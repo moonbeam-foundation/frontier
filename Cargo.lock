@@ -2688,7 +2688,7 @@ dependencies = [
 [[package]]
 name = "ethereum"
 version = "0.18.2"
-source = "git+https://github.com/rust-ethereum/ethereum?rev=cf3076f07e61102eec686f6816da668f97d94f1f#cf3076f07e61102eec686f6816da668f97d94f1f"
+source = "git+https://github.com/moonbeam-foundation/ethereum?branch=moonbeam-polkadot-stable2503#5253c50bfa346124c5b1d472165fcb7f8664a2f2"
 dependencies = [
  "bytes",
  "ethereum-types",
@@ -2749,7 +2749,7 @@ dependencies = [
 [[package]]
 name = "evm"
 version = "0.43.4"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#b3d5b09d5136f76a7e63fae94674f194542e6144"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#1b88b75c1e8243e7502125d1cb7505653a5d8fae"
 dependencies = [
  "auto_impl",
  "environmental",
@@ -2769,7 +2769,7 @@ dependencies = [
 [[package]]
 name = "evm-core"
 version = "0.43.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#b3d5b09d5136f76a7e63fae94674f194542e6144"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#1b88b75c1e8243e7502125d1cb7505653a5d8fae"
 dependencies = [
  "parity-scale-codec",
  "primitive-types",
@@ -2780,7 +2780,7 @@ dependencies = [
 [[package]]
 name = "evm-gasometer"
 version = "0.43.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#b3d5b09d5136f76a7e63fae94674f194542e6144"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#1b88b75c1e8243e7502125d1cb7505653a5d8fae"
 dependencies = [
  "environmental",
  "evm-core",
@@ -2791,7 +2791,7 @@ dependencies = [
 [[package]]
 name = "evm-runtime"
 version = "0.43.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#b3d5b09d5136f76a7e63fae94674f194542e6144"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2503#1b88b75c1e8243e7502125d1cb7505653a5d8fae"
 dependencies = [
  "auto_impl",
  "environmental",
@@ -3090,6 +3090,7 @@ dependencies = [
  "ethereum-types",
  "fp-rpc",
  "fp-storage",
+ "log",
  "parity-scale-codec",
  "sc-client-api",
  "sp-api",
