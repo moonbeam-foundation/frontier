@@ -270,6 +270,9 @@ impl FilteredParams {
 	}
 
 	pub fn filter_topics(&self, topics: &[H256]) -> bool {
+		if self.filter.topics.len() > topics.len() {
+			return false;
+		}
 		let replaced = self.replace(topics, self.filter.topics.clone().into());
 		for (idx, topic) in topics.iter().enumerate() {
 			if !replaced[idx].contains(&topic) {
