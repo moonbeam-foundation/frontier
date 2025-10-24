@@ -3090,6 +3090,7 @@ dependencies = [
  "ethereum-types",
  "fp-rpc",
  "fp-storage",
+ "log",
  "parity-scale-codec",
  "sc-client-api",
  "sp-api",
