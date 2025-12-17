@@ -37,7 +37,15 @@ use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
 use fc_storage::StorageOverride;
 use fp_rpc::EthereumRuntimeRPCApi;
 
-use crate::SyncStrategy;
+use crate::{ReorgInfo, SyncStrategy};
+
+/// Information tracked at import time for a block that was `is_new_best`.
+pub struct BestBlockInfo<Block: BlockT> {
+	/// The block number (for pruning purposes).
+	pub block_number: <Block::Header as HeaderT>::Number,
+	/// Reorg info if this block became best as part of a reorganization.
+	pub reorg_info: Option<ReorgInfo<Block>>,
+}
 
 pub struct MappingSyncWorker<Block: BlockT, C, BE> {
 	import_notifications: ImportNotifications<Block>,
@@ -59,11 +67,11 @@ pub struct MappingSyncWorker<Block: BlockT, C, BE> {
 		Arc<crate::EthereumBlockNotificationSinks<crate::EthereumBlockNotification<Block>>>,
 
 	/// Tracks block hashes that were `is_new_best` at the time of their import notification,
-	/// along with their block number for pruning purposes.
+	/// along with their block number for pruning purposes and optional reorg info.
 	/// This is used to correctly determine `is_new_best` when syncing blocks, avoiding race
 	/// conditions where the best hash may have changed between import and sync time.
 	/// Entries are pruned when blocks become finalized to prevent unbounded growth.
-	best_at_import: HashMap<Block::Hash, <Block::Header as HeaderT>::Number>,
+	best_at_import: HashMap<Block::Hash, BestBlockInfo<Block>>,
 }
 
 impl<Block: BlockT, C, BE> Unpin for MappingSyncWorker<Block, C, BE> {}
@@ -126,10 +134,33 @@ where
 					fire = true;
 					// Track blocks that were `is_new_best` at import time to avoid race
 					// conditions when determining `is_new_best` at sync time.
-					// We store the block number to enable pruning of old entries.
+					// We store the block number to enable pruning of old entries,
+					// and reorg info if this block became best as part of a reorg.
 					if notification.is_new_best {
-						self.best_at_import
-							.insert(notification.hash, *notification.header.number());
+						let reorg_info = notification.tree_route.as_ref().map(|tree_route| {
+							let retracted = tree_route
+								.retracted()
+								.iter()
+								.map(|hash_and_number| hash_and_number.hash)
+								.collect();
+							let enacted = tree_route
+								.enacted()
+								.iter()
+								.map(|hash_and_number| hash_and_number.hash)
+								.collect();
+							ReorgInfo {
+								common_ancestor: tree_route.common_block().hash,
+								retracted,
+								enacted,
+							}
+						});
+						self.best_at_import.insert(
+							notification.hash,
+							BestBlockInfo {
+								block_number: *notification.header.number(),
+								reorg_info,
+							},
+						);
 					}
 				}
 				Poll::Ready(None) => return Poll::Ready(None),
