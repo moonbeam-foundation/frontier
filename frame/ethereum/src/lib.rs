@@ -1138,9 +1138,11 @@ impl From<TransactionValidationError> for InvalidTransactionWrapper {
 			TransactionValidationError::GasLimitTooLow => InvalidTransactionWrapper(
 				InvalidTransaction::Custom(TransactionValidationError::GasLimitTooLow as u8),
 			),
-			TransactionValidationError::GasLimitTooHigh => InvalidTransactionWrapper(
-				InvalidTransaction::Custom(TransactionValidationError::GasLimitTooHigh as u8),
-			),
+			TransactionValidationError::GasLimitExceedsBlockLimit => {
+				InvalidTransactionWrapper(InvalidTransaction::Custom(
+					TransactionValidationError::GasLimitExceedsBlockLimit as u8,
+				))
+			}
 			TransactionValidationError::PriorityFeeTooHigh => InvalidTransactionWrapper(
 				InvalidTransaction::Custom(TransactionValidationError::PriorityFeeTooHigh as u8),
 			),
@@ -1173,6 +1175,11 @@ impl From<TransactionValidationError> for InvalidTransactionWrapper {
 			TransactionValidationError::AuthorizationListTooLarge => {
 				InvalidTransactionWrapper(InvalidTransaction::Custom(
 					TransactionValidationError::AuthorizationListTooLarge as u8,
+				))
+			}
+			TransactionValidationError::TransactionGasLimitExceedsCap => {
+				InvalidTransactionWrapper(InvalidTransaction::Custom(
+					TransactionValidationError::TransactionGasLimitExceedsCap as u8,
 				))
 			}
 			TransactionValidationError::UnknownError => InvalidTransactionWrapper(
