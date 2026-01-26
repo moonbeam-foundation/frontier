@@ -15246,3 +15246,8 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "ethereum"
+version = "0.18.2"
+source = "git+https://github.com/rust-ethereum/ethereum.git?rev=5185fe8efa62add7e989660a69c6945c8a3ae64e#5185fe8efa62add7e989660a69c6945c8a3ae64e"
