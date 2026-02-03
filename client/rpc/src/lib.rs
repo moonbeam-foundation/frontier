@@ -434,7 +434,7 @@ mod tests {
 			ethereum_block_hash,
 			ethereum_transaction_hashes: vec![],
 		};
-		let _ = backend.mapping().write_hashes(commitment);
+		let _ = backend.mapping().write_hashes(commitment, 2);
 
 		// Expect B1 to be canon
 		assert_eq!(
@@ -466,7 +466,7 @@ mod tests {
 			ethereum_block_hash,
 			ethereum_transaction_hashes: vec![],
 		};
-		let _ = backend.mapping().write_hashes(commitment);
+		let _ = backend.mapping().write_hashes(commitment, 2);
 
 		// Still expect B1 to be canon
 		assert_eq!(
