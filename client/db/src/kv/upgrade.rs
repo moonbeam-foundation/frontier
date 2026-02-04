@@ -141,11 +141,6 @@ pub(crate) fn upgrade_db<Block: BlockT, C: HeaderBackend<Block>>(
 
 	// Version 2 -> 3: Backfill block_number -> ethereum_block_hash mapping
 	if db_version == 2 {
-		// ParityDB schema change: v2 had 4 columns, v3 requires 5.
-		// Add the column while DB is closed, then re-open and backfill.
-		if matches!(source, DatabaseSource::ParityDb { .. }) {
-			ensure_paritydb_has_v3_columns(db_path)?;
-		}
 		let summary: UpgradeVersion2To3Summary = match source {
 			DatabaseSource::ParityDb { .. } => {
 				migrate_2_to_3_parity_db::<Block, C>(client.clone(), db_path)?
@@ -775,12 +770,9 @@ mod tests {
 
 		// Write version file to indicate v2.
 		std::fs::create_dir_all(&db_path).expect("db path created");
-		let mut version_path = db_path.clone();
-		version_path.push("db_version");
-		let mut version_file = std::fs::File::create(version_path).expect("db version file created");
-		version_file
-			.write_all(b"2")
-			.expect("write version 2");
+		let mut version_file =
+			std::fs::File::create(super::version_file_path(&db_path)).expect("db version file created");
+		version_file.write_all(b"2").expect("write version 2");
 
 		// Run upgrade: should add the new column and backfill block_number -> eth_hash mapping.
 		let source = sc_client_db::DatabaseSource::ParityDb {
@@ -802,6 +794,84 @@ mod tests {
 		let decoded: Vec<<OpaqueBlock as BlockT>::Hash> =
 			Vec::decode(&mut &raw[..]).expect("decode Vec<Block::Hash>");
 		assert_eq!(decoded, vec![substrate_hash]);
+
+		// New index is backfilled.
+		let raw = db
+			.get(
+				crate::kv::columns::BLOCK_NUMBER_MAPPING as u8,
+				&block_number_u64.encode(),
+			)
+			.expect("get block number mapping")
+			.expect("block number mapping exists");
+		let decoded_eth = H256::decode(&mut &raw[..]).expect("decode H256");
+		assert_eq!(decoded_eth, eth_hash);
+
+		// Version file updated to current.
+		assert_eq!(super::current_version(&db_path).expect("version"), 3u32);
+	}
+
+	#[test]
+	fn upgrade_paritydb_without_version_file_detects_v2_and_migrates() {
+		let tmp = tempdir().expect("create a temporary directory");
+		let db_path = tmp.path().to_owned();
+
+		let (client, _) = TestClientBuilder::new()
+			.build_with_native_executor::<substrate_test_runtime_client::runtime::RuntimeApi, _>(
+			None,
+		);
+		let client = Arc::new(client);
+
+		// Build/import one block so we have a known block hash -> block number mapping.
+		let chain_info = client.chain_info();
+		let mut builder = BlockBuilderBuilder::new(&*client)
+			.on_parent_block(chain_info.best_hash)
+			.with_parent_block_number(chain_info.best_number)
+			.build()
+			.expect("build block");
+		builder
+			.push_storage_change(vec![1], None)
+			.expect("push storage change");
+		let block = builder.build().expect("build").block;
+		let substrate_hash = block.header.hash();
+		let block_number_u64: u64 = (*block.header.number()).into();
+		executor::block_on(client.import(BlockOrigin::Own, block)).expect("import block");
+
+		// Create an "old" ParityDB (v2) with 4 columns and a v2-style BLOCK_MAPPING entry.
+		// Importantly: do NOT write a db_version file.
+		let eth_hash = H256::random();
+		{
+			let mut opts_v2 =
+				parity_db::Options::with_columns(&db_path, super::V2_NUM_COLUMNS as u8);
+			opts_v2.columns[crate::kv::columns::BLOCK_MAPPING as usize].btree_index = true;
+			let db = parity_db::Db::open_or_create(&opts_v2).expect("open/create v2 paritydb");
+
+			let key = eth_hash.encode();
+			let value = vec![substrate_hash].encode(); // v2 encoding: Vec<Block::Hash>
+			db.commit(vec![(
+				crate::kv::columns::BLOCK_MAPPING as u8,
+				key,
+				Some(value),
+			)])
+			.expect("commit v2 block mapping");
+		} // DB closed here
+
+		// Confirm there's no version file.
+		assert!(
+			!super::version_file_path(&db_path).exists(),
+			"version file should not exist yet"
+		);
+
+		// Run upgrade: should detect v2, write the version file, add the new column, and backfill.
+		let source = sc_client_db::DatabaseSource::ParityDb {
+			path: db_path.clone(),
+		};
+		super::upgrade_db::<OpaqueBlock, _>(client, &db_path, &source).expect("upgrade v2->v3");
+
+		// Verify the DB can now open with v3 column count.
+		let mut opts_v3 = parity_db::Options::with_columns(&db_path, super::V3_NUM_COLUMNS as u8);
+		opts_v3.columns[crate::kv::columns::BLOCK_MAPPING as usize].btree_index = true;
+		let db = parity_db::Db::open(&opts_v3).expect("open v3 paritydb");
+		assert_eq!(db.num_columns(), super::V3_NUM_COLUMNS as u8);
 
 		// New index is backfilled.
 		let raw = db
@@ -949,13 +1019,9 @@ mod tests {
 
 			// Writes version 1 to file.
 			std::fs::create_dir_all(path).expect("db path created");
-			let mut version_path = path.to_owned();
-			version_path.push("db_version");
 			let mut version_file =
-				std::fs::File::create(version_path).expect("db version file path created");
-			version_file
-				.write_all(format!("{}", 1).as_bytes())
-				.expect("write version 1");
+				std::fs::File::create(super::version_file_path(path)).expect("db version file created");
+			version_file.write_all(b"1").expect("write version 1");
 
 			// Upgrade database from version 1 to current
 			let _ = super::upgrade_db::<OpaqueBlock, _>(client.clone(), path, &setting.source);
