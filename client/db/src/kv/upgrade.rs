@@ -288,8 +288,8 @@ fn detect_version_without_version_file_rocksdb<Block: BlockT, C: HeaderBackend<B
 ) -> UpgradeResult<u32> {
 	let db_cfg = kvdb_rocksdb::DatabaseConfig::with_columns(V2_NUM_COLUMNS);
 	let db = kvdb_rocksdb::Database::open(&db_cfg, db_path)?;
-	let mut iter = db.iter(super::columns::BLOCK_MAPPING)?;
-	let Some((_k, v)) = iter.next().ok().flatten() else {
+	let mut iter = db.iter(super::columns::BLOCK_MAPPING);
+	let Some((_k, v)) = iter.next().and_then(|r| r.ok()) else {
 		return Ok(2);
 	};
 
@@ -470,11 +470,24 @@ pub(crate) fn migrate_1_to_2_parity_db<Block: BlockT, C: HeaderBackend<Block>>(
 
 	// Open with V3_NUM_COLUMNS to handle both v1 DBs (will create missing columns)
 	// and test DBs that were created with 5 columns.
-	let mut db_cfg = parity_db::Options::with_columns(db_path, V1_NUM_COLUMNS as u8);
-	db_cfg.columns[super::columns::BLOCK_MAPPING as usize].btree_index = true;
+	let db = {
+		let mut db_cfg = parity_db::Options::with_columns(db_path, V3_NUM_COLUMNS as u8);
+		db_cfg.columns[super::columns::BLOCK_MAPPING as usize].btree_index = true;
 
-	let db = parity_db::Db::open_or_create(&db_cfg)
-		.map_err(|_| io::Error::other("Failed to open db"))?;
+		match parity_db::Db::open_or_create(&db_cfg) {
+			Ok(db) => db,
+			Err(err_v3) => {
+				let mut db_cfg = parity_db::Options::with_columns(db_path, V1_NUM_COLUMNS as u8);
+				db_cfg.columns[super::columns::BLOCK_MAPPING as usize].btree_index = true;
+
+				parity_db::Db::open_or_create(&db_cfg).map_err(|err_v1| {
+					io::Error::other(format!(
+						"Failed to open db for migrate_1_to_2 (v3 open error: {err_v3}; v1 open error: {err_v1})"
+					))
+				})?
+			}
+		}
+	};
 
 	// Get all the block hashes we need to update
 	let ethereum_hashes: Vec<_> = match db.iter(super::columns::BLOCK_MAPPING as u8) {
@@ -678,7 +691,7 @@ mod tests {
 	};
 
 	use futures::executor;
-	use scale_codec::Encode;
+	use scale_codec::{Decode, Encode};
 	use tempfile::tempdir;
 	// Substrate
 	use sc_block_builder::BlockBuilderBuilder;
@@ -703,6 +716,106 @@ mod tests {
 		Ok(Arc::new(crate::kv::Backend::<Block, C>::new(
 			client, setting,
 		)?))
+	}
+
+	#[test]
+	fn upgrade_2_to_3_paritydb_adds_missing_column_then_backfills() {
+		let tmp = tempdir().expect("create a temporary directory");
+		let db_path = tmp.path().to_owned();
+
+		let (client, _) = TestClientBuilder::new()
+			.build_with_native_executor::<substrate_test_runtime_client::runtime::RuntimeApi, _>(
+			None,
+		);
+		let client = Arc::new(client);
+
+		// Build/import one block so we have a known block hash -> block number mapping.
+		let chain_info = client.chain_info();
+		let mut builder = BlockBuilderBuilder::new(&*client)
+			.on_parent_block(chain_info.best_hash)
+			.with_parent_block_number(chain_info.best_number)
+			.build()
+			.expect("build block");
+		builder
+			.push_storage_change(vec![1], None)
+			.expect("push storage change");
+		let block = builder.build().expect("build").block;
+		let substrate_hash = block.header.hash();
+		let block_number_u64: u64 = (*block.header.number()).into();
+		executor::block_on(client.import(BlockOrigin::Own, block)).expect("import block");
+
+		// Create an "old" ParityDB (v2) with 4 columns and a v2-style BLOCK_MAPPING entry.
+		let eth_hash = H256::random();
+		{
+			let mut opts_v2 =
+				parity_db::Options::with_columns(&db_path, super::V2_NUM_COLUMNS as u8);
+			opts_v2.columns[crate::kv::columns::BLOCK_MAPPING as usize].btree_index = true;
+			let db = parity_db::Db::open_or_create(&opts_v2).expect("open/create v2 paritydb");
+
+			let key = eth_hash.encode();
+			let value = vec![substrate_hash].encode(); // v2 encoding: Vec<Block::Hash>
+			db.commit(vec![(
+				crate::kv::columns::BLOCK_MAPPING as u8,
+				key,
+				Some(value),
+			)])
+			.expect("commit v2 block mapping");
+		} // DB closed here
+
+		// Sanity check: opening with v3 columns should fail before the upgrade runs.
+		{
+			let mut opts_v3 =
+				parity_db::Options::with_columns(&db_path, super::V3_NUM_COLUMNS as u8);
+			opts_v3.columns[crate::kv::columns::BLOCK_MAPPING as usize].btree_index = true;
+			assert!(
+				parity_db::Db::open_or_create(&opts_v3).is_err(),
+				"expected v3 open to fail on a 4-column db"
+			);
+		}
+
+		// Write version file to indicate v2.
+		std::fs::create_dir_all(&db_path).expect("db path created");
+		let mut version_path = db_path.clone();
+		version_path.push("db_version");
+		let mut version_file = std::fs::File::create(version_path).expect("db version file created");
+		version_file
+			.write_all(b"2")
+			.expect("write version 2");
+
+		// Run upgrade: should add the new column and backfill block_number -> eth_hash mapping.
+		let source = sc_client_db::DatabaseSource::ParityDb {
+			path: db_path.clone(),
+		};
+		super::upgrade_db::<OpaqueBlock, _>(client, &db_path, &source).expect("upgrade v2->v3");
+
+		// Verify the DB can now open with v3 column count and contains the backfilled mapping.
+		let mut opts_v3 = parity_db::Options::with_columns(&db_path, super::V3_NUM_COLUMNS as u8);
+		opts_v3.columns[crate::kv::columns::BLOCK_MAPPING as usize].btree_index = true;
+		let db = parity_db::Db::open(&opts_v3).expect("open v3 paritydb");
+		assert_eq!(db.num_columns(), super::V3_NUM_COLUMNS as u8);
+
+		// Old mapping is still present.
+		let raw = db
+			.get(crate::kv::columns::BLOCK_MAPPING as u8, &eth_hash.encode())
+			.expect("get block mapping")
+			.expect("block mapping exists");
+		let decoded: Vec<<OpaqueBlock as BlockT>::Hash> =
+			Vec::decode(&mut &raw[..]).expect("decode Vec<Block::Hash>");
+		assert_eq!(decoded, vec![substrate_hash]);
+
+		// New index is backfilled.
+		let raw = db
+			.get(
+				crate::kv::columns::BLOCK_NUMBER_MAPPING as u8,
+				&block_number_u64.encode(),
+			)
+			.expect("get block number mapping")
+			.expect("block number mapping exists");
+		let decoded_eth = H256::decode(&mut &raw[..]).expect("decode H256");
+		assert_eq!(decoded_eth, eth_hash);
+
+		// Version file updated to current.
+		assert_eq!(super::current_version(&db_path).expect("version"), 3u32);
 	}
 
 	#[cfg_attr(not(feature = "rocksdb"), ignore)]
