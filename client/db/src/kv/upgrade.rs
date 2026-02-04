@@ -256,13 +256,17 @@ fn detect_version_without_version_file_paritydb<Block: BlockT, C: HeaderBackend<
 		io::Error::other(format!("Failed to open paritydb to detect version: {err}"))
 	})?;
 
-	let mut it = db.iter(super::columns::BLOCK_MAPPING as u8).map_err(|err| {
-		io::Error::other(format!("Failed to iterate paritydb to detect version: {err}"))
-	})?;
+	let mut it = db
+		.iter(super::columns::BLOCK_MAPPING as u8)
+		.map_err(|err| {
+			io::Error::other(format!(
+				"Failed to iterate paritydb to detect version: {err}"
+			))
+		})?;
 
-	let maybe_first = it.next().map_err(|err| {
-		io::Error::other(format!("Failed to read paritydb iterator: {err}"))
-	})?;
+	let maybe_first = it
+		.next()
+		.map_err(|err| io::Error::other(format!("Failed to read paritydb iterator: {err}")))?;
 
 	let Some((_k, v)) = maybe_first else {
 		// Empty DB; default to v2 (safe: avoids v1->v2 panic heuristics).
@@ -770,8 +774,8 @@ mod tests {
 
 		// Write version file to indicate v2.
 		std::fs::create_dir_all(&db_path).expect("db path created");
-		let mut version_file =
-			std::fs::File::create(super::version_file_path(&db_path)).expect("db version file created");
+		let mut version_file = std::fs::File::create(super::version_file_path(&db_path))
+			.expect("db version file created");
 		version_file.write_all(b"2").expect("write version 2");
 
 		// Run upgrade: should add the new column and backfill block_number -> eth_hash mapping.
@@ -967,8 +971,7 @@ mod tests {
 					let block = builder.build().expect("build A1 block").block;
 					let next_canon_block_hash = block.header.hash();
 					let next_canon_block_number = *block.header.number();
-					executor::block_on(client.import(BlockOrigin::Own, block))
-						.expect("import A1");
+					executor::block_on(client.import(BlockOrigin::Own, block)).expect("import A1");
 					// A2
 					let mut builder = BlockBuilderBuilder::new(&*client)
 						.on_parent_block(previous_canon_block_hash)
@@ -980,8 +983,7 @@ mod tests {
 						.expect("push A2 storage change");
 					let block = builder.build().expect("build A2 block").block;
 					let orphan_block_hash = block.header.hash();
-					executor::block_on(client.import(BlockOrigin::Own, block))
-						.expect("import A2");
+					executor::block_on(client.import(BlockOrigin::Own, block)).expect("import A2");
 
 					// Track canon hash
 					ethereum_hashes.push(ethhash);
@@ -1019,8 +1021,8 @@ mod tests {
 
 			// Writes version 1 to file.
 			std::fs::create_dir_all(path).expect("db path created");
-			let mut version_file =
-				std::fs::File::create(super::version_file_path(path)).expect("db version file created");
+			let mut version_file = std::fs::File::create(super::version_file_path(path))
+				.expect("db version file created");
 			version_file.write_all(b"1").expect("write version 1");
 
 			// Upgrade database from version 1 to current
