@@ -216,8 +216,8 @@ fn unprotected_transaction_should_fail_when_not_allowed() {
 
 	ext.execute_with(|| {
 		AllowUnprotectedTxs::set(false);
-		let transaction = legacy_erc20_creation_unsigned_transaction()
-			.sign_without_chain_id(&alice.private_key);
+		let transaction =
+			legacy_erc20_creation_unsigned_transaction().sign_without_chain_id(&alice.private_key);
 
 		let call = crate::Call::<Test>::transact { transaction };
 		let source = call.check_self_contained().unwrap().unwrap();
@@ -242,8 +242,8 @@ fn unprotected_transaction_should_succeed_when_allowed() {
 
 	ext.execute_with(|| {
 		AllowUnprotectedTxs::set(true);
-		let transaction = legacy_erc20_creation_unsigned_transaction()
-			.sign_without_chain_id(&alice.private_key);
+		let transaction =
+			legacy_erc20_creation_unsigned_transaction().sign_without_chain_id(&alice.private_key);
 
 		let call = crate::Call::<Test>::transact { transaction };
 		let source = call.check_self_contained().unwrap().unwrap();
