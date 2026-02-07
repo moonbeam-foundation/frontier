@@ -212,6 +212,8 @@ pub mod pallet {
 		type PostLogContent: Get<PostLogContent>;
 		/// The maximum length of the extra data in the Executed event.
 		type ExtraDataLength: Get<u32>;
+		/// Whether transactional ethereum calls accept legacy transactions without EIP-155 chain id.
+		type AllowUnprotectedTxs: Get<bool>;
 	}
 
 	pub mod config_preludes {
@@ -228,6 +230,7 @@ pub mod pallet {
 
 		parameter_types! {
 			pub const PostBlockAndTxnHashes: PostLogContent = PostLogContent::BlockAndTxnHashes;
+			pub const AllowUnprotectedTxs: bool = false;
 		}
 
 		#[register_default_impl(TestDefaultConfig)]
@@ -235,6 +238,7 @@ pub mod pallet {
 			type StateRoot = IntermediateStateRoot<Self::Version>;
 			type PostLogContent = PostBlockAndTxnHashes;
 			type ExtraDataLength = ConstU32<30>;
+			type AllowUnprotectedTxs = AllowUnprotectedTxs;
 		}
 	}
 
@@ -564,6 +568,7 @@ impl<T: Config> Pallet<T> {
 				base_fee,
 				chain_id: T::ChainId::get(),
 				is_transactional: true,
+				allow_unprotected_txs: T::AllowUnprotectedTxs::get(),
 			},
 			transaction_data.clone().into(),
 			weight_limit,
@@ -1021,6 +1026,7 @@ impl<T: Config> Pallet<T> {
 				base_fee,
 				chain_id: T::ChainId::get(),
 				is_transactional: true,
+				allow_unprotected_txs: T::AllowUnprotectedTxs::get(),
 			},
 			transaction_data.into(),
 			weight_limit,
