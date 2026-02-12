@@ -434,7 +434,9 @@ mod tests {
 			ethereum_block_hash,
 			ethereum_transaction_hashes: vec![],
 		};
-		let _ = backend.mapping().write_hashes(commitment, 2);
+		let _ = backend
+			.mapping()
+			.write_hashes(commitment, 2, fc_db::kv::NumberMappingWrite::Write);
 
 		// Expect B1 to be canon
 		assert_eq!(
@@ -466,7 +468,9 @@ mod tests {
 			ethereum_block_hash,
 			ethereum_transaction_hashes: vec![],
 		};
-		let _ = backend.mapping().write_hashes(commitment, 2);
+		let _ = backend
+			.mapping()
+			.write_hashes(commitment, 2, fc_db::kv::NumberMappingWrite::Write);
 
 		// Still expect B1 to be canon
 		assert_eq!(
