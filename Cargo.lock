@@ -2776,8 +2776,7 @@ dependencies = [
 [[package]]
 name = "ethereum"
 version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ee371ebb7479ed3258617557ab0b3247e741075cb6b02b820d188f68da44441"
+source = "git+https://github.com/moonbeam-foundation/ethereum?branch=moonbeam-polkadot-stable2506#cf3076f07e61102eec686f6816da668f97d94f1f"
 dependencies = [
  "bytes",
  "ethereum-types",
@@ -2838,7 +2837,7 @@ dependencies = [
 [[package]]
 name = "evm"
 version = "0.43.4"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2506#349849116745a3a1bbb52102ab2d6aad0fd3ce56"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2506#662508e1a60f9d7aaf300fed832d86c67ef4f1d1"
 dependencies = [
  "auto_impl",
  "environmental",
@@ -2858,7 +2857,7 @@ dependencies = [
 [[package]]
 name = "evm-core"
 version = "0.43.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2506#349849116745a3a1bbb52102ab2d6aad0fd3ce56"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2506#662508e1a60f9d7aaf300fed832d86c67ef4f1d1"
 dependencies = [
  "parity-scale-codec",
  "primitive-types",
@@ -2869,7 +2868,7 @@ dependencies = [
 [[package]]
 name = "evm-gasometer"
 version = "0.43.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2506#349849116745a3a1bbb52102ab2d6aad0fd3ce56"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2506#662508e1a60f9d7aaf300fed832d86c67ef4f1d1"
 dependencies = [
  "environmental",
  "evm-core",
@@ -2880,7 +2879,7 @@ dependencies = [
 [[package]]
 name = "evm-runtime"
 version = "0.43.0"
-source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2506#349849116745a3a1bbb52102ab2d6aad0fd3ce56"
+source = "git+https://github.com/moonbeam-foundation/evm?branch=moonbeam-polkadot-stable2506#662508e1a60f9d7aaf300fed832d86c67ef4f1d1"
 dependencies = [
  "auto_impl",
  "environmental",
