@@ -78,9 +78,9 @@ where
 	}
 
 	pub async fn send_transaction(&self, request: TransactionRequest) -> RpcResult<H256> {
-		request.validate_size().map_err(|msg| {
-			crate::err(jsonrpsee::types::error::INVALID_PARAMS_CODE, &msg, None)
-		})?;
+		request
+			.validate_size()
+			.map_err(|msg| crate::err(jsonrpsee::types::error::INVALID_PARAMS_CODE, &msg, None))?;
 
 		let from = match request.from {
 			Some(from) => from,
