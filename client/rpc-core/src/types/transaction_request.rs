@@ -252,7 +252,8 @@ impl TransactionRequest {
 
 		if size > DEFAULT_MAX_TX_INPUT_BYTES {
 			return Err(format!(
-				"oversized data: transaction size {size} exceeds limit {DEFAULT_MAX_TX_INPUT_BYTES}"
+				"oversized data: transaction size {} exceeds limit {}",
+				size, DEFAULT_MAX_TX_INPUT_BYTES
 			));
 		}
 		Ok(())
@@ -586,7 +587,8 @@ mod tests {
 		// Verify it's a reasonable size for a minimal transaction
 		assert!(
 			size < 200,
-			"Size {size} should be reasonable for minimal tx"
+			"Size {} should be reasonable for minimal tx",
+			size
 		);
 	}
 
@@ -620,7 +622,9 @@ mod tests {
 		// - Access list overhead
 		assert!(
 			typed_size > legacy_size,
-			"Typed tx {typed_size} should be larger than legacy {legacy_size}"
+			"Typed tx {} should be larger than legacy {}",
+			typed_size,
+			legacy_size
 		);
 	}
 
@@ -655,7 +659,8 @@ mod tests {
 		let diff = size_100 - size_10;
 		assert!(
 			diff > 2500 && diff < 4000,
-			"Size difference {diff} should be proportional to storage keys"
+			"Size difference {} should be proportional to storage keys",
+			diff
 		);
 	}
 
