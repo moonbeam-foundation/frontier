@@ -202,7 +202,7 @@ where
 		if bytes.len() > DEFAULT_MAX_TX_INPUT_BYTES {
 			return Err(crate::err(
 				jsonrpsee::types::error::INVALID_PARAMS_CODE,
-				&format!(
+				format!(
 					"oversized data: transaction size {} exceeds limit {}",
 					bytes.len(),
 					DEFAULT_MAX_TX_INPUT_BYTES
