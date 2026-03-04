@@ -78,6 +78,8 @@ where
 	}
 
 	pub async fn send_transaction(&self, request: TransactionRequest) -> RpcResult<H256> {
+		// Policy: this is an estimate-based pre-check to block clearly oversized requests.
+		// Exact signed-size boundary parity is intentionally not required here.
 		request
 			.validate_size()
 			.map_err(|msg| crate::err(jsonrpsee::types::error::INVALID_PARAMS_CODE, &msg, None))?;

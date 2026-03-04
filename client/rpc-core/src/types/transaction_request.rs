@@ -190,11 +190,11 @@ impl TransactionRequest {
 		self.chain_id.map(|id| id.as_u64()).unwrap_or_default()
 	}
 
-	/// Calculates the RLP-encoded size of the signed transaction for DoS protection.
+	/// Estimates signed transaction size for DoS protection.
 	///
-	/// This mirrors geth's `tx.Size()` and reth's `transaction.encoded_length()` which use
-	/// actual RLP encoding to determine transaction size. We convert the request to its
-	/// transaction message type and use the `encoded_len()` method from the ethereum crate.
+	/// This is an estimate based on message RLP length plus signature overhead. It is used as
+	/// a lightweight RPC pre-check, not as an exact post-signing boundary check.
+	/// We convert the request to its transaction message type and use `encoded_len()`.
 	///
 	/// Reference:
 	/// - geth: <https://github.com/ethereum/go-ethereum/blob/master/core/types/transaction.go> (`tx.Size()`)
@@ -239,9 +239,9 @@ impl TransactionRequest {
 	/// Fallback size for invalid requests that can't be converted to a message
 	const DEFAULT_FALLBACK_SIZE: usize = 256;
 
-	/// Validates that the estimated signed transaction size is within limits.
+	/// Validates that the estimated transaction size is within limits.
 	///
-	/// This prevents DoS attacks via oversized transactions before they enter the pool.
+	/// This prevents DoS attacks via clearly oversized transactions before they enter the pool.
 	/// The limit matches geth's `txMaxSize` and reth's `DEFAULT_MAX_TX_INPUT_BYTES`.
 	///
 	/// Reference:
