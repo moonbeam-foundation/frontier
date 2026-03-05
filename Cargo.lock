@@ -2776,7 +2776,7 @@ dependencies = [
 [[package]]
 name = "ethereum"
 version = "0.18.2"
-source = "git+https://github.com/moonbeam-foundation/ethereum?branch=moonbeam-polkadot-stable2506#cf3076f07e61102eec686f6816da668f97d94f1f"
+source = "git+https://github.com/moonbeam-foundation/ethereum?branch=moonbeam-polkadot-stable2506#301236b0cbbbd38dda2fadd68658e9a26e5c7e7a"
 dependencies = [
  "bytes",
  "ethereum-types",
