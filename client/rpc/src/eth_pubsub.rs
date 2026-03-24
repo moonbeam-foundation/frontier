@@ -287,45 +287,88 @@ where
 						pubsub.new_heads_from_notification(notification)
 					});
 
-					PendingSubscription::from(pending)
-						.pipe_from_stream(flat_stream, BoundedVecDeque::new(16))
-						.await
-				}
-				Kind::Logs => {
-					let stream = block_notification_stream
-						.filter_map(move |notification| {
-							pubsub.notify_logs(notification, &filtered_params)
-						})
-						.flat_map(futures::stream::iter);
-					PendingSubscription::from(pending)
-						.pipe_from_stream(stream, BoundedVecDeque::new(16))
-						.await
-				}
-				Kind::NewPendingTransactions => {
-					let pool = pubsub.pool.clone();
-					let stream = pool
-						.import_notification_stream()
-						.filter_map(move |hash| pubsub.pending_transactions(&hash));
-					PendingSubscription::from(pending)
-						.pipe_from_stream(stream, BoundedVecDeque::new(16))
-						.await;
-				}
-				Kind::Syncing => {
-					let Ok(sink) = pending.accept().await else {
-						return;
-					};
-					// On connection subscriber expects a value.
-					// Because import notifications are only emitted when the node is synced or
-					// in case of reorg, the first event is emitted right away.
-					let syncing_status = pubsub.syncing_status().await;
-					let subscription = Subscription::from(sink);
-					if subscription
-						.send(&PubSubResult::SyncingStatus(syncing_status))
-						.await
-						.is_err()
-					{
-						return;
+						PendingSubscription::from(pending)
+							.pipe_from_stream(flat_stream, BoundedVecDeque::new(16))
+							.await
 					}
+					Kind::Logs => {
+						let filter = filtered_params.filter.clone();
+						let stream =
+							futures::stream::unfold(
+								pubsub.logs_journal.subscribe(),
+								move |mut receiver| {
+									let filter = filter.clone();
+									async move {
+										loop {
+											match receiver.recv().await {
+										Ok(entry) => {
+											if !entry.complete {
+												debug!(
+													target: "eth-pubsub",
+													"Closing logs subscription after incomplete journal entry {}",
+													entry.seq,
+												);
+												return None;
+											}
+
+											let params = FilteredParams::new(filter.clone());
+											let logs = entry
+												.logs
+												.iter()
+												.filter(|log| log_matches_filter(&params, log, false))
+												.cloned()
+												.map(|log| PubSubResult::Log(Box::new(log)))
+												.collect::<Vec<_>>();
+											if logs.is_empty() {
+												continue;
+											}
+											return Some((logs, receiver));
+										}
+										Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+											debug!(
+												target: "eth-pubsub",
+												"Closing lagging logs subscription after missing {skipped} journal entries",
+											);
+											return None;
+										}
+										Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+											return None;
+										}
+									}
+										}
+									}
+								},
+							)
+							.flat_map(futures::stream::iter);
+						PendingSubscription::from(pending)
+							.pipe_from_stream(Box::pin(stream), BoundedVecDeque::new(16))
+							.await
+					}
+					Kind::NewPendingTransactions => {
+						let pool = pubsub.pool.clone();
+						let stream = pool
+							.import_notification_stream()
+							.filter_map(move |hash| pubsub.pending_transactions(&hash));
+						PendingSubscription::from(pending)
+							.pipe_from_stream(stream, BoundedVecDeque::new(16))
+							.await;
+					}
+					Kind::Syncing => {
+						let Ok(sink) = pending.accept().await else {
+							return;
+						};
+						// On connection subscriber expects a value.
+						// Because import notifications are only emitted when the node is synced or
+						// in case of reorg, the first event is emitted right away.
+						let syncing_status = pubsub.syncing_status().await;
+						let subscription = Subscription::from(sink);
+						if subscription
+							.send(&PubSubResult::SyncingStatus(syncing_status))
+							.await
+							.is_err()
+						{
+							return;
+						}
 
 					// When the node is not under a major syncing (i.e. from genesis), react
 					// normally to import notifications.

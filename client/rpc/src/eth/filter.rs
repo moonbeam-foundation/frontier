@@ -174,6 +174,7 @@ where
 				key,
 				FilterPoolItem {
 					last_poll: BlockNumberOrHash::Num(best_number),
+					last_log_journal_seq: matches!(filter_type, FilterType::Log(_)).then_some(0),
 					filter_type,
 					at_block: best_number,
 					pending_transaction_hashes,
@@ -218,18 +219,13 @@ where
 		// To avoid issues with multiple async blocks (having different
 		// anonymous types) we collect all necessary data in this enum then have
 		// a single async block.
-		enum FuturePath<B: BlockT> {
-			Block {
-				last: u64,
-				next: u64,
-			},
-			PendingTransaction {
-				new_hashes: Vec<H256>,
-			},
+		enum FuturePath {
+			Block { last: u64, next: u64 },
+			PendingTransaction { new_hashes: Vec<H256> },
 			Log {
 				filter: Filter,
-				from_number: NumberFor<B>,
-				current_number: NumberFor<B>,
+				cursor: u64,
+				last_poll_block: u64,
 			},
 			Error(jsonrpsee::types::ErrorObjectOwned),
 		}
@@ -302,62 +298,15 @@ where
 					}
 					// For each event since last poll, get a vector of ethereum logs.
 					FilterType::Log(filter) => {
-						// Either the filter-specific `to` block or latest indexed block.
-						// Use latest indexed block to ensure consistency with other RPCs.
-						let mut current_number = filter
-							.to_block
-							.and_then(|v| v.to_min_block_num())
-							.map(|s| s.unique_saturated_into())
-							.unwrap_or(latest_indexed_number);
-
-						if current_number > latest_indexed_number {
-							current_number = latest_indexed_number;
-						}
-
-						// The from clause is the max(last_poll, filter_from).
-						let last_poll = pool_item
+						let cursor = pool_item.last_log_journal_seq.unwrap_or(0);
+						let last_poll_block = pool_item
 							.last_poll
 							.to_min_block_num()
-							.unwrap()
-							.unique_saturated_into();
-
-						let filter_from = filter
-							.from_block
-							.and_then(|v| v.to_min_block_num())
-							.map(|s| s.unique_saturated_into())
-							.unwrap_or(last_poll);
-
-						let from_number = std::cmp::max(last_poll, filter_from);
-						let block_range = current_number.saturating_sub(from_number);
-
-						// Validate block range before advancing last_poll. If we reject after
-						// updating last_poll, the cursor would skip logs on the next poll.
-						if block_range > self.max_block_range.into() {
-							FuturePath::Error(internal_err(format!(
-								"block range is too wide (maximum {})",
-								self.max_block_range
-							)))
-						} else {
-							// Update filter `last_poll` based on the same capped head we query.
-							// This avoids skipping blocks when best_number is ahead of indexed data.
-							let next_last_poll =
-								UniqueSaturatedInto::<u64>::unique_saturated_into(current_number)
-									.saturating_add(1);
-							locked.insert(
-								key,
-								FilterPoolItem {
-									last_poll: BlockNumberOrHash::Num(next_last_poll),
-									filter_type: pool_item.filter_type.clone(),
-									at_block: pool_item.at_block,
-									pending_transaction_hashes: HashSet::new(),
-								},
-							);
-							// Build the response.
-							FuturePath::Log {
-								filter: filter.clone(),
-								from_number,
-								current_number,
-							}
+							.unwrap_or(0);
+						FuturePath::Log {
+							filter: filter.clone(),
+							cursor,
+							last_poll_block,
 						}
 					}
 				}
@@ -393,31 +342,50 @@ where
 			FuturePath::PendingTransaction { new_hashes } => Ok(FilterChanges::Hashes(new_hashes)),
 			FuturePath::Log {
 				filter,
-				from_number,
-				current_number,
+				cursor,
+				last_poll_block,
 			} => {
-				let logs = if backend.is_indexed() {
-					filter_range_logs_indexed(
-						client.as_ref(),
-						backend.log_indexer(),
-						&block_data_cache,
-						max_past_logs,
-						&filter,
-						from_number,
-						current_number,
-					)
-					.await?
-				} else {
-					filter_range_logs(
-						client.as_ref(),
-						&block_data_cache,
-						max_past_logs,
-						&filter,
-						from_number,
-						current_number,
-					)
-					.await?
+				let latest_indexed = self.latest_indexed_block_number().await?;
+				let latest_u64: u64 = latest_indexed.unique_saturated_into();
+				if latest_u64.saturating_sub(last_poll_block) > self.max_block_range.into() {
+					return Err(internal_err(format!(
+						"block range is too wide (maximum {})",
+						self.max_block_range
+					)));
+				}
+
+				let params = FilteredParams::new(filter);
+				let (entries, next_cursor) = match self.logs_journal.snapshot_since(cursor) {
+					Ok(snapshot) => snapshot,
+					Err(err) => {
+						if let Ok(locked) = &mut self.filter_pool.lock() {
+							let _ = locked.remove(&key);
+						}
+						return Err(logs_journal_error(err));
+					}
 				};
+
+				let mut logs = Vec::new();
+				for entry in entries {
+					for log in entry.logs.iter() {
+						if log_matches_filter(&params, log, true) {
+							logs.push(log.clone());
+						}
+					}
+				}
+
+				if logs.len() as u32 > max_past_logs {
+					return Err(internal_err(format!(
+						"query returned more than {max_past_logs} results",
+					)));
+				}
+
+				if let Ok(locked) = &mut self.filter_pool.lock() {
+					if let Some(pool_item) = locked.get_mut(&key) {
+						pool_item.last_log_journal_seq = Some(next_cursor);
+						pool_item.last_poll = BlockNumberOrHash::Num(latest_u64);
+					}
+				}
 
 				Ok(FilterChanges::Logs(logs))
 			}
