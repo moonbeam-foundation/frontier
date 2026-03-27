@@ -71,6 +71,7 @@ pub struct EthPubSub<B: BlockT, P, C, BE> {
 	storage_override: Arc<dyn StorageOverride<B>>,
 	starting_block: u64,
 	pubsub_notification_sinks: Arc<EthereumBlockNotificationSinks<EthereumBlockNotification<B>>>,
+	logs_journal: Arc<LogsJournal>,
 	_marker: PhantomData<BE>,
 }
 
@@ -84,6 +85,7 @@ impl<B: BlockT, P, C, BE> Clone for EthPubSub<B, P, C, BE> {
 			storage_override: self.storage_override.clone(),
 			starting_block: self.starting_block,
 			pubsub_notification_sinks: self.pubsub_notification_sinks.clone(),
+			logs_journal: self.logs_journal.clone(),
 			_marker: PhantomData::<BE>,
 		}
 	}
@@ -106,6 +108,7 @@ where
 		pubsub_notification_sinks: Arc<
 			EthereumBlockNotificationSinks<EthereumBlockNotification<B>>,
 		>,
+		logs_journal: Arc<LogsJournal>,
 	) -> Self {
 		// Capture the best block as seen on initialization. Used for syncing subscriptions.
 		let best_number = client.info().best_number;
@@ -118,6 +121,7 @@ where
 			storage_override,
 			starting_block,
 			pubsub_notification_sinks,
+			logs_journal,
 			_marker: PhantomData,
 		}
 	}
