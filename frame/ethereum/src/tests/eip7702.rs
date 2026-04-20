@@ -21,6 +21,7 @@ use std::panic;
 
 use super::*;
 use ethereum::{AuthorizationListItem, TransactionAction};
+use evm::{ExitError, ExitReason};
 use pallet_evm::{config_preludes::ChainId, AddressMapping};
 use sp_core::{H160, H256, U256};
 
@@ -811,5 +812,64 @@ fn authorization_with_zero_address_delegation() {
 			"Call to EOA should return empty data"
 		);
 
+	});
+}
+
+/// Regression: two EIP-7702 delegations in one tx must respect
+/// `GasLimitStorageGrowthRatio`—the per-tx storage byte budget is `gas_limit / ratio`.
+///
+/// With `GasLimitStorageGrowthRatio = 366` and `gas_limit = 80_000`:
+/// - storage byte budget = 80_000 / 366 = **218**
+/// - each delegation records ~135 bytes toward that budget
+/// - two delegations need **270** bytes → the second must trip `StorageMeter` and surface as OOG.
+///
+/// Exercises the full `Ethereum::execute` pipeline (beyond `Runner::call` alone).
+#[test]
+fn eip7702_delegation_bypasses_storage_meter_safety_check() {
+	let (pairs, mut ext) = new_test_ext_with_initial_balance(4, 10_000_000_000_000);
+	let alice = &pairs[0]; // tx sender
+	let bob = &pairs[1]; // authority 1
+	let charlie = &pairs[2]; // authority 2
+	ext.execute_with(|| {
+		let delegation_target =
+			H160::from_str("0x1000000000000000000000000000000000000001").unwrap();
+		let auth1 = create_authorization_tuple(
+			ChainId::get(),
+			delegation_target,
+			0,
+			&bob.private_key,
+		);
+		let auth2 = create_authorization_tuple(
+			ChainId::get(),
+			delegation_target,
+			0,
+			&charlie.private_key,
+		);
+		let gas_limit = U256::from(80_000);
+		let transaction = eip7702_transaction_unsigned(
+			U256::zero(),
+			gas_limit,
+			TransactionAction::Call(bob.address),
+			U256::zero(),
+			vec![],
+			vec![auth1, auth2],
+		)
+		.sign(&alice.private_key, Some(ChainId::get()));
+		let result = Ethereum::execute(alice.address, &transaction, None, None);
+		assert_ok!(&result);
+		let (_, _, info) = result.unwrap();
+		let CallOrCreateInfo::Call(call_info) = info else {
+			panic!("Expected Call info");
+		};
+		assert_eq!(
+			call_info.exit_reason,
+			ExitReason::Error(ExitError::OutOfGas),
+			"second delegation exceeds storage budget (80k gas → 218-byte budget < 270 bytes for two writes)",
+		);
+		let charlie_code = pallet_evm::AccountCodes::<Test>::get(charlie.address);
+		assert!(
+			charlie_code.is_empty(),
+			"second authority must not receive delegation once StorageMeter rejects (charlie_code={charlie_code:?})",
+		);
 	});
 }

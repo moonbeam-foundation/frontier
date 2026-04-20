@@ -89,7 +89,7 @@ impl FindAuthor<H160> for FindAuthorTruncated {
 
 parameter_types! {
 	pub const TransactionByteFee: u64 = 1;
-	pub const GasLimitStorageGrowthRatio: u64 = 0;
+	pub const GasLimitStorageGrowthRatio: u64 = 366;
 	pub static AllowUnprotectedTxs: bool = false;
 	// Alice is allowed to create contracts via CREATE and CALL(CREATE)
 	pub AllowedAddressesCreate: Vec<H160> = vec![H160::from_str("0x1a642f0e3c3af545e7acbd38b07251b3990914f1").expect("alice address")];

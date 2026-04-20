@@ -838,6 +838,261 @@ mod storage_growth_test {
 	}
 }
 
+mod eip7702_delegation_storage_meter_tests {
+	use super::*;
+	use crate::{Config, ExitReason, FixedGasWeightMapping};
+	use ethereum::AuthorizationListItem;
+	use evm::delegation::{EIP_7702_DELEGATION_PREFIX, EIP_7702_DELEGATION_SIZE};
+	use fp_evm::{ACCOUNT_CODES_KEY_SIZE, ACCOUNT_CODES_METADATA_PROOF_SIZE, WRITE_PROOF_SIZE};
+	use frame_support::traits::Get;
+	use libsecp256k1::{Message, SecretKey};
+	use rlp::RlpStream;
+	use sp_runtime::traits::UniqueSaturatedInto;
+
+	fn sign_authorization(
+		chain_id: u64,
+		delegate: H160,
+		nonce: u64,
+		sk: &SecretKey,
+	) -> AuthorizationListItem {
+		let magic: u8 = 0x05;
+		let mut stream = RlpStream::new_list(3);
+		stream.append(&chain_id);
+		stream.append(&delegate);
+		stream.append(&nonce);
+		let mut msg_data = vec![magic];
+		msg_data.extend_from_slice(&stream.out());
+		let msg_hash = sp_io::hashing::keccak_256(&msg_data);
+		let msg = Message::parse_slice(&msg_hash).expect("digest length");
+		let (sig, rec_id) = libsecp256k1::sign(&msg, sk);
+		let rs = sig.serialize();
+		let r = H256::from_slice(&rs[0..32]);
+		let s = H256::from_slice(&rs[32..64]);
+
+		AuthorizationListItem {
+			chain_id,
+			address: delegate,
+			nonce: U256::from(nonce),
+			signature: ethereum::eip2930::MalleableTransactionSignature {
+				odd_y_parity: rec_id.serialize() != 0,
+				r,
+				s,
+			},
+		}
+	}
+
+	fn gas_too_low_for_single_delegation_storage_budget() -> u64 {
+		let ratio = <<Test as Config>::GasLimitStorageGrowthRatio as Get<u64>>::get();
+		let designator_len = EIP_7702_DELEGATION_SIZE as u64;
+		let bytes_per_delegation = ACCOUNT_CODES_KEY_SIZE
+			.saturating_add(ACCOUNT_CODES_METADATA_PROOF_SIZE)
+			.saturating_add(designator_len);
+		ratio.saturating_mul(bytes_per_delegation).saturating_sub(1)
+	}
+
+	/// Largest `gas_limit` such that `gas_limit / GasLimitStorageGrowthRatio` is **strictly**
+	/// below two EIP-7702 delegation writes (each ~135 bytes of metered storage growth).
+	///
+	/// With ratio 366: storage byte budget = floor(gas / 366) = 269 < 2 × 135, but still ≥ 135
+	/// so the first delegation can be recorded before the second trips the meter.
+	fn gas_limit_two_delegations_exceeds_storage_budget() -> u64 {
+		let ratio = <<Test as Config>::GasLimitStorageGrowthRatio as Get<u64>>::get();
+		let designator_len = EIP_7702_DELEGATION_SIZE as u64;
+		let bytes_per_delegation = ACCOUNT_CODES_KEY_SIZE
+			.saturating_add(ACCOUNT_CODES_METADATA_PROOF_SIZE)
+			.saturating_add(designator_len);
+		let two = 2u64.saturating_mul(bytes_per_delegation);
+		// floor(gas_limit / ratio) == two - 1  →  second delegation pushes usage past limit
+		ratio.saturating_mul(two).saturating_sub(1)
+	}
+
+	#[test]
+	fn delegation_triggers_storage_meter_oog_when_gas_limit_storage_budget_too_small() {
+		new_test_ext().execute_with(|| {
+			let sk = SecretKey::parse_slice(&hex_literal::hex!(
+				"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+			))
+			.expect("valid test secret key");
+
+			let chain_id = <Test as Config>::ChainId::get();
+			let delegate = H160(hex_literal::hex!(
+				"4242424242424242424242424242424242424242"
+			));
+			let auth = sign_authorization(chain_id, delegate, 0, &sk);
+
+			let gas_limit = gas_too_low_for_single_delegation_storage_budget();
+
+			let info = <Test as Config>::Runner::call(
+				H160::default(),
+				H160::repeat_byte(0x77),
+				vec![],
+				U256::zero(),
+				gas_limit,
+				Some(FixedGasPrice::min_gas_price().0),
+				None,
+				None,
+				vec![],
+				vec![auth],
+				true,
+				false,
+				None,
+				Some(0),
+				<Test as Config>::config(),
+			)
+			.expect("runner returns CallInfo");
+
+			assert_eq!(
+				info.exit_reason,
+				ExitReason::Error(crate::ExitError::OutOfGas),
+				"gas_limit {gas_limit} leaves storage budget below one EIP-7702 delegation write",
+			);
+		});
+	}
+
+	/// Regression for EIP-7702: two distinct authorities delegating in one tx must respect the
+	/// per-transaction storage byte budget derived from `gas_limit` (not bypass `StorageMeter`).
+	///
+	/// Before the fix, `set_delegation` did not call `record_external_operation(Write)`, so two
+	/// delegations could succeed even when `gas_limit / ratio` only allowed one write’s worth of
+	/// growth. After the fix, the second delegation must fail with `OutOfGas`.
+	#[test]
+	fn eip7702_delegation_bypasses_storage_meter_safety_check() {
+		new_test_ext().execute_with(|| {
+			let sk_a = SecretKey::parse_slice(&hex_literal::hex!(
+				"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+			))
+			.expect("valid test secret key");
+			let sk_b = SecretKey::parse_slice(&hex_literal::hex!(
+				"11223344556677889900aabbccddeeff00112233445566778899aabbccddeeff"
+			))
+			.expect("valid test secret key");
+
+			let chain_id = <Test as Config>::ChainId::get();
+			let delegate =
+				H160(hex_literal::hex!("1000000000000000000000000000000000000001"));
+
+			let auth_a = sign_authorization(chain_id, delegate, 0, &sk_a);
+			let auth_b = sign_authorization(chain_id, delegate, 0, &sk_b);
+
+			let gas_limit = gas_limit_two_delegations_exceeds_storage_budget();
+			let ratio = <<Test as Config>::GasLimitStorageGrowthRatio as Get<u64>>::get();
+			let storage_budget = gas_limit.saturating_div(ratio);
+			let bytes_per = ACCOUNT_CODES_KEY_SIZE
+				.saturating_add(ACCOUNT_CODES_METADATA_PROOF_SIZE)
+				.saturating_add(EIP_7702_DELEGATION_SIZE as u64);
+			assert!(
+				storage_budget >= bytes_per,
+				"test setup: first delegation must fit (budget={storage_budget}, need {bytes_per})"
+			);
+			assert!(
+				storage_budget < 2.saturating_mul(bytes_per),
+				"test setup: two delegations must exceed budget (budget={storage_budget}, two={})",
+				2.saturating_mul(bytes_per)
+			);
+
+			let info = <Test as Config>::Runner::call(
+				H160::default(),
+				H160::repeat_byte(0x88),
+				vec![],
+				U256::zero(),
+				gas_limit,
+				Some(FixedGasPrice::min_gas_price().0),
+				None,
+				None,
+				vec![],
+				vec![auth_a, auth_b],
+				true,
+				false,
+				None,
+				Some(0),
+				<Test as Config>::config(),
+			)
+			.expect("runner returns CallInfo");
+
+			assert_eq!(
+				info.exit_reason,
+				ExitReason::Error(crate::ExitError::OutOfGas),
+				"second EIP-7702 delegation must trip StorageMeter (gas_limit={gas_limit}, storage_budget_bytes={storage_budget})",
+			);
+		});
+	}
+
+	#[test]
+	fn delegation_records_storage_and_pov_when_gas_budget_sufficient() {
+		new_test_ext().execute_with(|| {
+			let sk = SecretKey::parse_slice(&hex_literal::hex!(
+				"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+			))
+			.expect("valid test secret key");
+
+			let chain_id = <Test as Config>::ChainId::get();
+			let delegate =
+				H160(hex_literal::hex!("4242424242424242424242424242424242424242"));
+			let auth = sign_authorization(chain_id, delegate, 0, &sk);
+
+			let authority_h160 =
+				H160(auth.authorizing_address().expect("recover signer").0);
+
+			let gas_limit = 2_000_000u64;
+			let weight_limit = FixedGasWeightMapping::<Test>::gas_to_weight(gas_limit, true);
+
+			let info = <Test as Config>::Runner::call(
+				H160::default(),
+				H160::repeat_byte(0x77),
+				vec![],
+				U256::zero(),
+				gas_limit,
+				Some(FixedGasPrice::min_gas_price().0),
+				None,
+				None,
+				vec![],
+				vec![auth],
+				true,
+				false,
+				Some(weight_limit),
+				Some(0),
+				<Test as Config>::config(),
+			)
+			.expect("runner returns CallInfo");
+
+			assert!(
+				info.exit_reason.is_succeed(),
+				"unexpected exit: {:?}",
+				info.exit_reason
+			);
+
+			let code = AccountCodes::<Test>::get(authority_h160);
+			assert!(
+				code.starts_with(EIP_7702_DELEGATION_PREFIX),
+				"delegation designator should be stored"
+			);
+			assert_eq!(code.len(), EIP_7702_DELEGATION_SIZE);
+
+			let ratio = <<Test as Config>::GasLimitStorageGrowthRatio as Get<u64>>::get();
+			let delegation_storage_gas = (ACCOUNT_CODES_KEY_SIZE
+				+ ACCOUNT_CODES_METADATA_PROOF_SIZE
+				+ EIP_7702_DELEGATION_SIZE as u64)
+				.saturating_mul(ratio);
+			let effective: u64 =
+				UniqueSaturatedInto::<u64>::unique_saturated_into(info.used_gas.effective);
+			assert!(
+				effective >= delegation_storage_gas,
+				"effective gas is max(execution, pov, storage); it must be at least the delegation storage component (effective={effective}, delegation_storage_gas={delegation_storage_gas})",
+			);
+
+			let proof = info
+				.weight_info
+				.expect("weight limit was set")
+				.proof_size_usage
+				.expect("proof accounting");
+			assert!(
+				proof >= WRITE_PROOF_SIZE,
+				"delegation write should contribute PoV ({proof} < {WRITE_PROOF_SIZE})",
+			);
+		});
+	}
+}
+
 type Balances = pallet_balances::Pallet<Test>;
 #[allow(clippy::upper_case_acronyms)]
 type EVM = Pallet<Test>;

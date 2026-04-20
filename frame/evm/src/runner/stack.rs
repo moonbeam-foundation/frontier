@@ -1269,6 +1269,9 @@ where
 			delegation.address()
 		);
 
+		let code_len = delegation.to_bytes().len();
+		self.record_external_operation(ExternalOperation::Write(U256::from(code_len)))?;
+
 		let meta = crate::CodeMetadata::from_code(&delegation.to_bytes());
 		<AccountCodesMetadata<T>>::insert(authority, meta);
 		<AccountCodes<T>>::insert(authority, delegation.to_bytes());
@@ -1345,6 +1348,21 @@ where
 			.config()
 			.create_contract_limit
 			.unwrap_or_default() as u64;
+
+		// Storage growth for code writes (contract deployment, EIP-7702 delegation designators)
+		// must be enforced whenever `storage_meter` is enabled, including paths where
+		// `weight_info` is unset (for example non-transactional RPC estimates).
+		if let ExternalOperation::Write(len) = &op {
+			if let Some(storage_meter) = self.storage_meter.as_mut() {
+				let storage_growth = ACCOUNT_CODES_KEY_SIZE
+					.saturating_add(ACCOUNT_CODES_METADATA_PROOF_SIZE)
+					.saturating_add(len.as_u64());
+				storage_meter
+					.record(storage_growth)
+					.map_err(|_| ExitError::OutOfGas)?;
+			}
+		}
+
 		let (weight_info, recorded) = self.info_mut();
 
 		if let Some(weight_info) = weight_info {
@@ -1358,18 +1376,8 @@ where
 				ExternalOperation::IsEmpty => {
 					weight_info.try_record_proof_size_or_fail(IS_EMPTY_CHECK_PROOF_SIZE)?
 				}
-				ExternalOperation::Write(len) => {
+				ExternalOperation::Write(_) => {
 					weight_info.try_record_proof_size_or_fail(WRITE_PROOF_SIZE)?;
-
-					if let Some(storage_meter) = self.storage_meter.as_mut() {
-						// Record the number of bytes written to storage when deploying a contract.
-						let storage_growth = ACCOUNT_CODES_KEY_SIZE
-							.saturating_add(ACCOUNT_CODES_METADATA_PROOF_SIZE)
-							.saturating_add(len.as_u64());
-						storage_meter
-							.record(storage_growth)
-							.map_err(|_| ExitError::OutOfGas)?;
-					}
 				}
 				ExternalOperation::DelegationResolution(address) => {
 					Self::record_address_code_read(address, weight_info, recorded, size_limit)?;
