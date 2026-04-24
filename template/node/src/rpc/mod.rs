@@ -53,11 +53,7 @@ where
 pub fn create_full<B, C, P, BE, CT, CIDP>(
 	deps: FullDeps<B, C, P, CT, CIDP>,
 	subscription_task_executor: SubscriptionTaskExecutor,
-	pubsub_notification_sinks: Arc<
-		fc_mapping_sync::EthereumBlockNotificationSinks<
-			fc_mapping_sync::EthereumBlockNotification<B>,
-		>,
-	>,
+	pubsub_notification_sinks: Arc<fc_mapping_sync::EthereumBlockNotificationSinks<B>>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
 	B: BlockT,

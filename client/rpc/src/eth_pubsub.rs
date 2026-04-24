@@ -70,7 +70,7 @@ pub struct EthPubSub<B: BlockT, P, C, BE> {
 	executor: SubscriptionTaskExecutor,
 	storage_override: Arc<dyn StorageOverride<B>>,
 	starting_block: u64,
-	pubsub_notification_sinks: Arc<EthereumBlockNotificationSinks<EthereumBlockNotification<B>>>,
+	pubsub_notification_sinks: Arc<EthereumBlockNotificationSinks<B>>,
 	logs_journal: Arc<LogsJournal>,
 	_marker: PhantomData<BE>,
 }
@@ -105,9 +105,7 @@ where
 		sync: Arc<SyncingService<B>>,
 		executor: SubscriptionTaskExecutor,
 		storage_override: Arc<dyn StorageOverride<B>>,
-		pubsub_notification_sinks: Arc<
-			EthereumBlockNotificationSinks<EthereumBlockNotification<B>>,
-		>,
+		pubsub_notification_sinks: Arc<EthereumBlockNotificationSinks<B>>,
 		logs_journal: Arc<LogsJournal>,
 	) -> Self {
 		// Capture the best block as seen on initialization. Used for syncing subscriptions.
@@ -253,9 +251,9 @@ where
 		let fut = async move {
 			match kind {
 				Kind::NewHeads => {
-					let (inner_sink, block_notification_stream) =
-						sc_utils::mpsc::tracing_unbounded("pubsub_notification_stream", 100_000);
-					pubsub.pubsub_notification_sinks.lock().push(inner_sink);
+					let (sink_guard, block_notification_stream) = pubsub
+						.pubsub_notification_sinks
+						.register("pubsub_notification_stream", 100_000);
 					// Per Ethereum spec, when a reorg occurs, we must emit all headers
 					// for the new canonical chain. The reorg_info field in the notification
 					// contains the enacted blocks when a reorg occurred.
@@ -263,6 +261,7 @@ where
 						pubsub.new_heads_from_notification(notification)
 					});
 
+					let _sink_guard = sink_guard;
 					PendingSubscription::from(pending)
 						.pipe_from_stream(flat_stream, BoundedVecDeque::new(16))
 						.await
@@ -270,43 +269,48 @@ where
 				Kind::Logs => {
 					let logs_params = filtered_params.clone();
 					let journal_rx = pubsub.logs_journal.subscribe();
-					let stream = futures::stream::unfold(journal_rx, move |mut rx| {
-						let logs_params = logs_params.clone();
-						async move {
-							loop {
-								let entry = match rx.recv().await {
-									Ok(e) => e,
-									Err(RecvError::Lagged(n)) => {
+					let logs_journal = pubsub.logs_journal.clone();
+					let stream = futures::stream::unfold(
+						(journal_rx, logs_journal),
+						move |(mut rx, logs_journal)| {
+							let logs_params = logs_params.clone();
+							async move {
+								loop {
+									let entry = match rx.recv().await {
+										Ok(e) => e,
+										Err(RecvError::Lagged(n)) => {
+											logs_journal.record_logs_broadcast_lag(n);
+											debug!(
+												target: "eth-pubsub",
+												"Closing logs subscription; lagged behind logs journal by {n} entries"
+											);
+											return None;
+										}
+										Err(RecvError::Closed) => return None,
+									};
+
+									if !entry.complete {
 										debug!(
 											target: "eth-pubsub",
-											"Closing logs subscription; lagged behind logs journal by {n} entries"
+											"Closing logs subscription after incomplete journal entry",
 										);
 										return None;
 									}
-									Err(RecvError::Closed) => return None,
-								};
 
-								if !entry.complete {
-									debug!(
-										target: "eth-pubsub",
-										"Closing logs subscription after incomplete journal entry",
-									);
-									return None;
-								}
+									let results: Vec<PubSubResult> = entry
+										.logs
+										.iter()
+										.filter(|log| log_matches_filter(&logs_params, log, false))
+										.map(|log| PubSubResult::Log(Box::new(log.clone())))
+										.collect();
 
-								let results: Vec<PubSubResult> = entry
-									.logs
-									.iter()
-									.filter(|log| log_matches_filter(&logs_params, log, false))
-									.map(|log| PubSubResult::Log(Box::new(log.clone())))
-									.collect();
-
-								if !results.is_empty() {
-									return Some((results, rx));
+									if !results.is_empty() {
+										return Some((results, (rx, logs_journal)));
+									}
 								}
 							}
-						}
-					})
+						},
+					)
 					.flat_map(futures::stream::iter);
 					PendingSubscription::from(pending)
 						.pipe_from_stream(Box::pin(stream), BoundedVecDeque::new(16))

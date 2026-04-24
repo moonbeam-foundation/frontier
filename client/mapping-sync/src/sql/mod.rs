@@ -30,8 +30,8 @@ use sp_runtime::traits::{Block as BlockT, Header as HeaderT, UniqueSaturatedInto
 use fp_rpc::EthereumRuntimeRPCApi;
 
 use crate::{
-	emit_block_notification, BlockNotificationContext, EthereumBlockNotification,
-	EthereumBlockNotificationSinks, ReorgInfo, SyncStrategy,
+	emit_block_notification, BlockNotificationContext, EthereumBlockNotificationSinks, ReorgInfo,
+	SyncStrategy,
 };
 
 /// Defines the commands for the sync worker.
@@ -87,9 +87,7 @@ where
 		client: Arc<Client>,
 		substrate_backend: Arc<Backend>,
 		indexer_backend: Arc<fc_db::sql::Backend<Block>>,
-		pubsub_notification_sinks: Arc<
-			EthereumBlockNotificationSinks<crate::EthereumBlockNotification<Block>>,
-		>,
+		pubsub_notification_sinks: Arc<crate::EthereumBlockNotificationSinks<Block>>,
 		sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
 	) -> tokio::sync::mpsc::Sender<WorkerCommand<Block>> {
 		let (tx, mut rx) = tokio::sync::mpsc::channel(100);
@@ -200,9 +198,7 @@ where
 		worker_config: SyncWorkerConfig,
 		_sync_strategy: SyncStrategy,
 		sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
-		pubsub_notification_sinks: Arc<
-			EthereumBlockNotificationSinks<EthereumBlockNotification<Block>>,
-		>,
+		pubsub_notification_sinks: Arc<EthereumBlockNotificationSinks<Block>>,
 	) {
 		let tx = Self::spawn_worker(
 			client.clone(),
@@ -666,9 +662,8 @@ mod test {
 		}
 
 		let test_sync_oracle = TestSyncOracleNotSyncing {};
-		let pubsub_notification_sinks: EthereumBlockNotificationSinks<
-			EthereumBlockNotification<OpaqueBlock>,
-		> = Default::default();
+		let pubsub_notification_sinks: EthereumBlockNotificationSinks<OpaqueBlock> =
+			Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 
 		let pubsub_notification_sinks_inner = pubsub_notification_sinks.clone();
@@ -786,9 +781,8 @@ mod test {
 		let pool = indexer_backend.pool().clone();
 
 		let test_sync_oracle = TestSyncOracleNotSyncing {};
-		let pubsub_notification_sinks: EthereumBlockNotificationSinks<
-			EthereumBlockNotification<OpaqueBlock>,
-		> = Default::default();
+		let pubsub_notification_sinks: EthereumBlockNotificationSinks<OpaqueBlock> =
+			Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 
 		let pubsub_notification_sinks_inner = pubsub_notification_sinks.clone();
@@ -992,9 +986,8 @@ mod test {
 
 		// Spawn indexer task
 		let test_sync_oracle = TestSyncOracleNotSyncing {};
-		let pubsub_notification_sinks: EthereumBlockNotificationSinks<
-			EthereumBlockNotification<OpaqueBlock>,
-		> = Default::default();
+		let pubsub_notification_sinks: EthereumBlockNotificationSinks<OpaqueBlock> =
+			Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 
 		let pubsub_notification_sinks_inner = pubsub_notification_sinks.clone();
@@ -1204,9 +1197,8 @@ mod test {
 
 		// Spawn indexer task
 		let test_sync_oracle = TestSyncOracleNotSyncing {};
-		let pubsub_notification_sinks: EthereumBlockNotificationSinks<
-			EthereumBlockNotification<OpaqueBlock>,
-		> = Default::default();
+		let pubsub_notification_sinks: EthereumBlockNotificationSinks<OpaqueBlock> =
+			Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 
 		let pubsub_notification_sinks_inner = pubsub_notification_sinks.clone();
@@ -1309,9 +1301,8 @@ mod test {
 		let pool = indexer_backend.pool().clone();
 
 		// Spawn indexer task
-		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<
-			crate::EthereumBlockNotification<OpaqueBlock>,
-		> = Default::default();
+		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<OpaqueBlock> =
+			Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 		let mut sync_oracle_wrapper = TestSyncOracleWrapper::new();
 		let sync_oracle = sync_oracle_wrapper.oracle.clone();
@@ -1410,9 +1401,8 @@ mod test {
 		let pool = indexer_backend.pool().clone();
 
 		// Spawn indexer task
-		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<
-			crate::EthereumBlockNotification<OpaqueBlock>,
-		> = Default::default();
+		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<OpaqueBlock> =
+			Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 		let mut sync_oracle_wrapper = TestSyncOracleWrapper::new();
 		let sync_oracle = sync_oracle_wrapper.oracle.clone();
@@ -1525,9 +1515,8 @@ mod test {
 		let pool = indexer_backend.pool().clone();
 
 		// Spawn indexer task
-		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<
-			crate::EthereumBlockNotification<OpaqueBlock>,
-		> = Default::default();
+		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<OpaqueBlock> =
+			Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 		let mut sync_oracle_wrapper = TestSyncOracleWrapper::new();
 		let sync_oracle = sync_oracle_wrapper.oracle.clone();
@@ -1626,9 +1615,8 @@ mod test {
 		let pool = indexer_backend.pool().clone();
 
 		// Spawn indexer task
-		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<
-			crate::EthereumBlockNotification<OpaqueBlock>,
-		> = Default::default();
+		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<OpaqueBlock> =
+			Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 		let mut sync_oracle_wrapper = TestSyncOracleWrapper::new();
 		let sync_oracle = sync_oracle_wrapper.oracle.clone();
@@ -1741,9 +1729,8 @@ mod test {
 		let pool = indexer_backend.pool().clone();
 
 		// Spawn indexer task
-		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<
-			crate::EthereumBlockNotification<OpaqueBlock>,
-		> = Default::default();
+		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<OpaqueBlock> =
+			Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 		let mut sync_oracle_wrapper = TestSyncOracleWrapper::new();
 		let sync_oracle = sync_oracle_wrapper.oracle.clone();
@@ -1842,9 +1829,8 @@ mod test {
 		let pool = indexer_backend.pool().clone();
 
 		// Spawn indexer task
-		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<
-			crate::EthereumBlockNotification<OpaqueBlock>,
-		> = Default::default();
+		let pubsub_notification_sinks: crate::EthereumBlockNotificationSinks<OpaqueBlock> =
+			Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 		let mut sync_oracle_wrapper = TestSyncOracleWrapper::new();
 		let sync_oracle = sync_oracle_wrapper.oracle.clone();

@@ -6,7 +6,10 @@
 use std::{
 	collections::VecDeque,
 	mem::size_of,
-	sync::{Arc, Mutex},
+	sync::{
+		atomic::{AtomicU64, Ordering},
+		Arc, Mutex,
+	},
 	time::Duration,
 };
 
@@ -226,15 +229,15 @@ pub struct LogsJournal {
 	state: Arc<Mutex<LogsJournalState>>,
 	tx: broadcast::Sender<Arc<LogsJournalEntry>>,
 	worker_init: Arc<Mutex<Option<SpawnLogsJournalWorker>>>,
+	/// Largest `RecvError::Lagged(n)` skip count from any `eth_subscribe("logs")` consumer.
+	max_logs_broadcast_lag: Arc<AtomicU64>,
 }
 
 impl LogsJournal {
 	pub fn new<B: BlockT + 'static>(
 		executor: SubscriptionTaskExecutor,
 		storage_override: Arc<dyn StorageOverride<B>>,
-		pubsub_notification_sinks: Arc<
-			EthereumBlockNotificationSinks<EthereumBlockNotification<B>>,
-		>,
+		pubsub_notification_sinks: Arc<EthereumBlockNotificationSinks<B>>,
 	) -> Self {
 		Self::with_config(
 			executor,
@@ -247,22 +250,23 @@ impl LogsJournal {
 	pub fn with_config<B: BlockT + 'static>(
 		executor: SubscriptionTaskExecutor,
 		storage_override: Arc<dyn StorageOverride<B>>,
-		pubsub_notification_sinks: Arc<
-			EthereumBlockNotificationSinks<EthereumBlockNotification<B>>,
-		>,
+		pubsub_notification_sinks: Arc<EthereumBlockNotificationSinks<B>>,
 		config: LogsJournalConfig,
 	) -> Self {
 		let config = config.normalized();
 		let state = Arc::new(Mutex::new(LogsJournalState::with_config(&config)));
+		let max_logs_broadcast_lag = Arc::new(AtomicU64::new(0));
 		let (tx, _) = broadcast::channel(broadcast_capacity(config.max_entries));
+		let sink_registry = pubsub_notification_sinks.clone();
 		#[rustfmt::skip]
 		let worker_init = Arc::new(Mutex::new(Some(Box::new(
 			move |worker_state: Arc<Mutex<LogsJournalState>>,
 				worker_tx: broadcast::Sender<Arc<LogsJournalEntry>>| {
-				let initial_notifications =
-					register_notification_stream(&pubsub_notification_sinks);
+				let (mut sink_guard, mut notifications) = sink_registry.register(
+					"logs_journal_notification_stream",
+					100_000,
+				);
 				let worker_fut = async move {
-					let mut notifications = initial_notifications;
 					loop {
 						while let Some(notification) = notifications.next().await {
 							if !notification.is_new_best {
@@ -301,7 +305,13 @@ impl LogsJournal {
 						}
 
 						tokio::time::sleep(LOGS_JOURNAL_RECONNECT_BACKOFF).await;
-						notifications = register_notification_stream(&pubsub_notification_sinks);
+						drop(sink_guard);
+						let (g, n) = sink_registry.register(
+							"logs_journal_notification_stream",
+							100_000,
+						);
+						sink_guard = g;
+						notifications = n;
 					}
 				}
 				.boxed();
@@ -314,6 +324,7 @@ impl LogsJournal {
 			state,
 			tx,
 			worker_init,
+			max_logs_broadcast_lag,
 		}
 	}
 
@@ -321,9 +332,7 @@ impl LogsJournal {
 	pub fn with_capacity<B: BlockT + 'static>(
 		executor: SubscriptionTaskExecutor,
 		storage_override: Arc<dyn StorageOverride<B>>,
-		pubsub_notification_sinks: Arc<
-			EthereumBlockNotificationSinks<EthereumBlockNotification<B>>,
-		>,
+		pubsub_notification_sinks: Arc<EthereumBlockNotificationSinks<B>>,
 		max_entries: usize,
 	) -> Self {
 		let total_bytes = max_entries
@@ -361,6 +370,26 @@ impl LogsJournal {
 		self.tx.subscribe()
 	}
 
+	/// Sum of retained journal entry bytes currently in the deque.
+	pub fn total_retained_bytes(&self) -> usize {
+		self.ensure_started();
+		self.state
+			.lock()
+			.expect("logs journal mutex poisoned")
+			.total_bytes
+	}
+
+	/// Record skip count from a lagged logs subscriber (`tokio::sync::broadcast::RecvError::Lagged`).
+	pub fn record_logs_broadcast_lag(&self, skipped: u64) {
+		self.max_logs_broadcast_lag
+			.fetch_max(skipped, Ordering::Relaxed);
+	}
+
+	/// Maximum skip count recorded since process start (see [`Self::record_logs_broadcast_lag`]).
+	pub fn max_logs_broadcast_lag(&self) -> u64 {
+		self.max_logs_broadcast_lag.load(Ordering::Relaxed)
+	}
+
 	pub fn snapshot_since(
 		&self,
 		cursor: u64,
@@ -390,15 +419,6 @@ impl LogsJournal {
 
 		Ok((entries, next_cursor))
 	}
-}
-
-fn register_notification_stream<B: BlockT>(
-	pubsub_notification_sinks: &Arc<EthereumBlockNotificationSinks<EthereumBlockNotification<B>>>,
-) -> sc_utils::mpsc::TracingUnboundedReceiver<EthereumBlockNotification<B>> {
-	let (inner_sink, notifications) =
-		sc_utils::mpsc::tracing_unbounded("logs_journal_notification_stream", 100_000);
-	pubsub_notification_sinks.lock().push(inner_sink);
-	notifications
 }
 
 fn build_journal_payload<B: BlockT>(
@@ -555,7 +575,7 @@ fn retained_entry_bytes(logs: &Vec<Log>) -> usize {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::collections::HashMap;
+	use std::{collections::HashMap, sync::atomic::AtomicU64};
 
 	use ethereum::{BlockV3, PartialHeader};
 	use ethereum_types::{Bloom, H160, H256, H64, U256};
@@ -666,6 +686,7 @@ mod tests {
 			))),
 			tx: broadcast::channel(2).0,
 			worker_init: Arc::new(Mutex::new(None)),
+			max_logs_broadcast_lag: Arc::new(AtomicU64::new(0)),
 		};
 
 		{
@@ -697,6 +718,7 @@ mod tests {
 			))),
 			tx: broadcast::channel(4).0,
 			worker_init: Arc::new(Mutex::new(None)),
+			max_logs_broadcast_lag: Arc::new(AtomicU64::new(0)),
 		};
 
 		{
@@ -720,6 +742,7 @@ mod tests {
 			))),
 			tx: broadcast::channel(4).0,
 			worker_init: Arc::new(Mutex::new(None)),
+			max_logs_broadcast_lag: Arc::new(AtomicU64::new(0)),
 		};
 		let (entries, next_cursor) = journal.snapshot_since(0).unwrap();
 		assert!(entries.is_empty());
@@ -737,6 +760,7 @@ mod tests {
 			))),
 			tx: broadcast::channel(8).0,
 			worker_init: Arc::new(Mutex::new(None)),
+			max_logs_broadcast_lag: Arc::new(AtomicU64::new(0)),
 		};
 		let mk = |topic_byte: u8| Log {
 			address: H160::repeat_byte(0x01),
@@ -780,6 +804,7 @@ mod tests {
 			))),
 			tx: broadcast::channel(8).0,
 			worker_init: Arc::new(Mutex::new(None)),
+			max_logs_broadcast_lag: Arc::new(AtomicU64::new(0)),
 		};
 		{
 			let mut state = journal.state.lock().unwrap();

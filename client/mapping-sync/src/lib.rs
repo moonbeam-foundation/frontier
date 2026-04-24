@@ -20,8 +20,11 @@
 #![allow(clippy::too_many_arguments)]
 
 pub mod kv;
+pub mod sink_registry;
 #[cfg(feature = "sql")]
 pub mod sql;
+
+pub use sink_registry::{SinkGuard, SinkRegistry};
 
 use sp_blockchain::TreeRoute;
 use sp_consensus::SyncOracle;
@@ -37,8 +40,8 @@ pub enum SyncStrategy {
 	Parachain,
 }
 
-pub type EthereumBlockNotificationSinks<T> =
-	parking_lot::Mutex<Vec<sc_utils::mpsc::TracingUnboundedSender<T>>>;
+/// Registry of live block-notification sinks (RAII removal; see [`SinkRegistry`]).
+pub type EthereumBlockNotificationSinks<Block> = SinkRegistry<EthereumBlockNotification<Block>>;
 
 /// Default hard cap for pending notifications per subscriber channel.
 /// Subscribers above this threshold are considered lagging and are dropped.
@@ -127,36 +130,20 @@ pub struct BlockNotificationContext<Block: BlockT> {
 /// Both backends should call this function after completing block sync/indexing
 /// to ensure consistent notification behavior regardless of the storage backend used.
 pub fn emit_block_notification<Block: BlockT>(
-	pubsub_notification_sinks: &EthereumBlockNotificationSinks<EthereumBlockNotification<Block>>,
+	sink_registry: &EthereumBlockNotificationSinks<Block>,
 	sync_oracle: &dyn SyncOracle,
 	context: BlockNotificationContext<Block>,
 ) {
-	let sinks = &mut pubsub_notification_sinks.lock();
-
 	if sync_oracle.is_major_syncing() {
 		// Remove all sinks when major syncing to prevent stale subscriptions
-		sinks.clear();
+		sink_registry.clear_on_major_sync();
 		return;
 	}
 
-	sinks.retain(|sink| {
-		let max_pending = MAX_PENDING_NOTIFICATIONS_PER_SUBSCRIBER.load(Ordering::Relaxed);
-		if sink.len() >= max_pending {
-			log::debug!(
-				target: "mapping-sync",
-				"Dropping lagging pubsub subscriber (pending={}, max={})",
-				sink.len(),
-				max_pending,
-			);
-			let _ = sink.close();
-			return false;
-		}
-
-		sink.unbounded_send(EthereumBlockNotification {
-			is_new_best: context.is_new_best,
-			hash: context.hash,
-			reorg_info: context.reorg_info.clone(),
-		})
-		.is_ok()
+	let max_pending = MAX_PENDING_NOTIFICATIONS_PER_SUBSCRIBER.load(Ordering::Relaxed);
+	sink_registry.broadcast(max_pending, || EthereumBlockNotification {
+		is_new_best: context.is_new_best,
+		hash: context.hash,
+		reorg_info: context.reorg_info.clone(),
 	});
 }

@@ -410,9 +410,8 @@ where
 	fc_mapping_sync::set_max_pending_notifications_per_subscriber(
 		eth_config.pubsub_max_pending_notifications,
 	);
-	let pubsub_notification_sinks: fc_mapping_sync::EthereumBlockNotificationSinks<
-		fc_mapping_sync::EthereumBlockNotification<B>,
-	> = Default::default();
+	let pubsub_notification_sinks: fc_mapping_sync::EthereumBlockNotificationSinks<B> =
+		Default::default();
 	let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 
 	// for ethereum-compatibility rpc.
@@ -423,6 +422,7 @@ where
 		let pool = transaction_pool.clone();
 		let network = network.clone();
 		let sync_service = sync_service.clone();
+		let prometheus_registry_eth = prometheus_registry.clone();
 
 		let is_authority = role.is_authority();
 		let enable_dev_signer = eth_config.enable_dev_signer;
@@ -484,6 +484,7 @@ where
 				rpc_allow_unprotected_txs,
 				forced_parent_hashes: None,
 				pending_create_inherent_data_providers,
+				prometheus_registry: prometheus_registry_eth.clone(),
 			};
 			let deps = crate::rpc::FullDeps {
 				client: client.clone(),

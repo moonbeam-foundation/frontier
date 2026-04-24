@@ -67,6 +67,8 @@ pub struct EthDeps<B: BlockT, C, P, CT, CIDP> {
 	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
 	/// Something that can create the inherent data providers for pending state
 	pub pending_create_inherent_data_providers: CIDP,
+	/// Prometheus registry for Frontier pubsub / logs journal gauges (optional).
+	pub prometheus_registry: Option<prometheus_endpoint::Registry>,
 }
 
 /// Instantiate Ethereum-compatible RPC extensions.
@@ -74,11 +76,7 @@ pub fn create_eth<B, C, BE, P, CT, CIDP, EC>(
 	mut io: RpcModule<()>,
 	deps: EthDeps<B, C, P, CT, CIDP>,
 	subscription_task_executor: SubscriptionTaskExecutor,
-	pubsub_notification_sinks: Arc<
-		fc_mapping_sync::EthereumBlockNotificationSinks<
-			fc_mapping_sync::EthereumBlockNotification<B>,
-		>,
-	>,
+	pubsub_notification_sinks: Arc<fc_mapping_sync::EthereumBlockNotificationSinks<B>>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
 	B: BlockT,
@@ -96,9 +94,9 @@ where
 	EC: EthConfig<B, C>,
 {
 	use fc_rpc::{
-		pending::AuraConsensusDataProvider, Debug, DebugApiServer, Eth, EthApiServer, EthDevSigner,
-		EthFilter, EthFilterApiServer, EthPubSub, EthPubSubApiServer, EthSigner, LogsJournal, Net,
-		NetApiServer, Web3, Web3ApiServer,
+		pending::AuraConsensusDataProvider, spawn_frontier_pubsub_metrics_task, Debug,
+		DebugApiServer, Eth, EthApiServer, EthDevSigner, EthFilter, EthFilterApiServer, EthPubSub,
+		EthPubSubApiServer, EthSigner, LogsJournal, Net, NetApiServer, Web3, Web3ApiServer,
 	};
 	#[cfg(feature = "txpool")]
 	use fc_rpc::{TxPool, TxPoolApiServer};
@@ -124,6 +122,7 @@ where
 		rpc_allow_unprotected_txs,
 		forced_parent_hashes,
 		pending_create_inherent_data_providers,
+		prometheus_registry,
 	} = deps;
 
 	let mut signers = Vec::new();
@@ -137,6 +136,13 @@ where
 		pubsub_notification_sinks.clone(),
 		logs_journal_config,
 	));
+
+	spawn_frontier_pubsub_metrics_task(
+		prometheus_registry.as_ref(),
+		pubsub_notification_sinks.clone(),
+		logs_journal.clone(),
+		subscription_task_executor.clone(),
+	);
 
 	io.merge(
 		Eth::<B, C, P, CT, BE, CIDP, EC>::new(
