@@ -39,8 +39,7 @@ use fp_consensus::{FindLogError, Hashes, Log, PostLog, PreLog};
 use fp_rpc::EthereumRuntimeRPCApi;
 
 use crate::{
-	emit_block_notification, BlockNotificationContext, EthereumBlockNotification,
-	EthereumBlockNotificationSinks, SyncStrategy,
+	emit_block_notification, BlockNotificationContext, EthereumBlockNotificationSinks, SyncStrategy,
 };
 use worker::BestBlockInfo;
 
@@ -353,9 +352,7 @@ pub fn sync_one_block<Block: BlockT, C, BE>(
 	state_pruning_blocks: Option<u64>,
 	strategy: SyncStrategy,
 	sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
-	pubsub_notification_sinks: Arc<
-		EthereumBlockNotificationSinks<EthereumBlockNotification<Block>>,
-	>,
+	pubsub_notification_sinks: Arc<EthereumBlockNotificationSinks<Block>>,
 	best_at_import: &mut HashMap<Block::Hash, BestBlockInfo<Block>>,
 ) -> Result<bool, String>
 where
@@ -583,9 +580,7 @@ pub fn sync_blocks<Block: BlockT, C, BE>(
 	state_pruning_blocks: Option<u64>,
 	strategy: SyncStrategy,
 	sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
-	pubsub_notification_sinks: Arc<
-		EthereumBlockNotificationSinks<EthereumBlockNotification<Block>>,
-	>,
+	pubsub_notification_sinks: Arc<EthereumBlockNotificationSinks<Block>>,
 	best_at_import: &mut HashMap<Block::Hash, BestBlockInfo<Block>>,
 ) -> Result<bool, String>
 where
@@ -671,9 +666,7 @@ mod tests {
 	use sp_runtime::generic::DigestItem;
 
 	use super::{canonical_reconciler, repair_canonical_number_mappings_batch, sync_one_block};
-	use crate::{
-		EthereumBlockNotification, EthereumBlockNotificationSinks, ReorgInfo, SyncStrategy,
-	};
+	use crate::{EthereumBlockNotificationSinks, ReorgInfo, SyncStrategy};
 
 	fn ethereum_digest_item_for(eth_block: &ethereum::BlockV3) -> DigestItem {
 		DigestItem::Consensus(
@@ -1449,9 +1442,8 @@ mod tests {
 			Arc::new(NoopStorageOverride);
 		let sync_oracle: Arc<dyn sp_consensus::SyncOracle + Send + Sync> =
 			Arc::new(TestSyncOracleNotSyncing);
-		let pubsub_sinks: Arc<
-			EthereumBlockNotificationSinks<EthereumBlockNotification<OpaqueBlock>>,
-		> = Arc::new(Default::default());
+		let pubsub_sinks: Arc<EthereumBlockNotificationSinks<OpaqueBlock>> =
+			Arc::new(Default::default());
 		let mut best_at_import = HashMap::new();
 
 		let did_sync = sync_one_block(

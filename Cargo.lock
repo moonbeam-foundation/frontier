@@ -3188,7 +3188,6 @@ dependencies = [
  "sc-rpc",
  "sc-service",
  "sc-transaction-pool-api",
- "sc-utils",
  "schnellru",
  "serde",
  "sp-api",

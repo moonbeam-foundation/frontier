@@ -67,8 +67,7 @@ pub struct MappingSyncWorker<Block: BlockT, C, BE> {
 	strategy: SyncStrategy,
 
 	sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
-	pubsub_notification_sinks:
-		Arc<crate::EthereumBlockNotificationSinks<crate::EthereumBlockNotification<Block>>>,
+	pubsub_notification_sinks: Arc<crate::EthereumBlockNotificationSinks<Block>>,
 
 	/// Tracks block hashes that were `is_new_best` at the time of their import notification,
 	/// along with their block number for pruning purposes and optional reorg info.
@@ -93,9 +92,7 @@ impl<Block: BlockT, C, BE> MappingSyncWorker<Block, C, BE> {
 		state_pruning_blocks: Option<u64>,
 		strategy: SyncStrategy,
 		sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
-		pubsub_notification_sinks: Arc<
-			crate::EthereumBlockNotificationSinks<crate::EthereumBlockNotification<Block>>,
-		>,
+		pubsub_notification_sinks: Arc<crate::EthereumBlockNotificationSinks<Block>>,
 	) -> Self {
 		Self {
 			import_notifications,
@@ -245,7 +242,7 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::{EthereumBlockNotification, EthereumBlockNotificationSinks};
+	use crate::EthereumBlockNotificationSinks;
 	use fc_storage::SchemaV3StorageOverride;
 	use fp_storage::{EthereumStorageSchema, PALLET_ETHEREUM_SCHEMA};
 	use sc_block_builder::BlockBuilderBuilder;
@@ -348,9 +345,8 @@ mod tests {
 		let notification_stream = client.clone().import_notification_stream();
 		let client_inner = client.clone();
 
-		let pubsub_notification_sinks: EthereumBlockNotificationSinks<
-			EthereumBlockNotification<OpaqueBlock>,
-		> = Default::default();
+		let pubsub_notification_sinks: EthereumBlockNotificationSinks<OpaqueBlock> =
+			Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 
 		let pubsub_notification_sinks_inner = pubsub_notification_sinks.clone();
@@ -374,19 +370,11 @@ mod tests {
 			.await
 		});
 
+		let (guard1, mut block_notification_stream) = pubsub_notification_sinks
+			.clone()
+			.register("pubsub_notification_stream", 100_000);
+
 		{
-			// A new mpsc channel
-			let (inner_sink, mut block_notification_stream) =
-				sc_utils::mpsc::tracing_unbounded("pubsub_notification_stream", 100_000);
-
-			{
-				// This scope represents a call to eth_subscribe, where it briefly locks the pool
-				// to push the new sink.
-				let sinks = &mut pubsub_notification_sinks.lock();
-				// Push to sink pool
-				sinks.push(inner_sink);
-			}
-
 			// Let's produce a block, which we expect to trigger a channel message
 			let chain_info = client.chain_info();
 			let builder = BlockBuilderBuilder::new(&*client)
@@ -410,25 +398,17 @@ mod tests {
 			);
 		}
 
-		{
-			// Assert we still hold a sink in the pool after switching scopes
-			let sinks = pubsub_notification_sinks.lock();
-			assert_eq!(sinks.len(), 1);
-		}
+		drop(block_notification_stream);
+		// Assert we still hold a sink in the pool (guard1) while the receiver is gone (zombie
+		// until the next emit prunes it).
+		assert_eq!(pubsub_notification_sinks.len(), 1);
+
+		let (guard2, mut block_notification_stream) = pubsub_notification_sinks
+			.clone()
+			.register("pubsub_notification_stream", 100_000);
+		assert_eq!(pubsub_notification_sinks.len(), 2);
 
 		{
-			// Create yet another mpsc channel
-			let (inner_sink, mut block_notification_stream) =
-				sc_utils::mpsc::tracing_unbounded("pubsub_notification_stream", 100_000);
-
-			{
-				let sinks = &mut pubsub_notification_sinks.lock();
-				// Push it
-				sinks.push(inner_sink);
-				// Now we expect two sinks in the pool
-				assert_eq!(sinks.len(), 2);
-			}
-
 			// Let's produce another block, this not only triggers a message in the new channel
 			// but also removes the closed channels from the pool.
 			let chain_info = client.chain_info();
@@ -451,11 +431,12 @@ mod tests {
 					.hash,
 				block_hash
 			);
-
-			// So we expect the pool to hold one sink only after cleanup
-			let sinks = &mut pubsub_notification_sinks.lock();
-			assert_eq!(sinks.len(), 1);
 		}
+
+		// So we expect the pool to hold one sink only after cleanup
+		assert_eq!(pubsub_notification_sinks.len(), 1);
+		drop(guard1);
+		drop(guard2);
 	}
 
 	#[tokio::test]
@@ -496,9 +477,8 @@ mod tests {
 		let notification_stream = client.clone().import_notification_stream();
 		let client_inner = client.clone();
 
-		let pubsub_notification_sinks: EthereumBlockNotificationSinks<
-			EthereumBlockNotification<OpaqueBlock>,
-		> = Default::default();
+		let pubsub_notification_sinks: EthereumBlockNotificationSinks<OpaqueBlock> =
+			Default::default();
 		let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 
 		let pubsub_notification_sinks_inner = pubsub_notification_sinks.clone();
@@ -522,19 +502,11 @@ mod tests {
 			.await
 		});
 
+		let (_guard, mut block_notification_stream) = pubsub_notification_sinks
+			.clone()
+			.register("pubsub_notification_stream", 100_000);
+
 		{
-			// A new mpsc channel
-			let (inner_sink, mut block_notification_stream) =
-				sc_utils::mpsc::tracing_unbounded("pubsub_notification_stream", 100_000);
-
-			{
-				// This scope represents a call to eth_subscribe, where it briefly locks the pool
-				// to push the new sink.
-				let sinks = &mut pubsub_notification_sinks.lock();
-				// Push to sink pool
-				sinks.push(inner_sink);
-			}
-
 			// Let's produce a block, which we expect to trigger a channel message
 			let chain_info = client.chain_info();
 			let builder = BlockBuilderBuilder::new(&*client)
@@ -550,11 +522,8 @@ mod tests {
 			assert!(block_notification_stream.next().await.is_none());
 		}
 
-		{
-			// Assert sink was removed from pool on major syncing
-			let sinks = pubsub_notification_sinks.lock();
-			assert_eq!(sinks.len(), 0);
-		}
+		// Assert sink was removed from pool on major syncing
+		assert_eq!(pubsub_notification_sinks.len(), 0);
 	}
 
 	#[tokio::test]

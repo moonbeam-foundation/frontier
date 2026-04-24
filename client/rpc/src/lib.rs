@@ -32,6 +32,7 @@ mod eth;
 mod eth_pubsub;
 mod logs_journal;
 mod net;
+mod pubsub_metrics;
 mod signer;
 #[cfg(feature = "txpool")]
 mod txpool;
@@ -46,6 +47,7 @@ pub use self::{
 	eth_pubsub::{EthPubSub, EthereumSubIdProvider},
 	logs_journal::{LogsJournal, LogsJournalConfig, LogsJournalEntry, LogsJournalError},
 	net::Net,
+	pubsub_metrics::spawn_frontier_pubsub_metrics_task,
 	signer::{EthDevSigner, EthSigner},
 	web3::Web3,
 };

@@ -152,11 +152,7 @@ pub async fn spawn_frontier_tasks<B, RA, HF>(
 	fee_history_cache_limit: FeeHistoryCacheLimit,
 	state_pruning_blocks: Option<u64>,
 	sync: Arc<SyncingService<B>>,
-	pubsub_notification_sinks: Arc<
-		fc_mapping_sync::EthereumBlockNotificationSinks<
-			fc_mapping_sync::EthereumBlockNotification<B>,
-		>,
-	>,
+	pubsub_notification_sinks: Arc<fc_mapping_sync::EthereumBlockNotificationSinks<B>>,
 ) where
 	B: BlockT<Hash = H256>,
 	RA: ConstructRuntimeApi<B, FullClient<B, RA, HF>>,
