@@ -21,6 +21,24 @@ struct Inner<T> {
 	generation: u64,
 }
 
+fn maybe_shrink_sink_map<T>(sinks: &mut HashMap<u64, TracingUnboundedSender<T>>) {
+	let len = sinks.len();
+	let cap = sinks.capacity();
+	if cap > 4096 && cap > len.saturating_mul(4).max(1) {
+		sinks.shrink_to_fit();
+	}
+}
+
+/// Aggregated queue / capacity stats for [`SinkRegistry`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SinkRegistryStats {
+	pub sinks: usize,
+	pub capacity: usize,
+	pub pending_total: usize,
+	pub pending_max: usize,
+	pub closed: usize,
+}
+
 /// Shared registry of async sinks with RAII-based removal.
 ///
 /// Each [`Self::register`] returns a [`SinkGuard`]; when dropped, the sink is removed.
@@ -56,11 +74,33 @@ impl<T> SinkRegistry<T> {
 		self.inner.lock().sinks.is_empty()
 	}
 
+	/// Per-sink queue depth and map capacity (for Prometheus / leak hunting).
+	pub fn stats(&self) -> SinkRegistryStats {
+		let inner = self.inner.lock();
+		let mut stats = SinkRegistryStats {
+			sinks: inner.sinks.len(),
+			capacity: inner.sinks.capacity(),
+			pending_total: 0,
+			pending_max: 0,
+			closed: 0,
+		};
+		for sink in inner.sinks.values() {
+			let pending = sink.len();
+			stats.pending_total = stats.pending_total.saturating_add(pending);
+			stats.pending_max = stats.pending_max.max(pending);
+			if sink.is_closed() {
+				stats.closed = stats.closed.saturating_add(1);
+			}
+		}
+		stats
+	}
+
 	/// Remove all sinks (used when the node enters major sync).
 	pub fn clear_on_major_sync(&self) {
 		let mut inner = self.inner.lock();
 		inner.generation = inner.generation.saturating_add(1);
 		inner.sinks.clear();
+		inner.sinks.shrink_to_fit();
 	}
 
 	/// Register a new sink. Keep [`SinkGuard`] alive while the paired receiver is in use;
@@ -126,6 +166,7 @@ impl<T> SinkRegistry<T> {
 		for id in to_remove {
 			inner.sinks.remove(&id);
 		}
+		maybe_shrink_sink_map(&mut inner.sinks);
 	}
 }
 
@@ -172,6 +213,20 @@ mod tests {
 		registry.broadcast(512, || 7);
 		assert_eq!(registry.len(), 1);
 		assert_eq!(block_on(rx1.next()), Some(7));
+	}
+
+	#[test]
+	fn stats_sum_pending_and_capacity() {
+		let registry = Arc::new(SinkRegistry::<u32>::new());
+		let (_g1, _rx1) = registry.register("a", 10_000);
+		let (_g2, _rx2) = registry.register("b", 10_000);
+		registry.broadcast(512, || 1);
+		registry.broadcast(512, || 2);
+		let s = registry.stats();
+		assert_eq!(s.sinks, 2);
+		assert!(s.capacity >= 2);
+		assert_eq!(s.pending_total, 4);
+		assert_eq!(s.pending_max, 2);
 	}
 
 	#[test]

@@ -413,6 +413,7 @@ where
 	let pubsub_notification_sinks: fc_mapping_sync::EthereumBlockNotificationSinks<B> =
 		Default::default();
 	let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
+	let mapping_sync_metrics = Arc::new(fc_mapping_sync::MappingSyncMetrics::default());
 
 	// for ethereum-compatibility rpc.
 	config.rpc.id_provider = Some(Box::new(fc_rpc::EthereumSubIdProvider));
@@ -433,6 +434,7 @@ where
 		let filter_pool = filter_pool.clone();
 		let frontier_backend = frontier_backend.clone();
 		let pubsub_notification_sinks = pubsub_notification_sinks.clone();
+		let mapping_sync_metrics = mapping_sync_metrics.clone();
 		let storage_override = storage_override.clone();
 		let fee_history_cache = fee_history_cache.clone();
 		let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
@@ -485,6 +487,7 @@ where
 				forced_parent_hashes: None,
 				pending_create_inherent_data_providers,
 				prometheus_registry: prometheus_registry_eth.clone(),
+				mapping_sync_metrics: Some(mapping_sync_metrics.clone()),
 			};
 			let deps = crate::rpc::FullDeps {
 				client: client.clone(),
@@ -543,6 +546,7 @@ where
 		state_pruning_blocks,
 		sync_service.clone(),
 		pubsub_notification_sinks,
+		Some(mapping_sync_metrics),
 	)
 	.await;
 

@@ -24,7 +24,7 @@ pub mod sink_registry;
 #[cfg(feature = "sql")]
 pub mod sql;
 
-pub use sink_registry::{SinkGuard, SinkRegistry};
+pub use sink_registry::{SinkGuard, SinkRegistry, SinkRegistryStats};
 
 use sp_blockchain::TreeRoute;
 use sp_consensus::SyncOracle;
@@ -33,6 +33,21 @@ use std::sync::{
 	atomic::{AtomicUsize, Ordering},
 	Arc,
 };
+
+/// Atomics updated by the KV mapping-sync worker for Prometheus / diagnostics.
+#[derive(Debug)]
+pub struct MappingSyncMetrics {
+	/// Current `best_at_import` map length. SQL backend does not update this (stays zero).
+	pub best_at_import_entries: AtomicUsize,
+}
+
+impl Default for MappingSyncMetrics {
+	fn default() -> Self {
+		Self {
+			best_at_import_entries: AtomicUsize::new(0),
+		}
+	}
+}
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum SyncStrategy {

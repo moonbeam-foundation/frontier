@@ -23,6 +23,7 @@ mod worker;
 
 pub use worker::MappingSyncWorker;
 
+use core::cmp::Ord;
 use std::{collections::HashMap, sync::Arc};
 
 // Substrate
@@ -44,6 +45,10 @@ use crate::{
 use worker::BestBlockInfo;
 
 pub const CANONICAL_NUMBER_REPAIR_BATCH_SIZE: u64 = 2048;
+
+/// Hard cap for [`MappingSyncWorker`](worker::MappingSyncWorker) `best_at_import` (drops lowest
+/// block numbers when over limit).
+const MAX_BEST_AT_IMPORT_ENTRIES: usize = 65_536;
 
 /// Max blocks to backfill in one skip-path call to avoid unbounded stall on heavily pruned nodes.
 const BACKFILL_ON_SKIP_MAX_BLOCKS: u64 = 1024;
@@ -570,6 +575,36 @@ where
 	Ok(true)
 }
 
+fn prune_best_at_import_finalized<Block: BlockT>(
+	best_at_import: &mut HashMap<Block::Hash, BestBlockInfo<Block>>,
+	finalized_number: <Block::Header as HeaderT>::Number,
+) {
+	best_at_import.retain(|_, info| info.block_number > finalized_number);
+}
+
+fn cap_best_at_import<Block: BlockT>(best_at_import: &mut HashMap<Block::Hash, BestBlockInfo<Block>>)
+where
+	<Block::Header as HeaderT>::Number: Ord,
+{
+	if best_at_import.len() <= MAX_BEST_AT_IMPORT_ENTRIES {
+		return;
+	}
+	let excess = best_at_import.len() - MAX_BEST_AT_IMPORT_ENTRIES;
+	let mut by_number: Vec<(Block::Hash, <Block::Header as HeaderT>::Number)> = best_at_import
+		.iter()
+		.map(|(h, info)| (*h, info.block_number))
+		.collect();
+	by_number.sort_by_key(|(_, n)| *n);
+	for (hash, _) in by_number.into_iter().take(excess) {
+		best_at_import.remove(&hash);
+	}
+	log::warn!(
+		target: "mapping-sync",
+		"best_at_import exceeded {MAX_BEST_AT_IMPORT_ENTRIES}: dropped {excess} lowest-number entries; remaining={}",
+		best_at_import.len(),
+	);
+}
+
 pub fn sync_blocks<Block: BlockT, C, BE>(
 	client: &C,
 	substrate_backend: &BE,
@@ -588,30 +623,42 @@ where
 	C::Api: EthereumRuntimeRPCApi<Block>,
 	C: HeaderBackend<Block> + StorageProvider<Block, BE>,
 	BE: Backend<Block>,
+	<Block::Header as HeaderT>::Number: Ord,
 {
+	let finalized_number = client.info().finalized_number;
+	prune_best_at_import_finalized(best_at_import, finalized_number);
+	cap_best_at_import(best_at_import);
+
 	let mut synced_any = false;
 
 	for _ in 0..limit {
-		synced_any = synced_any
-			|| sync_one_block(
-				client,
-				substrate_backend,
-				storage_override.clone(),
-				frontier_backend,
-				sync_from,
-				state_pruning_blocks,
-				strategy,
-				sync_oracle.clone(),
-				pubsub_notification_sinks.clone(),
-				best_at_import,
-			)?;
+		match sync_one_block(
+			client,
+			substrate_backend,
+			storage_override.clone(),
+			frontier_backend,
+			sync_from,
+			state_pruning_blocks,
+			strategy,
+			sync_oracle.clone(),
+			pubsub_notification_sinks.clone(),
+			best_at_import,
+		) {
+			Ok(b) => synced_any = synced_any || b,
+			Err(e) => {
+				prune_best_at_import_finalized(best_at_import, client.info().finalized_number);
+				cap_best_at_import(best_at_import);
+				return Err(e);
+			}
+		}
 	}
 
 	// Prune old entries from best_at_import to prevent unbounded growth.
 	// Entries for finalized blocks are no longer needed since finalized blocks
 	// cannot be reorged and their is_new_best status is irrelevant.
 	let finalized_number = client.info().finalized_number;
-	best_at_import.retain(|_, info| info.block_number > finalized_number);
+	prune_best_at_import_finalized(best_at_import, finalized_number);
+	cap_best_at_import(best_at_import);
 
 	Ok(synced_any)
 }

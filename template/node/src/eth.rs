@@ -153,6 +153,7 @@ pub async fn spawn_frontier_tasks<B, RA, HF>(
 	state_pruning_blocks: Option<u64>,
 	sync: Arc<SyncingService<B>>,
 	pubsub_notification_sinks: Arc<fc_mapping_sync::EthereumBlockNotificationSinks<B>>,
+	mapping_sync_metrics: Option<Arc<fc_mapping_sync::MappingSyncMetrics>>,
 ) where
 	B: BlockT<Hash = H256>,
 	RA: ConstructRuntimeApi<B, FullClient<B, RA, HF>>,
@@ -179,6 +180,7 @@ pub async fn spawn_frontier_tasks<B, RA, HF>(
 					fc_mapping_sync::SyncStrategy::Normal,
 					sync,
 					pubsub_notification_sinks,
+					mapping_sync_metrics,
 				)
 				.for_each(|()| future::ready(())),
 			);

@@ -69,6 +69,8 @@ pub struct EthDeps<B: BlockT, C, P, CT, CIDP> {
 	pub pending_create_inherent_data_providers: CIDP,
 	/// Prometheus registry for Frontier pubsub / logs journal gauges (optional).
 	pub prometheus_registry: Option<prometheus_endpoint::Registry>,
+	/// Mapping-sync introspection (KV worker updates `best_at_import` gauge).
+	pub mapping_sync_metrics: Option<Arc<fc_mapping_sync::MappingSyncMetrics>>,
 }
 
 /// Instantiate Ethereum-compatible RPC extensions.
@@ -123,6 +125,7 @@ where
 		forced_parent_hashes,
 		pending_create_inherent_data_providers,
 		prometheus_registry,
+		mapping_sync_metrics,
 	} = deps;
 
 	let mut signers = Vec::new();
@@ -142,6 +145,7 @@ where
 		pubsub_notification_sinks.clone(),
 		logs_journal.clone(),
 		subscription_task_executor.clone(),
+		mapping_sync_metrics,
 	);
 
 	io.merge(

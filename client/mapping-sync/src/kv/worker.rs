@@ -16,14 +16,22 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{collections::HashMap, pin::Pin, sync::Arc, time::Duration};
+use std::{
+	collections::HashMap,
+	pin::Pin,
+	sync::{
+		atomic::Ordering,
+		Arc,
+	},
+	time::Duration,
+};
 
 use futures::{
 	prelude::*,
 	task::{Context, Poll},
 };
 use futures_timer::Delay;
-use log::debug;
+use log::{debug, warn};
 // Substrate
 use sc_client_api::{
 	backend::{Backend, StorageProvider},
@@ -37,7 +45,7 @@ use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
 use fc_storage::StorageOverride;
 use fp_rpc::EthereumRuntimeRPCApi;
 
-use crate::{ReorgInfo, SyncStrategy};
+use crate::{MappingSyncMetrics, ReorgInfo, SyncStrategy};
 
 /// Information tracked at import time for a block that was `is_new_best`.
 pub struct BestBlockInfo<Block: BlockT> {
@@ -68,6 +76,8 @@ pub struct MappingSyncWorker<Block: BlockT, C, BE> {
 
 	sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
 	pubsub_notification_sinks: Arc<crate::EthereumBlockNotificationSinks<Block>>,
+	/// When set, [`MappingSyncMetrics::best_at_import_entries`] is updated after each sync step.
+	metrics: Option<Arc<MappingSyncMetrics>>,
 
 	/// Tracks block hashes that were `is_new_best` at the time of their import notification,
 	/// along with their block number for pruning purposes and optional reorg info.
@@ -93,6 +103,7 @@ impl<Block: BlockT, C, BE> MappingSyncWorker<Block, C, BE> {
 		strategy: SyncStrategy,
 		sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
 		pubsub_notification_sinks: Arc<crate::EthereumBlockNotificationSinks<Block>>,
+		metrics: Option<Arc<MappingSyncMetrics>>,
 	) -> Self {
 		Self {
 			import_notifications,
@@ -112,6 +123,7 @@ impl<Block: BlockT, C, BE> MappingSyncWorker<Block, C, BE> {
 
 			sync_oracle,
 			pubsub_notification_sinks,
+			metrics,
 			best_at_import: HashMap::new(),
 		}
 	}
@@ -120,6 +132,7 @@ impl<Block: BlockT, C, BE> MappingSyncWorker<Block, C, BE> {
 impl<Block, C, BE> Stream for MappingSyncWorker<Block, C, BE>
 where
 	Block: BlockT,
+	<Block::Header as HeaderT>::Number: core::cmp::Ord,
 	C: ProvideRuntimeApi<Block>,
 	C::Api: EthereumRuntimeRPCApi<Block>,
 	C: HeaderBackend<Block> + StorageProvider<Block, BE>,
@@ -140,9 +153,17 @@ where
 					// We store the block number to enable pruning of old entries,
 					// and reorg info if this block became best as part of a reorg.
 					if notification.is_new_best {
-						// For notification: include new_best_hash per Ethereum spec.
-						let reorg_info = notification.tree_route.as_ref().map(|tree_route| {
-							Arc::new(ReorgInfo::from_tree_route(tree_route, notification.hash))
+						// For notification: include new_best_hash per Ethereum spec. Skip `ReorgInfo`
+						// allocation on linear extension (no retracted blocks).
+						let reorg_info = notification.tree_route.as_ref().and_then(|tree_route| {
+							if tree_route.retracted().is_empty() {
+								None
+							} else {
+								Some(Arc::new(ReorgInfo::from_tree_route(
+									tree_route,
+									notification.hash,
+								)))
+							}
 						});
 						self.best_at_import.insert(
 							notification.hash,
@@ -195,6 +216,10 @@ where
 
 			// Restore the best_at_import set
 			self.best_at_import = best_at_import;
+			if let Some(m) = &self.metrics {
+				m.best_at_import_entries
+					.store(self.best_at_import.len(), Ordering::Relaxed);
+			}
 
 			match result {
 				Ok(have_next) => {
@@ -229,7 +254,12 @@ where
 				}
 				Err(e) => {
 					self.have_next = false;
-					debug!(target: "mapping-sync", "Syncing failed with error {e:?}, retrying.");
+					warn!(
+						target: "mapping-sync",
+						"Syncing failed with error {e:?}, retrying. sync_from={:?} best_at_import_len={}",
+						self.sync_from,
+						self.best_at_import.len(),
+					);
 					Poll::Ready(Some(()))
 				}
 			}
@@ -365,6 +395,7 @@ mod tests {
 				SyncStrategy::Normal,
 				Arc::new(test_sync_oracle),
 				pubsub_notification_sinks_inner,
+				None,
 			)
 			.for_each(|()| future::ready(()))
 			.await
@@ -497,6 +528,7 @@ mod tests {
 				SyncStrategy::Normal,
 				Arc::new(test_sync_oracle),
 				pubsub_notification_sinks_inner,
+				None,
 			)
 			.for_each(|()| future::ready(()))
 			.await
