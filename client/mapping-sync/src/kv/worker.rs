@@ -45,7 +45,7 @@ use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
 use fc_storage::StorageOverride;
 use fp_rpc::EthereumRuntimeRPCApi;
 
-use crate::{MappingSyncMetrics, ReorgInfo, SyncStrategy};
+use crate::{EthereumBlockNotificationSinks, MappingSyncMetrics, ReorgInfo, SyncStrategy};
 
 /// Information tracked at import time for a block that was `is_new_best`.
 pub struct BestBlockInfo<Block: BlockT> {
@@ -88,6 +88,68 @@ pub struct MappingSyncWorker<Block: BlockT, C, BE> {
 }
 
 impl<Block: BlockT, C, BE> Unpin for MappingSyncWorker<Block, C, BE> {}
+
+/// Logs mapping-sync structures that correlate with RSS (pubsub fan-out, fork catch-up maps).
+fn log_mapping_sync_memory_pressure<Block: BlockT>(
+	best_at_import: &HashMap<Block::Hash, BestBlockInfo<Block>>,
+	sinks: &EthereumBlockNotificationSinks<Block>,
+	metrics: Option<&MappingSyncMetrics>,
+	sync_step_us: u64,
+	sync_blocks_ok: bool,
+	worker_have_next: bool,
+) {
+	let entries = best_at_import.len();
+	let map_cap = best_at_import.capacity();
+	let reorg_route_items: usize = best_at_import
+		.values()
+		.filter_map(|info| info.reorg_info.as_ref())
+		.map(|info| info.retracted.len().saturating_add(info.enacted.len()))
+		.sum();
+	let (tips_len, tips_dup, tips_peak) = match metrics {
+		Some(m) => (
+			m.current_syncing_tips_len.load(Ordering::Relaxed),
+			m.current_syncing_tips_duplicates.load(Ordering::Relaxed),
+			m.current_syncing_tips_len_peak.load(Ordering::Relaxed),
+		),
+		None => (0usize, 0usize, 0usize),
+	};
+	let s = sinks.stats();
+	let max_b = super::max_best_at_import_entries();
+
+	log::debug!(
+		target: "mapping-sync",
+		"memory-pressure snapshot: best_at_import_entries={entries} best_at_import_map_capacity={map_cap} \
+		 best_at_import_reorg_route_items={reorg_route_items} max_best_at_import_entries={max_b} \
+		 current_syncing_tips_len={tips_len} tips_duplicates={tips_dup} tips_len_peak={tips_peak} \
+		 pubsub_sinks_registered={} pubsub_sink_map_capacity={} pubsub_closed_senders={} \
+		 sync_step_us={sync_step_us} sync_blocks_ok={sync_blocks_ok} worker_have_next={worker_have_next}",
+		s.sinks,
+		s.capacity,
+		s.closed,
+	);
+
+	let heavy = entries >= max_b.saturating_mul(3) / 4
+		|| tips_len >= 4096
+		|| tips_peak >= 4096
+		|| s.sinks >= 1024
+		|| s.capacity >= 65_536
+		|| map_cap >= max_b;
+
+	if heavy {
+		log::warn!(
+			target: "mapping-sync",
+			"HIGH mapping-sync retained state (check for RSS growth / OOM): \
+			 best_at_import_entries={entries}/{max_b} best_at_import_map_capacity={map_cap} \
+			 best_at_import_reorg_route_items={reorg_route_items} \
+			 current_syncing_tips_len={tips_len} tips_duplicates={tips_dup} tips_len_peak={tips_peak} \
+			 pubsub_sinks_registered={} pubsub_sink_map_capacity={} pubsub_closed_senders={} \
+			 sync_step_us={sync_step_us} sync_blocks_ok={sync_blocks_ok} worker_have_next={worker_have_next}",
+			s.sinks,
+			s.capacity,
+			s.closed,
+		);
+	}
+}
 
 impl<Block: BlockT, C, BE> MappingSyncWorker<Block, C, BE> {
 	pub fn new(
@@ -142,6 +204,7 @@ where
 
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<()>> {
 		let mut fire = false;
+		let best_at_import_len_before_notifications = self.best_at_import.len();
 
 		loop {
 			match Stream::poll_next(Pin::new(&mut self.import_notifications), cx) {
@@ -176,6 +239,20 @@ where
 				}
 				Poll::Ready(None) => return Poll::Ready(None),
 			}
+		}
+
+		let growth = self
+			.best_at_import
+			.len()
+			.saturating_sub(best_at_import_len_before_notifications);
+		if growth >= 256 {
+			warn!(
+				target: "mapping-sync",
+				"rapid best_at_import growth in one worker wake: +{growth} new-best import(s) \
+				 (now entries={} map_capacity={}); large reorg metadata may increase RSS",
+				self.best_at_import.len(),
+				self.best_at_import.capacity(),
+			);
 		}
 
 		let timeout = self.timeout;
@@ -235,7 +312,14 @@ where
 					.store(reorg_items, Ordering::Relaxed);
 			}
 
-			match result {
+			let sync_ok = result.is_ok();
+			let sync_step_us = started_at
+				.elapsed()
+				.as_micros()
+				.try_into()
+				.unwrap_or(u64::MAX);
+
+			let poll = match result {
 				Ok(have_next) => {
 					if !have_next {
 						if let Err(e) = super::canonical_reconciler::reconcile_recent_window(
@@ -270,15 +354,49 @@ where
 				}
 				Err(e) => {
 					self.have_next = false;
+					let s = self.pubsub_notification_sinks.stats();
+					let (tips_len, tips_dup, tips_peak) = match self.metrics.as_deref() {
+						Some(m) => (
+							m.current_syncing_tips_len.load(Ordering::Relaxed),
+							m.current_syncing_tips_duplicates.load(Ordering::Relaxed),
+							m.current_syncing_tips_len_peak.load(Ordering::Relaxed),
+						),
+						None => (0usize, 0usize, 0usize),
+					};
+					let reorg_route_items: usize = self
+						.best_at_import
+						.values()
+						.filter_map(|info| info.reorg_info.as_ref())
+						.map(|info| info.retracted.len().saturating_add(info.enacted.len()))
+						.sum();
 					warn!(
 						target: "mapping-sync",
-						"Syncing failed with error {e:?}, retrying. sync_from={:?} best_at_import_len={}",
+						"Syncing failed with error {e:?}, retrying. sync_from={:?} \
+						 best_at_import_entries={} best_at_import_map_capacity={} \
+						 best_at_import_reorg_route_items={reorg_route_items} \
+						 current_syncing_tips_len={tips_len} tips_duplicates={tips_dup} tips_len_peak={tips_peak} \
+						 pubsub_sinks_registered={} pubsub_sink_map_capacity={} pubsub_closed_senders={}",
 						self.sync_from,
 						self.best_at_import.len(),
+						self.best_at_import.capacity(),
+						s.sinks,
+						s.capacity,
+						s.closed,
 					);
 					Poll::Ready(Some(()))
 				}
-			}
+			};
+
+			log_mapping_sync_memory_pressure(
+				&self.best_at_import,
+				self.pubsub_notification_sinks.as_ref(),
+				self.metrics.as_deref(),
+				sync_step_us,
+				sync_ok,
+				self.have_next,
+			);
+
+			poll
 		} else {
 			Poll::Pending
 		}

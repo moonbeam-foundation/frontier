@@ -661,8 +661,10 @@ where
 	}
 	log::warn!(
 		target: "mapping-sync",
-		"best_at_import exceeded {max_entries}: dropped {excess} lowest-number entries; remaining={}",
+		"best_at_import exceeded {max_entries}: dropped {excess} lowest-number entries; \
+		 remaining_entries={} remaining_map_capacity={}",
 		best_at_import.len(),
+		best_at_import.capacity(),
 	);
 }
 

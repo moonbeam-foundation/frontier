@@ -6,6 +6,7 @@
 //! RAII-backed registry of block-notification sinks (replaces append-only `Vec` of senders).
 
 use std::{
+	cell::Cell,
 	collections::HashMap,
 	sync::{Arc, Weak},
 };
@@ -141,23 +142,51 @@ impl<T> SinkRegistry<T> {
 			return;
 		}
 
+		let len_before = inner.sinks.len();
+		let dropped_full = Cell::new(0u32);
+		let dropped_other = Cell::new(0u32);
+		let dropped_closed = Cell::new(0u32);
+
 		inner.sinks.retain(|_id, sink| {
 			if sink.is_closed() {
+				dropped_closed.set(dropped_closed.get().saturating_add(1));
 				return false;
 			}
 			match sink.try_send(make_msg()) {
 				Ok(()) => true,
 				Err(e) => {
 					if e.is_full() {
-						log::debug!(
-							target: "mapping-sync",
-							"Dropping lagging pubsub sink (bounded notification channel full)",
-						);
+						dropped_full.set(dropped_full.get().saturating_add(1));
+					} else {
+						dropped_other.set(dropped_other.get().saturating_add(1));
 					}
 					false
 				}
 			}
 		});
+
+		let dropped = len_before.saturating_sub(inner.sinks.len());
+		if dropped > 0 {
+			let remaining = inner.sinks.len();
+			let cap = inner.sinks.capacity();
+			let full = dropped_full.get();
+			let other = dropped_other.get();
+			let closed = dropped_closed.get();
+			if full > 0 || other > 0 {
+				log::warn!(
+					target: "mapping-sync",
+					"pubsub broadcast pruned {dropped} sink(s): bounded_channel_full={full} \
+					 try_send_other={other} closed_receiver={closed}; \
+					 remaining_registered={remaining} sink_map_capacity={cap}",
+				);
+			} else {
+				log::debug!(
+					target: "mapping-sync",
+					"pubsub broadcast pruned {dropped} closed sink(s); \
+					 remaining_registered={remaining} sink_map_capacity={cap}",
+				);
+			}
+		}
 		maybe_shrink_sink_map(&mut inner.sinks);
 	}
 }
