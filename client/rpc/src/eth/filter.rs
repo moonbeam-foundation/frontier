@@ -377,8 +377,8 @@ where
 				let mut logs = Vec::new();
 				for entry in entries {
 					for log in entry.logs.iter() {
-						if log_matches_filter(&params, log, true) {
-							logs.push(log.clone());
+						if log_matches_filter(&params, log.as_ref(), true) {
+							logs.push(log.as_ref().clone());
 						}
 					}
 				}

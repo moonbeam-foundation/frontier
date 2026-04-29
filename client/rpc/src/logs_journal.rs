@@ -4,17 +4,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 use std::{
-	collections::VecDeque,
+	collections::{HashMap, HashSet, VecDeque},
 	mem::size_of,
 	sync::{
 		atomic::{AtomicU64, Ordering},
 		Arc, Mutex,
 	},
-	time::Duration,
+	time::{Duration, Instant},
 };
 
 use futures::{FutureExt as _, StreamExt as _};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 // Substrate
 use sc_rpc::SubscriptionTaskExecutor;
 use sp_runtime::traits::Block as BlockT;
@@ -25,7 +25,7 @@ use fc_storage::StorageOverride;
 
 use crate::eth::filter::visit_block_logs_with_removed;
 
-const DEFAULT_LOGS_JOURNAL_MAX_TOTAL_BYTES: usize = 512 * 1024 * 1024;
+const DEFAULT_LOGS_JOURNAL_MAX_TOTAL_BYTES: usize = 256 * 1024 * 1024;
 const DEFAULT_LOGS_JOURNAL_MAX_BLOCKS_PER_ENTRY: usize = 128;
 const DEFAULT_LOGS_JOURNAL_MAX_LOGS_PER_ENTRY: usize = 10_000;
 const DEFAULT_LOGS_JOURNAL_MAX_BYTES_PER_ENTRY: usize = 4 * 1024 * 1024;
@@ -36,6 +36,47 @@ const MAX_BROADCAST_CAPACITY: usize = 4_096;
 /// churn rapidly; we intentionally **do not** cap retries so the journal keeps tracking the best
 /// chain for the lifetime of the process.
 const LOGS_JOURNAL_RECONNECT_BACKOFF: Duration = Duration::from_millis(50);
+
+/// Kick `eth_subscribe("logs")` consumers that fall behind the journal head by more than this
+/// many entries (before Tokio `broadcast` forces `RecvError::Lagged` at full ring capacity).
+const LOGS_JOURNAL_WATCHDOG_MAX_LAG_ENTRIES: u64 = 32;
+/// Kick consumers that stay at least one entry behind for this wall-clock duration.
+const LOGS_JOURNAL_WATCHDOG_MAX_LAG_DURATION: Duration = Duration::from_secs(15);
+const LOGS_JOURNAL_WATCHDOG_SWEEP: Duration = Duration::from_secs(2);
+
+/// Per-subscription state for the logs-journal lag watchdog.
+#[derive(Debug)]
+pub struct LogsJournalSubscriber {
+	pub id: u64,
+	last_delivered_seq: AtomicU64,
+	cancel: watch::Sender<bool>,
+}
+
+impl LogsJournalSubscriber {
+	pub fn last_delivered_seq(&self) -> u64 {
+		self.last_delivered_seq.load(Ordering::Relaxed)
+	}
+
+	/// Record the highest journal sequence successfully forwarded to the WebSocket client.
+	pub fn note_delivered(&self, seq: u64) {
+		let mut cur = self.last_delivered_seq.load(Ordering::Relaxed);
+		while seq > cur {
+			match self.last_delivered_seq.compare_exchange_weak(
+				cur,
+				seq,
+				Ordering::Relaxed,
+				Ordering::Relaxed,
+			) {
+				Ok(_) => break,
+				Err(actual) => cur = actual,
+			}
+		}
+	}
+
+	fn cancel(&self) {
+		let _ = self.cancel.send(true);
+	}
+}
 
 #[derive(Clone, Debug)]
 pub struct LogsJournalConfig {
@@ -136,7 +177,7 @@ fn broadcast_capacity(max_entries: usize) -> usize {
 pub struct LogsJournalEntry {
 	pub seq: u64,
 	pub complete: bool,
-	pub logs: Vec<Log>,
+	pub logs: Vec<Arc<Log>>,
 }
 
 #[derive(Clone, Debug)]
@@ -192,6 +233,7 @@ impl LogsJournalState {
 	}
 
 	fn push(&mut self, complete: bool, logs: Vec<Log>) -> Arc<LogsJournalEntry> {
+		let logs: Vec<Arc<Log>> = logs.into_iter().map(Arc::new).collect();
 		let retained_logs = logs.len();
 		let retained_bytes = retained_entry_bytes(&logs);
 		let entry = Arc::new(LogsJournalEntry {
@@ -231,6 +273,9 @@ pub struct LogsJournal {
 	worker_init: Arc<Mutex<Option<SpawnLogsJournalWorker>>>,
 	/// Largest `RecvError::Lagged(n)` skip count from any `eth_subscribe("logs")` consumer.
 	max_logs_broadcast_lag: Arc<AtomicU64>,
+	head_seq: Arc<AtomicU64>,
+	logs_subscribers: Arc<Mutex<HashMap<u64, Arc<LogsJournalSubscriber>>>>,
+	next_logs_subscriber_id: Arc<AtomicU64>,
 }
 
 impl LogsJournal {
@@ -256,16 +301,79 @@ impl LogsJournal {
 		let config = config.normalized();
 		let state = Arc::new(Mutex::new(LogsJournalState::with_config(&config)));
 		let max_logs_broadcast_lag = Arc::new(AtomicU64::new(0));
+		let head_seq = Arc::new(AtomicU64::new(0));
+		let logs_subscribers = Arc::new(Mutex::new(HashMap::new()));
+		let next_logs_subscriber_id = Arc::new(AtomicU64::new(0));
 		let (tx, _) = broadcast::channel(broadcast_capacity(config.max_entries));
 		let sink_registry = pubsub_notification_sinks.clone();
+
+		let head_seq_watchdog = head_seq.clone();
+		let logs_subscribers_watchdog = logs_subscribers.clone();
+		let mut watchdog_ticker = tokio::time::interval(LOGS_JOURNAL_WATCHDOG_SWEEP);
+		watchdog_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+		executor.spawn(
+			"frontier-logs-journal-watchdog",
+			Some("rpc"),
+			async move {
+				let mut behind_since: HashMap<u64, Instant> = HashMap::new();
+				loop {
+					watchdog_ticker.tick().await;
+					let head = head_seq_watchdog.load(Ordering::Relaxed);
+					let now = Instant::now();
+					let snapshot: Vec<Arc<LogsJournalSubscriber>> = {
+						let subs = logs_subscribers_watchdog
+							.lock()
+							.expect("logs journal subscribers mutex poisoned");
+						subs.values().cloned().collect()
+					};
+					let mut live_ids = HashSet::with_capacity(snapshot.len());
+					for handle in snapshot {
+						live_ids.insert(handle.id);
+						let last = handle.last_delivered_seq();
+						let lag = head.saturating_sub(last);
+						if lag == 0 {
+							behind_since.remove(&handle.id);
+							continue;
+						}
+						if lag > LOGS_JOURNAL_WATCHDOG_MAX_LAG_ENTRIES {
+							log::debug!(
+								target: "rpc",
+								"Closing logs subscription {}: {} entries behind journal head (head={}, last={})",
+								handle.id,
+								lag,
+								head,
+								last,
+							);
+							handle.cancel();
+							behind_since.remove(&handle.id);
+							continue;
+						}
+						let first = *behind_since.entry(handle.id).or_insert(now);
+						if now.duration_since(first) > LOGS_JOURNAL_WATCHDOG_MAX_LAG_DURATION {
+							log::debug!(
+								target: "rpc",
+								"Closing logs subscription {}: behind head for {:?} (lag={})",
+								handle.id,
+								now.duration_since(first),
+								lag,
+							);
+							handle.cancel();
+							behind_since.remove(&handle.id);
+						}
+					}
+					behind_since.retain(|id, _| live_ids.contains(id));
+				}
+			}
+			.boxed(),
+		);
+
+		let head_seq_worker = head_seq.clone();
 		#[rustfmt::skip]
 		let worker_init = Arc::new(Mutex::new(Some(Box::new(
 			move |worker_state: Arc<Mutex<LogsJournalState>>,
 				worker_tx: broadcast::Sender<Arc<LogsJournalEntry>>| {
-				let (mut sink_guard, mut notifications) = sink_registry.register(
-					"logs_journal_notification_stream",
-					100_000,
-				);
+				let cap = fc_mapping_sync::max_pending_notifications_per_subscriber();
+				let (mut sink_guard, mut notifications) = sink_registry.register(cap);
 				let worker_fut = async move {
 					loop {
 						while let Some(notification) = notifications.next().await {
@@ -283,6 +391,7 @@ impl LogsJournal {
 									worker_state.lock().expect("logs journal mutex poisoned");
 								state.push(complete, logs)
 							};
+							head_seq_worker.store(entry.seq, Ordering::Relaxed);
 							let _ = worker_tx.send(entry);
 						}
 
@@ -301,15 +410,13 @@ impl LogsJournal {
 							}
 						};
 						if let Some(entry) = maybe_gap {
+							head_seq_worker.store(entry.seq, Ordering::Relaxed);
 							let _ = worker_tx.send(entry);
 						}
 
 						tokio::time::sleep(LOGS_JOURNAL_RECONNECT_BACKOFF).await;
 						drop(sink_guard);
-						let (g, n) = sink_registry.register(
-							"logs_journal_notification_stream",
-							100_000,
-						);
+						let (g, n) = sink_registry.register(cap);
 						sink_guard = g;
 						notifications = n;
 					}
@@ -325,6 +432,9 @@ impl LogsJournal {
 			tx,
 			worker_init,
 			max_logs_broadcast_lag,
+			head_seq,
+			logs_subscribers,
+			next_logs_subscriber_id,
 		}
 	}
 
@@ -368,6 +478,41 @@ impl LogsJournal {
 	pub fn subscribe(&self) -> broadcast::Receiver<Arc<LogsJournalEntry>> {
 		self.ensure_started();
 		self.tx.subscribe()
+	}
+
+	/// Like [`Self::subscribe`], but registers the receiver with the lag watchdog and returns a
+	/// [`watch::Receiver`] that becomes `true` when the subscription should terminate.
+	pub fn subscribe_tracked(
+		&self,
+	) -> (
+		Arc<LogsJournalSubscriber>,
+		broadcast::Receiver<Arc<LogsJournalEntry>>,
+		watch::Receiver<bool>,
+	) {
+		self.ensure_started();
+		let id = self
+			.next_logs_subscriber_id
+			.fetch_add(1, Ordering::Relaxed);
+		let head = self.head_seq.load(Ordering::Relaxed);
+		let (cancel_tx, cancel_rx) = watch::channel(false);
+		let sub = Arc::new(LogsJournalSubscriber {
+			id,
+			last_delivered_seq: AtomicU64::new(head),
+			cancel: cancel_tx,
+		});
+		self.logs_subscribers
+			.lock()
+			.expect("logs journal subscribers mutex poisoned")
+			.insert(id, sub.clone());
+		(sub, self.tx.subscribe(), cancel_rx)
+	}
+
+	pub fn unregister_logs_subscriber(&self, id: u64) {
+		let _ = self
+			.logs_subscribers
+			.lock()
+			.expect("logs journal subscribers mutex poisoned")
+			.remove(&id);
 	}
 
 	/// Sum of retained journal entry bytes currently in the deque.
@@ -560,22 +705,25 @@ fn retained_log_dynamic_bytes(log: &Log) -> usize {
 
 fn retained_entry_bytes_with_capacity(logs_capacity: usize, dynamic_bytes: usize) -> usize {
 	size_of::<LogsJournalEntry>()
-		.saturating_add(logs_capacity.saturating_mul(size_of::<Log>()))
+		.saturating_add(logs_capacity.saturating_mul(size_of::<Arc<Log>>()))
 		.saturating_add(dynamic_bytes)
 }
 
-fn retained_entry_bytes(logs: &Vec<Log>) -> usize {
+fn retained_entry_bytes(logs: &[Arc<Log>]) -> usize {
 	let dynamic_bytes = logs
 		.iter()
-		.map(retained_log_dynamic_bytes)
+		.map(|l| retained_log_dynamic_bytes(l.as_ref()))
 		.fold(0usize, usize::saturating_add);
-	retained_entry_bytes_with_capacity(logs.capacity(), dynamic_bytes)
+	retained_entry_bytes_with_capacity(logs.len(), dynamic_bytes)
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::{collections::HashMap, sync::atomic::AtomicU64};
+	use std::{
+		collections::HashMap,
+		sync::{atomic::AtomicU64, Arc, Mutex},
+	};
 
 	use ethereum::{BlockV3, PartialHeader};
 	use ethereum_types::{Bloom, H160, H256, H64, U256};
@@ -687,6 +835,9 @@ mod tests {
 			tx: broadcast::channel(2).0,
 			worker_init: Arc::new(Mutex::new(None)),
 			max_logs_broadcast_lag: Arc::new(AtomicU64::new(0)),
+			head_seq: Arc::new(AtomicU64::new(0)),
+			logs_subscribers: Arc::new(Mutex::new(HashMap::new())),
+			next_logs_subscriber_id: Arc::new(AtomicU64::new(0)),
 		};
 
 		{
@@ -719,6 +870,9 @@ mod tests {
 			tx: broadcast::channel(4).0,
 			worker_init: Arc::new(Mutex::new(None)),
 			max_logs_broadcast_lag: Arc::new(AtomicU64::new(0)),
+			head_seq: Arc::new(AtomicU64::new(0)),
+			logs_subscribers: Arc::new(Mutex::new(HashMap::new())),
+			next_logs_subscriber_id: Arc::new(AtomicU64::new(0)),
 		};
 
 		{
@@ -743,6 +897,9 @@ mod tests {
 			tx: broadcast::channel(4).0,
 			worker_init: Arc::new(Mutex::new(None)),
 			max_logs_broadcast_lag: Arc::new(AtomicU64::new(0)),
+			head_seq: Arc::new(AtomicU64::new(0)),
+			logs_subscribers: Arc::new(Mutex::new(HashMap::new())),
+			next_logs_subscriber_id: Arc::new(AtomicU64::new(0)),
 		};
 		let (entries, next_cursor) = journal.snapshot_since(0).unwrap();
 		assert!(entries.is_empty());
@@ -761,6 +918,9 @@ mod tests {
 			tx: broadcast::channel(8).0,
 			worker_init: Arc::new(Mutex::new(None)),
 			max_logs_broadcast_lag: Arc::new(AtomicU64::new(0)),
+			head_seq: Arc::new(AtomicU64::new(0)),
+			logs_subscribers: Arc::new(Mutex::new(HashMap::new())),
+			next_logs_subscriber_id: Arc::new(AtomicU64::new(0)),
 		};
 		let mk = |topic_byte: u8| Log {
 			address: H160::repeat_byte(0x01),
@@ -805,6 +965,9 @@ mod tests {
 			tx: broadcast::channel(8).0,
 			worker_init: Arc::new(Mutex::new(None)),
 			max_logs_broadcast_lag: Arc::new(AtomicU64::new(0)),
+			head_seq: Arc::new(AtomicU64::new(0)),
+			logs_subscribers: Arc::new(Mutex::new(HashMap::new())),
+			next_logs_subscriber_id: Arc::new(AtomicU64::new(0)),
 		};
 		{
 			let mut state = journal.state.lock().unwrap();
@@ -1154,7 +1317,7 @@ mod tests {
 			transaction_log_index: None,
 			removed: false,
 		};
-		let retained_bytes = retained_entry_bytes(&vec![sample_log.clone()]);
+		let retained_bytes = retained_entry_bytes(&[Arc::new(sample_log.clone())]);
 		// Keep the config explicit here so this test isolates the `max_total_bytes` eviction path.
 		let config = LogsJournalConfig {
 			max_entries: 8,
@@ -1190,7 +1353,7 @@ mod tests {
 			transaction_log_index: None,
 			removed: false,
 		};
-		let retained = retained_entry_bytes(&vec![sample_log.clone()]);
+		let retained = retained_entry_bytes(&[Arc::new(sample_log.clone())]);
 		let config = LogsJournalConfig {
 			max_entries: 2,
 			max_total_logs: usize::MAX,
@@ -1339,7 +1502,9 @@ mod tests {
 		assert!(complete_loose);
 		assert_eq!(logs_loose.len(), 1);
 
-		let retained_bytes = retained_entry_bytes(&logs_loose);
+		let logs_loose_arced: Vec<Arc<Log>> =
+			logs_loose.iter().cloned().map(Arc::new).collect();
+		let retained_bytes = retained_entry_bytes(&logs_loose_arced);
 		let tight_config = LogsJournalConfig {
 			max_entries: 1,
 			max_total_logs: usize::MAX,

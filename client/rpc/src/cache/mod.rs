@@ -27,6 +27,7 @@ use std::{
 use ethereum::BlockV3 as EthereumBlock;
 use ethereum_types::U256;
 use futures::StreamExt;
+use scale_codec::Encode;
 use tokio::sync::{mpsc, oneshot};
 // Substrate
 use sc_client_api::{
@@ -41,15 +42,107 @@ use sp_runtime::traits::{Block as BlockT, Header as HeaderT, UniqueSaturatedInto
 use fc_rpc_core::types::*;
 use fc_storage::StorageOverride;
 use fp_rpc::{EthereumRuntimeRPCApi, TransactionStatus};
+use prometheus::{HistogramOpts, HistogramVec, IntCounterVec, Opts};
 
 use self::lru_cache::LRUCacheByteLimited;
 
-type WaitList<Hash, T> = HashMap<Hash, Vec<oneshot::Sender<Option<T>>>>;
+/// Internal bounded queue between RPC tasks and the cache driver. Larger values
+/// reduce `send().await` stalls when many concurrent requests hit the cache.
+const CACHE_TASK_CHANNEL_CAPACITY: usize = 512;
+
+type BlockWaitList<B> = HashMap<<B as BlockT>::Hash, Vec<oneshot::Sender<Option<Arc<EthereumBlock>>>>>;
+type StatusesWaitList<B> = HashMap<
+	<B as BlockT>::Hash,
+	Vec<oneshot::Sender<Option<Arc<Vec<TransactionStatus>>>>>,
+>;
+
+/// Wrapper so the LRU byte budget uses the encoded size of the payload while
+/// storing a cheap-to-clone [`Arc`] for fan-out to concurrent waiters.
+#[derive(Clone)]
+struct EncodedSizeBlock(Arc<EthereumBlock>);
+
+impl Encode for EncodedSizeBlock {
+	fn encode_to<W: scale_codec::Output + ?Sized>(&self, dest: &mut W) {
+		self.0.as_ref().encode_to(dest);
+	}
+}
+
+#[derive(Clone)]
+struct EncodedSizeStatuses(Arc<Vec<TransactionStatus>>);
+
+impl Encode for EncodedSizeStatuses {
+	fn encode_to<W: scale_codec::Output + ?Sized>(&self, dest: &mut W) {
+		self.0.as_slice().encode_to(dest);
+	}
+}
+
+struct EthBlockDataCacheMetrics {
+	coalesced_waiters: HistogramVec,
+	waiter_joined: IntCounterVec,
+	fetch_started: IntCounterVec,
+}
+
+impl EthBlockDataCacheMetrics {
+	fn register(registry: &prometheus_endpoint::Registry) -> Result<Self, prometheus_endpoint::PrometheusError> {
+		let coalesced_waiters = prometheus_endpoint::register(
+			HistogramVec::new(
+				HistogramOpts::new(
+					"frontier_eth_block_data_cache_coalesced_waiters",
+					"How many concurrent RPC waiters were satisfied by one storage fetch (per kind).",
+				)
+				.buckets(vec![
+					1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0, 55.0, 89.0, 144.0, 233.0,
+				]),
+				&["kind"],
+			)?,
+			registry,
+		)?;
+		let waiter_joined = prometheus_endpoint::register(
+			IntCounterVec::new(
+				Opts::new(
+					"frontier_eth_block_data_cache_waiter_joined_total",
+					"Waiters attached to an in-flight fetch (coalescing) by kind.",
+				),
+				&["kind"],
+			)?,
+			registry,
+		)?;
+		let fetch_started = prometheus_endpoint::register(
+			IntCounterVec::new(
+				Opts::new(
+					"frontier_eth_block_data_cache_fetch_started_total",
+					"In-flight storage fetches started by the block data cache (per kind).",
+				),
+				&["kind"],
+			)?,
+			registry,
+		)?;
+		Ok(Self {
+			coalesced_waiters,
+			waiter_joined,
+			fetch_started,
+		})
+	}
+
+	fn observe_coalesced(&self, kind: &'static str, waiters: usize) {
+		self.coalesced_waiters
+			.with_label_values(&[kind])
+			.observe(waiters as f64);
+	}
+
+	fn inc_waiter_joined(&self, kind: &'static str) {
+		self.waiter_joined.with_label_values(&[kind]).inc();
+	}
+
+	fn inc_fetch_started(&self, kind: &'static str) {
+		self.fetch_started.with_label_values(&[kind]).inc();
+	}
+}
 
 enum EthBlockDataCacheMessage<B: BlockT> {
 	RequestCurrentBlock {
 		block_hash: B::Hash,
-		response_tx: oneshot::Sender<Option<EthereumBlock>>,
+		response_tx: oneshot::Sender<Option<Arc<EthereumBlock>>>,
 	},
 	FetchedCurrentBlock {
 		block_hash: B::Hash,
@@ -58,7 +151,7 @@ enum EthBlockDataCacheMessage<B: BlockT> {
 
 	RequestCurrentTransactionStatuses {
 		block_hash: B::Hash,
-		response_tx: oneshot::Sender<Option<Vec<TransactionStatus>>>,
+		response_tx: oneshot::Sender<Option<Arc<Vec<TransactionStatus>>>>,
 	},
 	FetchedCurrentTransactionStatuses {
 		block_hash: B::Hash,
@@ -80,26 +173,34 @@ impl<B: BlockT> EthBlockDataCacheTask<B> {
 		statuses_cache_max_size: usize,
 		prometheus_registry: Option<prometheus_endpoint::Registry>,
 	) -> Self {
-		let (task_tx, mut task_rx) = mpsc::channel(100);
+		let (task_tx, mut task_rx) = mpsc::channel(CACHE_TASK_CHANNEL_CAPACITY);
 		let outer_task_tx = task_tx.clone();
 		let outer_spawn_handle = spawn_handle.clone();
 
+		let cache_metrics = prometheus_registry
+			.as_ref()
+			.and_then(|r| match EthBlockDataCacheMetrics::register(r) {
+				Ok(m) => Some(m),
+				Err(e) => {
+					log::error!(target: "eth-cache", "Failed to register eth block data cache metrics: {e:?}");
+					None
+				}
+			});
+
 		outer_spawn_handle.spawn("EthBlockDataCacheTask", None, async move {
-			let mut blocks_cache = LRUCacheByteLimited::<B::Hash, EthereumBlock>::new(
+			let mut blocks_cache = LRUCacheByteLimited::<B::Hash, EncodedSizeBlock>::new(
 				"blocks_cache",
 				blocks_cache_max_size as u64,
 				prometheus_registry.clone(),
 			);
-			let mut statuses_cache = LRUCacheByteLimited::<B::Hash, Vec<TransactionStatus>>::new(
+			let mut statuses_cache = LRUCacheByteLimited::<B::Hash, EncodedSizeStatuses>::new(
 				"statuses_cache",
 				statuses_cache_max_size as u64,
 				prometheus_registry,
 			);
 
-			let mut awaiting_blocks =
-				HashMap::<B::Hash, Vec<oneshot::Sender<Option<EthereumBlock>>>>::new();
-			let mut awaiting_statuses =
-				HashMap::<B::Hash, Vec<oneshot::Sender<Option<Vec<TransactionStatus>>>>>::new();
+			let mut awaiting_blocks = BlockWaitList::<B>::new();
+			let mut awaiting_statuses = StatusesWaitList::<B>::new();
 
 			// Handle all incoming messages.
 			// Exits when there are no more senders.
@@ -111,7 +212,7 @@ impl<B: BlockT> EthBlockDataCacheTask<B> {
 					RequestCurrentBlock {
 						block_hash,
 						response_tx,
-					} => Self::request_current(
+					} => Self::request_current_block(
 						&spawn_handle,
 						&mut blocks_cache,
 						&mut awaiting_blocks,
@@ -119,27 +220,28 @@ impl<B: BlockT> EthBlockDataCacheTask<B> {
 						block_hash,
 						response_tx,
 						task_tx.clone(),
-						move |handler| FetchedCurrentBlock {
-							block_hash,
-							block: handler.current_block(block_hash),
-						},
+						cache_metrics.as_ref(),
 					),
 					FetchedCurrentBlock { block_hash, block } => {
 						if let Some(wait_list) = awaiting_blocks.remove(&block_hash) {
-							for sender in wait_list {
-								let _ = sender.send(block.clone());
+							let n = wait_list.len();
+							if let Some(m) = cache_metrics.as_ref() {
+								m.observe_coalesced("block", n);
 							}
-						}
-
-						if let Some(block) = block {
-							blocks_cache.put(block_hash, block);
+							let shared = block.map(Arc::new);
+							for sender in wait_list {
+								let _ = sender.send(shared.clone());
+							}
+							if let Some(block) = shared {
+								blocks_cache.put(block_hash, EncodedSizeBlock(block));
+							}
 						}
 					}
 
 					RequestCurrentTransactionStatuses {
 						block_hash,
 						response_tx,
-					} => Self::request_current(
+					} => Self::request_current_statuses(
 						&spawn_handle,
 						&mut statuses_cache,
 						&mut awaiting_statuses,
@@ -147,23 +249,24 @@ impl<B: BlockT> EthBlockDataCacheTask<B> {
 						block_hash,
 						response_tx,
 						task_tx.clone(),
-						move |handler| FetchedCurrentTransactionStatuses {
-							block_hash,
-							statuses: handler.current_transaction_statuses(block_hash),
-						},
+						cache_metrics.as_ref(),
 					),
 					FetchedCurrentTransactionStatuses {
 						block_hash,
 						statuses,
 					} => {
 						if let Some(wait_list) = awaiting_statuses.remove(&block_hash) {
-							for sender in wait_list {
-								let _ = sender.send(statuses.clone());
+							let n = wait_list.len();
+							if let Some(m) = cache_metrics.as_ref() {
+								m.observe_coalesced("statuses", n);
 							}
-						}
-
-						if let Some(statuses) = statuses {
-							statuses_cache.put(block_hash, statuses);
+							let shared = statuses.map(|s| Arc::new(s));
+							for sender in wait_list {
+								let _ = sender.send(shared.clone());
+							}
+							if let Some(statuses) = shared {
+								statuses_cache.put(block_hash, EncodedSizeStatuses(statuses));
+							}
 						}
 					}
 				}
@@ -173,40 +276,76 @@ impl<B: BlockT> EthBlockDataCacheTask<B> {
 		Self(outer_task_tx)
 	}
 
-	fn request_current<T, F>(
+	fn request_current_block(
 		spawn_handle: &SpawnTaskHandle,
-		cache: &mut LRUCacheByteLimited<B::Hash, T>,
-		wait_list: &mut WaitList<B::Hash, T>,
+		cache: &mut LRUCacheByteLimited<B::Hash, EncodedSizeBlock>,
+		wait_list: &mut BlockWaitList<B>,
 		storage_override: Arc<dyn StorageOverride<B>>,
 		block_hash: B::Hash,
-		response_tx: oneshot::Sender<Option<T>>,
+		response_tx: oneshot::Sender<Option<Arc<EthereumBlock>>>,
 		task_tx: mpsc::Sender<EthBlockDataCacheMessage<B>>,
-		handler_call: F,
-	) where
-		T: Clone + scale_codec::Encode,
-		F: FnOnce(&dyn StorageOverride<B>) -> EthBlockDataCacheMessage<B>,
-		F: Send + 'static,
-	{
-		// Data is cached, we respond immediately.
-		if let Some(data) = cache.get(&block_hash).cloned() {
-			let _ = response_tx.send(Some(data));
+		metrics: Option<&EthBlockDataCacheMetrics>,
+	) {
+		if let Some(w) = cache.get(&block_hash).cloned() {
+			let _ = response_tx.send(Some(w.0));
 			return;
 		}
 
-		// Another request already triggered caching but the
-		// response is not known yet, we add the sender to the waiting
-		// list.
 		if let Some(waiting) = wait_list.get_mut(&block_hash) {
 			waiting.push(response_tx);
+			if let Some(m) = metrics {
+				m.inc_waiter_joined("block");
+			}
 			return;
 		}
 
-		// Data is neither cached nor already requested, so we start fetching
-		// the data.
 		wait_list.insert(block_hash, vec![response_tx]);
+		if let Some(m) = metrics {
+			m.inc_fetch_started("block");
+		}
 
 		spawn_handle.spawn("EthBlockDataCacheTask Worker", None, async move {
-			let message = handler_call(&*storage_override);
+			let message = EthBlockDataCacheMessage::FetchedCurrentBlock {
+				block_hash,
+				block: storage_override.current_block(block_hash),
+			};
+			let _ = task_tx.send(message).await;
+		});
+	}
+
+	fn request_current_statuses(
+		spawn_handle: &SpawnTaskHandle,
+		cache: &mut LRUCacheByteLimited<B::Hash, EncodedSizeStatuses>,
+		wait_list: &mut StatusesWaitList<B>,
+		storage_override: Arc<dyn StorageOverride<B>>,
+		block_hash: B::Hash,
+		response_tx: oneshot::Sender<Option<Arc<Vec<TransactionStatus>>>>,
+		task_tx: mpsc::Sender<EthBlockDataCacheMessage<B>>,
+		metrics: Option<&EthBlockDataCacheMetrics>,
+	) {
+		if let Some(w) = cache.get(&block_hash).cloned() {
+			let _ = response_tx.send(Some(w.0));
+			return;
+		}
+
+		if let Some(waiting) = wait_list.get_mut(&block_hash) {
+			waiting.push(response_tx);
+			if let Some(m) = metrics {
+				m.inc_waiter_joined("statuses");
+			}
+			return;
+		}
+
+		wait_list.insert(block_hash, vec![response_tx]);
+		if let Some(m) = metrics {
+			m.inc_fetch_started("statuses");
+		}
+
+		spawn_handle.spawn("EthBlockDataCacheTask Worker", None, async move {
+			let message = EthBlockDataCacheMessage::FetchedCurrentTransactionStatuses {
+				block_hash,
+				statuses: storage_override.current_transaction_statuses(block_hash),
+			};
 			let _ = task_tx.send(message).await;
 		});
 	}
@@ -223,7 +362,10 @@ impl<B: BlockT> EthBlockDataCacheTask<B> {
 			.await
 			.ok()?;
 
-		response_rx.await.ok()?
+		response_rx
+			.await
+			.ok()?
+			.map(|arc| (*arc).clone())
 	}
 
 	/// Cache for `handler.current_transaction_statuses`.
@@ -243,7 +385,10 @@ impl<B: BlockT> EthBlockDataCacheTask<B> {
 			.await
 			.ok()?;
 
-		response_rx.await.ok()?
+		response_rx
+			.await
+			.ok()?
+			.map(|arc| (*arc).clone())
 	}
 }
 

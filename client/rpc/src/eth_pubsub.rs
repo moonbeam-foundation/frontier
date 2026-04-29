@@ -253,7 +253,7 @@ where
 				Kind::NewHeads => {
 					let (sink_guard, block_notification_stream) = pubsub
 						.pubsub_notification_sinks
-						.register("pubsub_notification_stream", 100_000);
+						.register(fc_mapping_sync::max_pending_notifications_per_subscriber());
 					// Per Ethereum spec, when a reorg occurs, we must emit all headers
 					// for the new canonical chain. The reorg_info field in the notification
 					// contains the enacted blocks when a reorg occurred.
@@ -268,53 +268,72 @@ where
 				}
 				Kind::Logs => {
 					let logs_params = filtered_params.clone();
-					let journal_rx = pubsub.logs_journal.subscribe();
-					let logs_journal = pubsub.logs_journal.clone();
-					let stream = futures::stream::unfold(
-						(journal_rx, logs_journal),
-						move |(mut rx, logs_journal)| {
-							let logs_params = logs_params.clone();
-							async move {
-								loop {
-									let entry = match rx.recv().await {
-										Ok(e) => e,
-										Err(RecvError::Lagged(n)) => {
-											logs_journal.record_logs_broadcast_lag(n);
-											debug!(
-												target: "eth-pubsub",
-												"Closing logs subscription; lagged behind logs journal by {n} entries"
-											);
-											return None;
-										}
-										Err(RecvError::Closed) => return None,
-									};
+					let (lag_handle, mut journal_rx, mut cancel_rx) =
+						pubsub.logs_journal.subscribe_tracked();
 
-									if !entry.complete {
-										debug!(
-											target: "eth-pubsub",
-											"Closing logs subscription after incomplete journal entry",
-										);
-										return None;
-									}
+					struct UnregisterLogsSub {
+						journal: Arc<LogsJournal>,
+						id: u64,
+					}
+					impl Drop for UnregisterLogsSub {
+						fn drop(&mut self) {
+							self.journal.unregister_logs_subscriber(self.id);
+						}
+					}
+					let _unregister = UnregisterLogsSub {
+						journal: pubsub.logs_journal.clone(),
+						id: lag_handle.id,
+					};
 
-									let results: Vec<PubSubResult> = entry
-										.logs
-										.iter()
-										.filter(|log| log_matches_filter(&logs_params, log, false))
-										.map(|log| PubSubResult::Log(Box::new(log.clone())))
-										.collect();
+					let Ok(sink) = pending.accept().await else {
+						return;
+					};
+					let subscription = Subscription::from(sink);
 
-									if !results.is_empty() {
-										return Some((results, (rx, logs_journal)));
-									}
+					loop {
+						tokio::select! {
+							res = cancel_rx.changed() => {
+								if res.is_err() {
+									break;
+								}
+								if *cancel_rx.borrow() {
+									break;
 								}
 							}
-						},
-					)
-					.flat_map(futures::stream::iter);
-					PendingSubscription::from(pending)
-						.pipe_from_stream(Box::pin(stream), BoundedVecDeque::new(16))
-						.await
+							_ = subscription.closed() => break,
+							recv = journal_rx.recv() => {
+								match recv {
+									Ok(entry) => {
+										if !entry.complete {
+											debug!(
+												target: "eth-pubsub",
+												"Closing logs subscription after incomplete journal entry",
+											);
+											break;
+										}
+										for log in entry.logs.iter() {
+											if log_matches_filter(&logs_params, log.as_ref(), false) {
+												let msg = PubSubResult::Log(Arc::clone(log));
+												if subscription.send(&msg).await.is_err() {
+													return;
+												}
+											}
+										}
+										lag_handle.note_delivered(entry.seq);
+									}
+									Err(RecvError::Lagged(n)) => {
+										pubsub.logs_journal.record_logs_broadcast_lag(n);
+										debug!(
+											target: "eth-pubsub",
+											"Closing logs subscription; lagged behind logs journal by {n} entries"
+										);
+										break;
+									}
+									Err(RecvError::Closed) => break,
+								}
+							}
+						}
+					}
 				}
 				Kind::NewPendingTransactions => {
 					let pool = pubsub.pool.clone();

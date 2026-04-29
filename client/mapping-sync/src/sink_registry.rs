@@ -10,18 +10,18 @@ use std::{
 	sync::{Arc, Weak},
 };
 
+use futures::channel::mpsc;
 use parking_lot::Mutex;
-use sc_utils::mpsc::{tracing_unbounded, TracingUnboundedReceiver, TracingUnboundedSender};
 
 struct Inner<T> {
-	sinks: HashMap<u64, TracingUnboundedSender<T>>,
+	sinks: HashMap<u64, mpsc::Sender<T>>,
 	next_id: u64,
 	/// Bumped when clearing all sinks on major sync; stale [`SinkGuard`]s must not remove
 	/// unrelated registrations after IDs advance.
 	generation: u64,
 }
 
-fn maybe_shrink_sink_map<T>(sinks: &mut HashMap<u64, TracingUnboundedSender<T>>) {
+fn maybe_shrink_sink_map<T>(sinks: &mut HashMap<u64, mpsc::Sender<T>>) {
 	let len = sinks.len();
 	let cap = sinks.capacity();
 	if cap > 4096 && cap > len.saturating_mul(4).max(1) {
@@ -29,21 +29,23 @@ fn maybe_shrink_sink_map<T>(sinks: &mut HashMap<u64, TracingUnboundedSender<T>>)
 	}
 }
 
-/// Aggregated queue / capacity stats for [`SinkRegistry`].
+/// Aggregated stats for [`SinkRegistry`].
+///
+/// Bounded per-sink `mpsc` channels do not expose queue depth on the sender; use `sinks` and
+/// `capacity` for pressure signals. Drops on full channels are visible indirectly (e.g. fewer
+/// sinks after `broadcast` prunes lagging receivers).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SinkRegistryStats {
 	pub sinks: usize,
 	pub capacity: usize,
-	pub pending_total: usize,
-	pub pending_max: usize,
 	pub closed: usize,
 }
 
 /// Shared registry of async sinks with RAII-based removal.
 ///
 /// Each [`Self::register`] returns a [`SinkGuard`]; when dropped, the sink is removed.
-/// [`Self::broadcast`] also removes closed or lagging sinks (same semantics as the former
-/// `Vec::retain` loop in [`crate::emit_block_notification`]).
+/// [`Self::broadcast`] also removes closed sinks, sinks whose bounded channel is full
+/// (`try_send` returns [`TrySendError::Full`]), and sinks that reject the send.
 pub struct SinkRegistry<T> {
 	inner: Mutex<Inner<T>>,
 }
@@ -74,20 +76,15 @@ impl<T> SinkRegistry<T> {
 		self.inner.lock().sinks.is_empty()
 	}
 
-	/// Per-sink queue depth and map capacity (for Prometheus / leak hunting).
+	/// Map size, bucket capacity, and closed senders (for Prometheus / leak hunting).
 	pub fn stats(&self) -> SinkRegistryStats {
 		let inner = self.inner.lock();
 		let mut stats = SinkRegistryStats {
 			sinks: inner.sinks.len(),
 			capacity: inner.sinks.capacity(),
-			pending_total: 0,
-			pending_max: 0,
 			closed: 0,
 		};
 		for sink in inner.sinks.values() {
-			let pending = sink.len();
-			stats.pending_total = stats.pending_total.saturating_add(pending);
-			stats.pending_max = stats.pending_max.max(pending);
 			if sink.is_closed() {
 				stats.closed = stats.closed.saturating_add(1);
 			}
@@ -103,17 +100,19 @@ impl<T> SinkRegistry<T> {
 		inner.sinks.shrink_to_fit();
 	}
 
-	/// Register a new sink. Keep [`SinkGuard`] alive while the paired receiver is in use;
-	/// dropping it unregisters the sender.
+	/// Register a new sink with a bounded per-sink queue of `channel_capacity` messages.
+	///
+	/// Keep [`SinkGuard`] alive while the paired [`mpsc::Receiver`] is in use; dropping it
+	/// unregisters the sender.
 	pub fn register(
 		self: &Arc<Self>,
-		name: &'static str,
-		warn_threshold: usize,
-	) -> (SinkGuard<T>, TracingUnboundedReceiver<T>)
+		channel_capacity: usize,
+	) -> (SinkGuard<T>, mpsc::Receiver<T>)
 	where
 		T: Send + 'static,
 	{
-		let (sender, receiver) = tracing_unbounded(name, warn_threshold);
+		let capacity = channel_capacity.max(1);
+		let (sender, receiver) = mpsc::channel(capacity);
 		let mut inner = self.inner.lock();
 		let id = inner.next_id;
 		inner.next_id = inner.next_id.saturating_add(1);
@@ -129,43 +128,36 @@ impl<T> SinkRegistry<T> {
 		)
 	}
 
-	/// Fan-out one notification per live sink, cloning via `make_msg` for each successful
-	/// delivery attempt. Drops closed channels, lagging channels (`len >= max_pending`), and
-	/// channels that reject the send — mirroring the previous `Mutex<Vec<_>>::retain` behavior.
-	pub fn broadcast(&self, max_pending: usize, mut make_msg: impl FnMut() -> T)
+	/// Fan-out one notification per live sink, cloning via `make_msg` for each send attempt.
+	///
+	/// `max_pending` is kept for call-site compatibility; per-sink capacity is fixed at
+	/// [`Self::register`] time.
+	pub fn broadcast(&self, _max_pending: usize, mut make_msg: impl FnMut() -> T)
 	where
-		T: Clone,
+		T: Send,
 	{
 		let mut inner = self.inner.lock();
 		if inner.sinks.is_empty() {
 			return;
 		}
 
-		let mut to_remove = Vec::new();
-		for (id, sink) in inner.sinks.iter() {
-			let id = *id;
+		inner.sinks.retain(|_id, sink| {
 			if sink.is_closed() {
-				to_remove.push(id);
-				continue;
+				return false;
 			}
-			if sink.len() >= max_pending {
-				log::debug!(
-					target: "mapping-sync",
-					"Dropping lagging pubsub subscriber (pending={}, max={})",
-					sink.len(),
-					max_pending,
-				);
-				let _ = sink.close();
-				to_remove.push(id);
-				continue;
+			match sink.try_send(make_msg()) {
+				Ok(()) => true,
+				Err(e) => {
+					if e.is_full() {
+						log::debug!(
+							target: "mapping-sync",
+							"Dropping lagging pubsub sink (bounded notification channel full)",
+						);
+					}
+					false
+				}
 			}
-			if sink.unbounded_send(make_msg()).is_err() {
-				to_remove.push(id);
-			}
-		}
-		for id in to_remove {
-			inner.sinks.remove(&id);
-		}
+		});
 		maybe_shrink_sink_map(&mut inner.sinks);
 	}
 }
@@ -198,7 +190,7 @@ mod tests {
 	#[test]
 	fn guard_drop_removes_sink() {
 		let registry = Arc::new(SinkRegistry::<u32>::new());
-		let (guard, _rx) = registry.register("test", 10_000);
+		let (guard, _rx) = registry.register(64);
 		assert_eq!(registry.len(), 1);
 		drop(guard);
 		assert_eq!(registry.len(), 0);
@@ -207,8 +199,8 @@ mod tests {
 	#[test]
 	fn broadcast_prunes_closed_receiver() {
 		let registry = Arc::new(SinkRegistry::<u32>::new());
-		let (_g1, mut rx1) = registry.register("a", 10_000);
-		let (_g2, rx2) = registry.register("b", 10_000);
+		let (_g1, mut rx1) = registry.register(64);
+		let (_g2, rx2) = registry.register(64);
 		drop(rx2);
 		registry.broadcast(512, || 7);
 		assert_eq!(registry.len(), 1);
@@ -216,29 +208,27 @@ mod tests {
 	}
 
 	#[test]
-	fn stats_sum_pending_and_capacity() {
+	fn stats_reports_sink_count() {
 		let registry = Arc::new(SinkRegistry::<u32>::new());
-		let (_g1, _rx1) = registry.register("a", 10_000);
-		let (_g2, _rx2) = registry.register("b", 10_000);
+		let (_g1, _rx1) = registry.register(64);
+		let (_g2, _rx2) = registry.register(64);
 		registry.broadcast(512, || 1);
 		registry.broadcast(512, || 2);
 		let s = registry.stats();
 		assert_eq!(s.sinks, 2);
 		assert!(s.capacity >= 2);
-		assert_eq!(s.pending_total, 4);
-		assert_eq!(s.pending_max, 2);
 	}
 
 	#[test]
 	fn clear_on_major_sync_invalidates_old_guards() {
 		let registry = Arc::new(SinkRegistry::<u32>::new());
-		let (g, _rx) = registry.register("t", 10_000);
+		let (g, _rx) = registry.register(64);
 		assert_eq!(registry.len(), 1);
 		registry.clear_on_major_sync();
 		assert_eq!(registry.len(), 0);
 		drop(g);
 		assert_eq!(registry.len(), 0);
-		let (_g2, mut rx2) = registry.register("t2", 10_000);
+		let (_g2, mut rx2) = registry.register(64);
 		assert_eq!(registry.len(), 1);
 		registry.broadcast(512, || 42);
 		assert_eq!(block_on(rx2.next()), Some(42));

@@ -104,7 +104,7 @@ pub struct EthConfiguration {
 	pub pubsub_max_pending_notifications: usize,
 
 	/// Maximum retained bytes across the reorg-aware log journal.
-	#[arg(long, default_value = "536870912")]
+	#[arg(long, default_value = "67108864")]
 	pub logs_journal_max_total_bytes: usize,
 }
 

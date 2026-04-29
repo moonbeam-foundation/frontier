@@ -19,7 +19,6 @@ parking_lot = { workspace = true }
 tokio = { workspace = true, features = ["macros", "sync"], optional = true }
 # Substrate
 sc-client-api = { workspace = true }
-sc-utils = { workspace = true }
 sp-api = { workspace = true }
 sp-blockchain = { workspace = true }
 sp-consensus = { workspace = true, features = ["default"] }

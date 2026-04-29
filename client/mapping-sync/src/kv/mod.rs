@@ -24,7 +24,13 @@ mod worker;
 pub use worker::MappingSyncWorker;
 
 use core::cmp::Ord;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+	collections::{HashMap, HashSet},
+	sync::{
+		atomic::{AtomicUsize, Ordering},
+		Arc, Once,
+	},
+};
 
 // Substrate
 use sc_client_api::backend::{Backend, StorageProvider};
@@ -40,7 +46,8 @@ use fp_consensus::{FindLogError, Hashes, Log, PostLog, PreLog};
 use fp_rpc::EthereumRuntimeRPCApi;
 
 use crate::{
-	emit_block_notification, BlockNotificationContext, EthereumBlockNotificationSinks, SyncStrategy,
+	emit_block_notification, BlockNotificationContext, EthereumBlockNotificationSinks,
+	MappingSyncMetrics, SyncStrategy,
 };
 use worker::BestBlockInfo;
 
@@ -48,7 +55,23 @@ pub const CANONICAL_NUMBER_REPAIR_BATCH_SIZE: u64 = 2048;
 
 /// Hard cap for [`MappingSyncWorker`](worker::MappingSyncWorker) `best_at_import` (drops lowest
 /// block numbers when over limit).
-const MAX_BEST_AT_IMPORT_ENTRIES: usize = 65_536;
+const DEFAULT_MAX_BEST_AT_IMPORT_ENTRIES: usize = 65_536;
+const MAX_BEST_AT_IMPORT_ENV: &str = "FRONTIER_MAPPING_SYNC_MAX_BEST_AT_IMPORT_ENTRIES";
+static MAX_BEST_AT_IMPORT_ENTRIES: AtomicUsize =
+	AtomicUsize::new(DEFAULT_MAX_BEST_AT_IMPORT_ENTRIES);
+static MAX_BEST_AT_IMPORT_INIT: Once = Once::new();
+
+fn max_best_at_import_entries() -> usize {
+	MAX_BEST_AT_IMPORT_INIT.call_once(|| {
+		let configured = std::env::var(MAX_BEST_AT_IMPORT_ENV)
+			.ok()
+			.and_then(|raw| raw.parse::<usize>().ok())
+			.filter(|v| *v > 0)
+			.unwrap_or(DEFAULT_MAX_BEST_AT_IMPORT_ENTRIES);
+		MAX_BEST_AT_IMPORT_ENTRIES.store(configured, Ordering::Relaxed);
+	});
+	MAX_BEST_AT_IMPORT_ENTRIES.load(Ordering::Relaxed)
+}
 
 /// Max blocks to backfill in one skip-path call to avoid unbounded stall on heavily pruned nodes.
 const BACKFILL_ON_SKIP_MAX_BLOCKS: u64 = 1024;
@@ -328,6 +351,7 @@ pub fn repair_canonical_number_mappings_batch<Block: BlockT, C: HeaderBackend<Bl
 	frontier_backend: &fc_db::kv::Backend<Block, C>,
 	sync_from: <Block::Header as HeaderT>::Number,
 	max_blocks: u64,
+	metrics: Option<&MappingSyncMetrics>,
 ) -> Result<(), String> {
 	if let Some(stats) = canonical_reconciler::reconcile_from_cursor_batch(
 		client,
@@ -335,6 +359,7 @@ pub fn repair_canonical_number_mappings_batch<Block: BlockT, C: HeaderBackend<Bl
 		frontier_backend,
 		sync_from,
 		max_blocks,
+		metrics,
 	)? {
 		log::debug!(
 			target: "reconcile",
@@ -359,6 +384,7 @@ pub fn sync_one_block<Block: BlockT, C, BE>(
 	sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
 	pubsub_notification_sinks: Arc<EthereumBlockNotificationSinks<Block>>,
 	best_at_import: &mut HashMap<Block::Hash, BestBlockInfo<Block>>,
+	metrics: Option<&MappingSyncMetrics>,
 ) -> Result<bool, String>
 where
 	C: ProvideRuntimeApi<Block>,
@@ -374,6 +400,7 @@ where
 			.leaves()
 			.map_err(|e| format!("{e:?}"))?;
 		if leaves.is_empty() {
+			update_tips_metrics::<Block>(&current_syncing_tips, metrics);
 			return Ok(false);
 		}
 		current_syncing_tips.append(&mut leaves);
@@ -400,6 +427,7 @@ where
 	let operating_header = match operating_header {
 		Some(operating_header) => operating_header,
 		None => {
+			update_tips_metrics::<Block>(&current_syncing_tips, metrics);
 			frontier_backend
 				.meta()
 				.write_current_syncing_tips(current_syncing_tips)?;
@@ -410,6 +438,7 @@ where
 	if operating_header.number() == &Zero::zero() {
 		sync_genesis_block(client, frontier_backend, &operating_header)?;
 
+		update_tips_metrics::<Block>(&current_syncing_tips, metrics);
 		frontier_backend
 			.meta()
 			.write_current_syncing_tips(current_syncing_tips)?;
@@ -417,6 +446,7 @@ where
 		if SyncStrategy::Parachain == strategy
 			&& operating_header.number() > &client.info().best_number
 		{
+			update_tips_metrics::<Block>(&current_syncing_tips, metrics);
 			return Ok(false);
 		}
 
@@ -465,6 +495,7 @@ where
 						}
 						current_syncing_tips = retained;
 						current_syncing_tips.push(skip_hash);
+						update_tips_metrics::<Block>(&current_syncing_tips, metrics);
 						frontier_backend
 							.meta()
 							.write_current_syncing_tips(current_syncing_tips)?;
@@ -492,6 +523,7 @@ where
 						// syncing headers). Return false to back off and retry later
 						// rather than falling through to sync a pruned block.
 						current_syncing_tips.push(operating_header.hash());
+						update_tips_metrics::<Block>(&current_syncing_tips, metrics);
 						frontier_backend
 							.meta()
 							.write_current_syncing_tips(current_syncing_tips)?;
@@ -505,6 +537,7 @@ where
 							"Pruned node: failed to resolve skip target #{skip_to_u64}: {e:?}; will retry.",
 						);
 						current_syncing_tips.push(operating_header.hash());
+						update_tips_metrics::<Block>(&current_syncing_tips, metrics);
 						frontier_backend
 							.meta()
 							.write_current_syncing_tips(current_syncing_tips)?;
@@ -522,6 +555,7 @@ where
 		)?;
 
 		current_syncing_tips.push(*operating_header.parent_hash());
+		update_tips_metrics::<Block>(&current_syncing_tips, metrics);
 		frontier_backend
 			.meta()
 			.write_current_syncing_tips(current_syncing_tips)?;
@@ -534,6 +568,7 @@ where
 		frontier_backend,
 		sync_from,
 		PERIODIC_RECONCILE_WINDOW,
+		metrics,
 	)?;
 
 	// Notify on import and remove closed channels using the unified notification mechanism.
@@ -555,6 +590,7 @@ where
 			reorg_info.as_deref(),
 			hash,
 			sync_from,
+			metrics,
 		)?;
 		log::debug!(
 			target: "reconcile",
@@ -575,6 +611,30 @@ where
 	Ok(true)
 }
 
+fn update_tips_metrics<Block: BlockT>(
+	current_syncing_tips: &[Block::Hash],
+	metrics: Option<&MappingSyncMetrics>,
+) {
+	if let Some(m) = metrics {
+		let len = current_syncing_tips.len();
+		let unique_len = current_syncing_tips.iter().copied().collect::<HashSet<_>>().len();
+		m.current_syncing_tips_len.store(len, Ordering::Relaxed);
+		m.current_syncing_tips_duplicates
+			.store(len.saturating_sub(unique_len), Ordering::Relaxed);
+		if len > 0 {
+			m.current_syncing_tips_nonzero_samples_total
+				.fetch_add(1, Ordering::Relaxed);
+			m.current_syncing_tips_len_last_nonzero
+				.store(len, Ordering::Relaxed);
+			let _ = m.current_syncing_tips_len_peak.fetch_update(
+				Ordering::Relaxed,
+				Ordering::Relaxed,
+				|peak| (len > peak).then_some(len),
+			);
+		}
+	}
+}
+
 fn prune_best_at_import_finalized<Block: BlockT>(
 	best_at_import: &mut HashMap<Block::Hash, BestBlockInfo<Block>>,
 	finalized_number: <Block::Header as HeaderT>::Number,
@@ -586,10 +646,11 @@ fn cap_best_at_import<Block: BlockT>(best_at_import: &mut HashMap<Block::Hash, B
 where
 	<Block::Header as HeaderT>::Number: Ord,
 {
-	if best_at_import.len() <= MAX_BEST_AT_IMPORT_ENTRIES {
+	let max_entries = max_best_at_import_entries();
+	if best_at_import.len() <= max_entries {
 		return;
 	}
-	let excess = best_at_import.len() - MAX_BEST_AT_IMPORT_ENTRIES;
+	let excess = best_at_import.len() - max_entries;
 	let mut by_number: Vec<(Block::Hash, <Block::Header as HeaderT>::Number)> = best_at_import
 		.iter()
 		.map(|(h, info)| (*h, info.block_number))
@@ -600,9 +661,19 @@ where
 	}
 	log::warn!(
 		target: "mapping-sync",
-		"best_at_import exceeded {MAX_BEST_AT_IMPORT_ENTRIES}: dropped {excess} lowest-number entries; remaining={}",
+		"best_at_import exceeded {max_entries}: dropped {excess} lowest-number entries; remaining={}",
 		best_at_import.len(),
 	);
+}
+
+fn best_at_import_reorg_items<Block: BlockT>(
+	best_at_import: &HashMap<Block::Hash, BestBlockInfo<Block>>,
+) -> usize {
+	best_at_import
+		.values()
+		.filter_map(|info| info.reorg_info.as_ref())
+		.map(|info| info.retracted.len().saturating_add(info.enacted.len()))
+		.sum()
 }
 
 pub fn sync_blocks<Block: BlockT, C, BE>(
@@ -617,6 +688,7 @@ pub fn sync_blocks<Block: BlockT, C, BE>(
 	sync_oracle: Arc<dyn SyncOracle + Send + Sync + 'static>,
 	pubsub_notification_sinks: Arc<EthereumBlockNotificationSinks<Block>>,
 	best_at_import: &mut HashMap<Block::Hash, BestBlockInfo<Block>>,
+	metrics: Option<&MappingSyncMetrics>,
 ) -> Result<bool, String>
 where
 	C: ProvideRuntimeApi<Block>,
@@ -627,7 +699,22 @@ where
 {
 	let finalized_number = client.info().finalized_number;
 	prune_best_at_import_finalized(best_at_import, finalized_number);
+	let len_before_cap = best_at_import.len();
 	cap_best_at_import(best_at_import);
+	if let Some(m) = metrics {
+		if best_at_import.len() < len_before_cap {
+			m.best_at_import_cap_evictions_total.fetch_add(
+				len_before_cap.saturating_sub(best_at_import.len()) as u64,
+				Ordering::Relaxed,
+			);
+		}
+		m.best_at_import_entries
+			.store(best_at_import.len(), Ordering::Relaxed);
+		m.best_at_import_reorg_items.store(
+			best_at_import_reorg_items(best_at_import),
+			Ordering::Relaxed,
+		);
+	}
 
 	let mut synced_any = false;
 
@@ -643,11 +730,27 @@ where
 			sync_oracle.clone(),
 			pubsub_notification_sinks.clone(),
 			best_at_import,
+			metrics,
 		) {
 			Ok(b) => synced_any = synced_any || b,
 			Err(e) => {
 				prune_best_at_import_finalized(best_at_import, client.info().finalized_number);
+				let len_before_cap = best_at_import.len();
 				cap_best_at_import(best_at_import);
+				if let Some(m) = metrics {
+					if best_at_import.len() < len_before_cap {
+						m.best_at_import_cap_evictions_total.fetch_add(
+							len_before_cap.saturating_sub(best_at_import.len()) as u64,
+							Ordering::Relaxed,
+						);
+					}
+					m.best_at_import_entries
+						.store(best_at_import.len(), Ordering::Relaxed);
+					m.best_at_import_reorg_items.store(
+						best_at_import_reorg_items(best_at_import),
+						Ordering::Relaxed,
+					);
+				}
 				return Err(e);
 			}
 		}
@@ -658,7 +761,22 @@ where
 	// cannot be reorged and their is_new_best status is irrelevant.
 	let finalized_number = client.info().finalized_number;
 	prune_best_at_import_finalized(best_at_import, finalized_number);
+	let len_before_cap = best_at_import.len();
 	cap_best_at_import(best_at_import);
+	if let Some(m) = metrics {
+		if best_at_import.len() < len_before_cap {
+			m.best_at_import_cap_evictions_total.fetch_add(
+				len_before_cap.saturating_sub(best_at_import.len()) as u64,
+				Ordering::Relaxed,
+			);
+		}
+		m.best_at_import_entries
+			.store(best_at_import.len(), Ordering::Relaxed);
+		m.best_at_import_reorg_items.store(
+			best_at_import_reorg_items(best_at_import),
+			Ordering::Relaxed,
+		);
+	}
 
 	Ok(synced_any)
 }
@@ -963,6 +1081,7 @@ mod tests {
 			None,
 			b1_hash,
 			1,
+			None,
 		)
 		.expect("repair pass");
 
@@ -1058,6 +1177,7 @@ mod tests {
 			&frontier_backend,
 			1,
 			2,
+			None,
 		)
 		.expect("run repair batch");
 
@@ -1189,6 +1309,7 @@ mod tests {
 			Some(&reorg_info),
 			canonical_hash_3,
 			3,
+			None,
 		)
 		.expect("reconcile reorg window")
 		.expect("stats");
@@ -1270,6 +1391,7 @@ mod tests {
 			&frontier_backend,
 			1,
 			1,
+			None,
 		)
 		.expect("first reconcile")
 		.expect("stats");
@@ -1290,6 +1412,7 @@ mod tests {
 			&frontier_backend,
 			1,
 			1,
+			None,
 		)
 		.expect("second reconcile")
 		.expect("stats");
@@ -1390,6 +1513,7 @@ mod tests {
 			&frontier_backend,
 			0,
 			1,
+			None,
 		)
 		.expect("first batch")
 		.expect("first stats");
@@ -1411,6 +1535,7 @@ mod tests {
 			&frontier_backend,
 			0,
 			1,
+			None,
 		)
 		.expect("second batch")
 		.expect("second stats");
@@ -1504,6 +1629,7 @@ mod tests {
 			sync_oracle,
 			pubsub_sinks,
 			&mut best_at_import,
+			None,
 		)
 		.expect("sync_one_block");
 		assert!(did_sync, "skip path should run and return true");
@@ -1598,6 +1724,7 @@ mod tests {
 			&frontier_backend,
 			1,
 			1,
+			None,
 		)
 		.expect("reconcile")
 		.expect("stats");
@@ -1681,6 +1808,7 @@ mod tests {
 			&frontier_backend,
 			1,
 			1,
+			None,
 		)
 		.expect("reconcile")
 		.expect("stats");
@@ -1785,6 +1913,7 @@ mod tests {
 			&frontier_backend,
 			1,
 			1,
+			None,
 		)
 		.expect("reconcile")
 		.expect("stats");
@@ -1912,6 +2041,7 @@ mod tests {
 			&frontier_backend,
 			1,
 			1,
+			None,
 		)
 		.expect("reconcile")
 		.expect("stats");

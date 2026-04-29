@@ -18,7 +18,7 @@
 
 //! Pub-Sub types.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use ethereum::{BlockV3 as EthereumBlock, TransactionV3 as EthereumTransaction};
 use ethereum_types::{H256, U256};
@@ -75,9 +75,9 @@ impl<'a> Deserialize<'a> for Params {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PubSubResult {
 	/// New block header.
-	Header(Box<RichHeader>),
+	Header(Arc<RichHeader>),
 	/// Log
-	Log(Box<Log>),
+	Log(Arc<Log>),
 	/// Transaction hash
 	TransactionHash(H256),
 	/// SyncStatus
@@ -86,7 +86,7 @@ pub enum PubSubResult {
 
 impl PubSubResult {
 	pub fn header(block: EthereumBlock) -> Self {
-		Self::Header(Box::new(Rich {
+		Self::Header(Arc::new(Rich {
 			inner: Header {
 				hash: Some(H256::from(keccak_256(&rlp::encode(&block.header)))),
 				parent_hash: block.header.parent_hash,
@@ -120,11 +120,11 @@ impl Serialize for PubSubResult {
 	where
 		S: Serializer,
 	{
-		match *self {
-			Self::Header(ref header) => header.serialize(serializer),
-			Self::Log(ref log) => log.serialize(serializer),
-			Self::TransactionHash(ref hash) => hash.serialize(serializer),
-			Self::SyncingStatus(ref sync) => sync.serialize(serializer),
+		match self {
+			Self::Header(header) => header.as_ref().serialize(serializer),
+			Self::Log(log) => log.as_ref().serialize(serializer),
+			Self::TransactionHash(hash) => hash.serialize(serializer),
+			Self::SyncingStatus(sync) => sync.serialize(serializer),
 		}
 	}
 }

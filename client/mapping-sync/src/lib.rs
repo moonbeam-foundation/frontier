@@ -30,7 +30,7 @@ use sp_blockchain::TreeRoute;
 use sp_consensus::SyncOracle;
 use sp_runtime::traits::Block as BlockT;
 use std::sync::{
-	atomic::{AtomicUsize, Ordering},
+	atomic::{AtomicU64, AtomicUsize, Ordering},
 	Arc,
 };
 
@@ -39,12 +39,48 @@ use std::sync::{
 pub struct MappingSyncMetrics {
 	/// Current `best_at_import` map length. SQL backend does not update this (stays zero).
 	pub best_at_import_entries: AtomicUsize,
+	/// Sum of `retracted + enacted` counts across `best_at_import` reorg payloads.
+	pub best_at_import_reorg_items: AtomicUsize,
+	/// Length of `current_syncing_tips` loaded in `sync_one_block`.
+	pub current_syncing_tips_len: AtomicUsize,
+	/// Duplicate entries in `current_syncing_tips` (`len - unique_len`).
+	pub current_syncing_tips_duplicates: AtomicUsize,
+	/// Highest observed `current_syncing_tips` length since process start.
+	pub current_syncing_tips_len_peak: AtomicUsize,
+	/// Number of times `current_syncing_tips` was observed non-empty.
+	pub current_syncing_tips_nonzero_samples_total: AtomicU64,
+	/// Last observed non-zero `current_syncing_tips` length.
+	pub current_syncing_tips_len_last_nonzero: AtomicUsize,
+	/// Total transactions scanned in canonical reconciler passes.
+	pub reconcile_transactions_scanned_total: AtomicU64,
+	/// Total transaction-metadata lookups performed in reconciler passes.
+	pub reconcile_tx_metadata_lookups_total: AtomicU64,
+	/// Total block numbers scanned by reconciler passes.
+	pub reconcile_scanned_total: AtomicU64,
+	/// Total reconcile updates applied.
+	pub reconcile_updated_total: AtomicU64,
+	/// Number of entries evicted by `best_at_import` hard-cap enforcement.
+	pub best_at_import_cap_evictions_total: AtomicU64,
+	/// Wall-clock duration (microseconds) of the latest worker sync step.
+	pub one_block_duration_micros: AtomicU64,
 }
 
 impl Default for MappingSyncMetrics {
 	fn default() -> Self {
 		Self {
 			best_at_import_entries: AtomicUsize::new(0),
+			best_at_import_reorg_items: AtomicUsize::new(0),
+			current_syncing_tips_len: AtomicUsize::new(0),
+			current_syncing_tips_duplicates: AtomicUsize::new(0),
+			current_syncing_tips_len_peak: AtomicUsize::new(0),
+			current_syncing_tips_nonzero_samples_total: AtomicU64::new(0),
+			current_syncing_tips_len_last_nonzero: AtomicUsize::new(0),
+			reconcile_transactions_scanned_total: AtomicU64::new(0),
+			reconcile_tx_metadata_lookups_total: AtomicU64::new(0),
+			reconcile_scanned_total: AtomicU64::new(0),
+			reconcile_updated_total: AtomicU64::new(0),
+			best_at_import_cap_evictions_total: AtomicU64::new(0),
+			one_block_duration_micros: AtomicU64::new(0),
 		}
 	}
 }
@@ -68,6 +104,11 @@ static MAX_PENDING_NOTIFICATIONS_PER_SUBSCRIBER: AtomicUsize =
 /// Configure the hard cap for pending notifications per subscriber channel.
 pub fn set_max_pending_notifications_per_subscriber(max_pending: usize) {
 	MAX_PENDING_NOTIFICATIONS_PER_SUBSCRIBER.store(max_pending.max(1), Ordering::Relaxed);
+}
+
+/// Current per-subscriber bounded channel capacity used by [`SinkRegistry::register`].
+pub fn max_pending_notifications_per_subscriber() -> usize {
+	MAX_PENDING_NOTIFICATIONS_PER_SUBSCRIBER.load(Ordering::Relaxed)
 }
 
 /// Information about a chain reorganization.

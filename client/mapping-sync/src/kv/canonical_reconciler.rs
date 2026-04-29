@@ -18,8 +18,9 @@
 
 use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT, UniqueSaturatedInto};
+use std::sync::atomic::Ordering;
 
-use crate::ReorgInfo;
+use crate::{MappingSyncMetrics, ReorgInfo};
 
 /// Extract the Ethereum block hash from a substrate block header's consensus digest.
 /// This is pruning-safe: digests are always available regardless of state pruning.
@@ -105,6 +106,7 @@ pub fn reconcile_reorg_window<Block: BlockT, C: HeaderBackend<Block>>(
 	reorg_info: Option<&ReorgInfo<Block>>,
 	new_best_hash: Block::Hash,
 	sync_from: <Block::Header as HeaderT>::Number,
+	metrics: Option<&MappingSyncMetrics>,
 ) -> Result<Option<ReconcileStats>, String> {
 	let Some(window) = build_reconcile_window(client, reorg_info, new_best_hash)? else {
 		return Ok(None);
@@ -124,6 +126,7 @@ pub fn reconcile_reorg_window<Block: BlockT, C: HeaderBackend<Block>>(
 		best_number,
 		ScanDirection::Ascending,
 		CursorUpdateStrategy::KeepLower,
+		metrics,
 	)?;
 	Ok(Some(stats))
 }
@@ -134,6 +137,7 @@ pub fn reconcile_from_cursor_batch<Block: BlockT, C: HeaderBackend<Block>>(
 	frontier_backend: &fc_db::kv::Backend<Block, C>,
 	sync_from: <Block::Header as HeaderT>::Number,
 	max_blocks: u64,
+	metrics: Option<&MappingSyncMetrics>,
 ) -> Result<Option<ReconcileStats>, String> {
 	if max_blocks == 0 {
 		return Ok(None);
@@ -167,6 +171,7 @@ pub fn reconcile_from_cursor_batch<Block: BlockT, C: HeaderBackend<Block>>(
 		finalized_number,
 		ScanDirection::Descending,
 		CursorUpdateStrategy::Replace,
+		metrics,
 	)?;
 	Ok(Some(stats))
 }
@@ -177,6 +182,7 @@ pub fn reconcile_recent_window<Block: BlockT, C: HeaderBackend<Block>>(
 	frontier_backend: &fc_db::kv::Backend<Block, C>,
 	sync_from: <Block::Header as HeaderT>::Number,
 	window_size: u64,
+	metrics: Option<&MappingSyncMetrics>,
 ) -> Result<Option<ReconcileStats>, String> {
 	if window_size == 0 {
 		return Ok(None);
@@ -206,6 +212,7 @@ pub fn reconcile_recent_window<Block: BlockT, C: HeaderBackend<Block>>(
 		best_number,
 		ScanDirection::Ascending,
 		CursorUpdateStrategy::KeepLower,
+		metrics,
 	)?;
 	Ok(Some(stats))
 }
@@ -220,6 +227,7 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 	upper_bound_number: u64,
 	direction: ScanDirection,
 	cursor_update: CursorUpdateStrategy,
+	metrics: Option<&MappingSyncMetrics>,
 ) -> Result<ReconcileStats, String> {
 	let no_range = match direction {
 		ScanDirection::Ascending => end < start,
@@ -242,6 +250,8 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 	let mut first_unresolved = None;
 	let mut highest_reconciled: Option<u64> = None;
 	let mut scanned = 0u64;
+	let mut txs_scanned = 0u64;
+	let mut tx_metadata_lookups = 0u64;
 
 	let mut step = |number: u64| -> Result<(), String> {
 		scanned = scanned.saturating_add(1);
@@ -255,6 +265,7 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 
 		match storage_override.current_block(canonical_hash) {
 			Some(ethereum_block) => {
+				txs_scanned = txs_scanned.saturating_add(ethereum_block.transactions.len() as u64);
 				let canonical_eth_hash = ethereum_block.header.hash();
 
 				let should_update = frontier_backend.mapping().block_hash_by_number(number)?
@@ -296,6 +307,7 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 					let needs_tx_repair = {
 						let mut needs = false;
 						for tx in &ethereum_block.transactions {
+							tx_metadata_lookups = tx_metadata_lookups.saturating_add(1);
 							let has_canonical = frontier_backend
 								.mapping()
 								.transaction_metadata(&tx.hash())?
@@ -443,6 +455,16 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 		lag_blocks,
 		window: ReconcileWindow { start, end },
 	};
+	if let Some(m) = metrics {
+		m.reconcile_scanned_total
+			.fetch_add(stats.scanned, Ordering::Relaxed);
+		m.reconcile_updated_total
+			.fetch_add(stats.updated, Ordering::Relaxed);
+		m.reconcile_transactions_scanned_total
+			.fetch_add(txs_scanned, Ordering::Relaxed);
+		m.reconcile_tx_metadata_lookups_total
+			.fetch_add(tx_metadata_lookups, Ordering::Relaxed);
+	}
 
 	log::debug!(
 		target: "reconcile",

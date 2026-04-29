@@ -23,7 +23,7 @@ use std::{
 		atomic::Ordering,
 		Arc,
 	},
-	time::Duration,
+	time::{Duration, Instant},
 };
 
 use futures::{
@@ -200,6 +200,7 @@ where
 			// of self.best_at_import at the same time)
 			let mut best_at_import = std::mem::take(&mut self.best_at_import);
 
+			let started_at = Instant::now();
 			let result = crate::kv::sync_blocks(
 				self.client.as_ref(),
 				self.substrate_backend.as_ref(),
@@ -212,13 +213,26 @@ where
 				self.sync_oracle.clone(),
 				self.pubsub_notification_sinks.clone(),
 				&mut best_at_import,
+				self.metrics.as_deref(),
 			);
 
 			// Restore the best_at_import set
 			self.best_at_import = best_at_import;
 			if let Some(m) = &self.metrics {
+				m.one_block_duration_micros.store(
+					started_at.elapsed().as_micros().try_into().unwrap_or(u64::MAX),
+					Ordering::Relaxed,
+				);
 				m.best_at_import_entries
 					.store(self.best_at_import.len(), Ordering::Relaxed);
+				let reorg_items = self
+					.best_at_import
+					.values()
+					.filter_map(|info| info.reorg_info.as_ref())
+					.map(|info| info.retracted.len().saturating_add(info.enacted.len()))
+					.sum::<usize>();
+				m.best_at_import_reorg_items
+					.store(reorg_items, Ordering::Relaxed);
 			}
 
 			match result {
@@ -230,6 +244,7 @@ where
 							self.frontier_backend.as_ref(),
 							self.sync_from,
 							super::PERIODIC_RECONCILE_WINDOW,
+							self.metrics.as_deref(),
 						) {
 							debug!(
 								target: "reconcile",
@@ -242,6 +257,7 @@ where
 							self.frontier_backend.as_ref(),
 							self.sync_from,
 							super::CURSOR_REPAIR_IDLE_BATCH,
+							self.metrics.as_deref(),
 						) {
 							debug!(
 								target: "reconcile",
@@ -403,7 +419,7 @@ mod tests {
 
 		let (guard1, mut block_notification_stream) = pubsub_notification_sinks
 			.clone()
-			.register("pubsub_notification_stream", 100_000);
+			.register(crate::max_pending_notifications_per_subscriber());
 
 		{
 			// Let's produce a block, which we expect to trigger a channel message
@@ -436,7 +452,7 @@ mod tests {
 
 		let (guard2, mut block_notification_stream) = pubsub_notification_sinks
 			.clone()
-			.register("pubsub_notification_stream", 100_000);
+			.register(crate::max_pending_notifications_per_subscriber());
 		assert_eq!(pubsub_notification_sinks.len(), 2);
 
 		{
@@ -536,7 +552,7 @@ mod tests {
 
 		let (_guard, mut block_notification_stream) = pubsub_notification_sinks
 			.clone()
-			.register("pubsub_notification_stream", 100_000);
+			.register(crate::max_pending_notifications_per_subscriber());
 
 		{
 			// Let's produce a block, which we expect to trigger a channel message
@@ -672,6 +688,7 @@ mod tests {
 			frontier_backend.as_ref(),
 			0,
 			16,
+			None,
 		)
 		.expect("repair batch");
 
