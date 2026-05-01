@@ -127,11 +127,23 @@ pub fn sync_block<Block: BlockT, C: HeaderBackend<Block>>(
 							Some(block) => {
 								let got_eth_block_hash = block.header.hash();
 								if got_eth_block_hash != expect_eth_block_hash {
-									Err(format!(
+									log::warn!(
+										target: "mapping-sync",
 										"Ethereum block hash mismatch: \
 										frontier consensus digest ({expect_eth_block_hash:?}), \
-										db state ({got_eth_block_hash:?})"
-									))
+										db state ({got_eth_block_hash:?}); \
+										writing minimal digest mapping (no tx hashes)."
+									);
+									let mapping_commitment = fc_db::kv::MappingCommitment::<Block> {
+										block_hash: substrate_block_hash,
+										ethereum_block_hash: expect_eth_block_hash,
+										ethereum_transaction_hashes: vec![],
+									};
+									backend.mapping().write_hashes(
+										mapping_commitment,
+										block_number,
+										number_mapping_write,
+									)
 								} else {
 									let mapping_commitment = gen_from_block(block);
 									backend.mapping().write_hashes(
@@ -670,7 +682,9 @@ mod tests {
 
 	use sp_runtime::generic::DigestItem;
 
-	use super::{canonical_reconciler, repair_canonical_number_mappings_batch, sync_one_block};
+	use super::{
+		canonical_reconciler, repair_canonical_number_mappings_batch, sync_block, sync_one_block,
+	};
 	use crate::{
 		EthereumBlockNotification, EthereumBlockNotificationSinks, ReorgInfo, SyncStrategy,
 	};
@@ -846,6 +860,202 @@ mod tests {
 	}
 
 	#[test]
+	fn sync_block_writes_digest_mapping_on_runtime_hash_mismatch() {
+		let tmp = tempdir().expect("create temp dir");
+		let (client, _) = TestClientBuilder::new()
+			.build_with_native_executor::<substrate_test_runtime_client::runtime::RuntimeApi, _>(
+			None,
+		);
+		let client = Arc::new(client);
+
+		let frontier_backend = fc_db::kv::Backend::<OpaqueBlock, _>::new(
+			client.clone(),
+			&fc_db::kv::DatabaseSettings {
+				#[cfg(feature = "rocksdb")]
+				source: sc_client_db::DatabaseSource::RocksDb {
+					path: tmp.path().to_path_buf(),
+					cache_size: 0,
+				},
+				#[cfg(not(feature = "rocksdb"))]
+				source: sc_client_db::DatabaseSource::ParityDb {
+					path: tmp.path().to_path_buf(),
+				},
+			},
+		)
+		.expect("frontier backend");
+
+		let digest_block = make_ethereum_block(1);
+		let digest_eth_hash = digest_block.header.hash();
+		let reconstructed_block = make_ethereum_block_with_txs(2, 1);
+		let reconstructed_eth_hash = reconstructed_block.header.hash();
+		let reconstructed_tx_hash = reconstructed_block.transactions[0].hash();
+
+		let chain = client.chain_info();
+		let mut builder = BlockBuilderBuilder::new(client.as_ref())
+			.on_parent_block(chain.best_hash)
+			.with_parent_block_number(chain.best_number)
+			.build()
+			.expect("build block");
+		builder
+			.push_deposit_log_digest_item(ethereum_digest_item_for(&digest_block))
+			.expect("push ethereum digest");
+		let block = builder.build().expect("build block").block;
+		let header = block.header.clone();
+		let substrate_hash = header.hash();
+		futures::executor::block_on(client.import_as_final(BlockOrigin::Own, block))
+			.expect("import block");
+
+		let storage_override = SelectiveStorageOverride {
+			blocks: HashMap::from([(substrate_hash, reconstructed_block)]),
+		};
+
+		sync_block(
+			client.as_ref(),
+			Arc::new(storage_override),
+			&frontier_backend,
+			&header,
+		)
+		.expect("sync block");
+
+		assert_eq!(
+			frontier_backend.mapping().block_hash_by_number(1),
+			Ok(Some(digest_eth_hash)),
+			"number mapping must use the digest hash"
+		);
+		assert!(
+			frontier_backend
+				.mapping()
+				.block_hash(&digest_eth_hash)
+				.expect("read digest block mapping")
+				.as_ref()
+				.is_some_and(|hashes| hashes.contains(&substrate_hash)),
+			"digest block mapping must contain the substrate hash"
+		);
+		assert_eq!(
+			frontier_backend
+				.mapping()
+				.block_hash(&reconstructed_eth_hash),
+			Ok(None),
+			"reconstructed hash must not be written when it disagrees with the digest"
+		);
+		assert!(
+			frontier_backend
+				.mapping()
+				.transaction_metadata(&reconstructed_tx_hash)
+				.expect("read transaction mapping")
+				.is_empty(),
+			"mismatched reconstructed block transactions must not be indexed"
+		);
+	}
+
+	#[test]
+	fn reconciler_repairs_missing_mapping_with_digest_on_runtime_hash_mismatch() {
+		let tmp = tempdir().expect("create temp dir");
+		let (client, _) = TestClientBuilder::new()
+			.build_with_native_executor::<substrate_test_runtime_client::runtime::RuntimeApi, _>(
+			None,
+		);
+		let client = Arc::new(client);
+
+		let frontier_backend = fc_db::kv::Backend::<OpaqueBlock, _>::new(
+			client.clone(),
+			&fc_db::kv::DatabaseSettings {
+				#[cfg(feature = "rocksdb")]
+				source: sc_client_db::DatabaseSource::RocksDb {
+					path: tmp.path().to_path_buf(),
+					cache_size: 0,
+				},
+				#[cfg(not(feature = "rocksdb"))]
+				source: sc_client_db::DatabaseSource::ParityDb {
+					path: tmp.path().to_path_buf(),
+				},
+			},
+		)
+		.expect("frontier backend");
+
+		let digest_block = make_ethereum_block(1);
+		let digest_eth_hash = digest_block.header.hash();
+		let reconstructed_block = make_ethereum_block_with_txs(2, 1);
+		let reconstructed_eth_hash = reconstructed_block.header.hash();
+		let reconstructed_tx_hash = reconstructed_block.transactions[0].hash();
+
+		let chain = client.chain_info();
+		let mut builder = BlockBuilderBuilder::new(client.as_ref())
+			.on_parent_block(chain.best_hash)
+			.with_parent_block_number(chain.best_number)
+			.build()
+			.expect("build block");
+		builder
+			.push_deposit_log_digest_item(ethereum_digest_item_for(&digest_block))
+			.expect("push ethereum digest");
+		let block = builder.build().expect("build block").block;
+		futures::executor::block_on(client.import_as_final(BlockOrigin::Own, block))
+			.expect("import block");
+
+		let substrate_hash = client
+			.hash(1)
+			.expect("query canonical hash")
+			.expect("canonical hash");
+
+		frontier_backend
+			.mapping()
+			.write_none(substrate_hash)
+			.expect("write synced marker without mappings");
+
+		let storage_override = SelectiveStorageOverride {
+			blocks: HashMap::from([(substrate_hash, reconstructed_block)]),
+		};
+
+		let stats = canonical_reconciler::reconcile_from_cursor_batch(
+			client.as_ref(),
+			&storage_override,
+			&frontier_backend,
+			1,
+			1,
+		)
+		.expect("reconcile")
+		.expect("stats");
+
+		assert_eq!(
+			stats.updated, 2,
+			"number and block mapping updates should be reported"
+		);
+		assert_eq!(stats.number_mapping_updates, 1);
+		assert_eq!(stats.block_hash_mapping_updates, 1);
+		assert_eq!(stats.transaction_mapping_updates, 0);
+		assert_eq!(stats.digest_mismatch_fallbacks, 1);
+		assert_eq!(
+			frontier_backend.mapping().block_hash_by_number(1),
+			Ok(Some(digest_eth_hash)),
+			"number mapping must use the digest hash"
+		);
+		assert!(
+			frontier_backend
+				.mapping()
+				.block_hash(&digest_eth_hash)
+				.expect("read digest block mapping")
+				.as_ref()
+				.is_some_and(|hashes| hashes.contains(&substrate_hash)),
+			"digest block mapping must contain the substrate hash"
+		);
+		assert_eq!(
+			frontier_backend
+				.mapping()
+				.block_hash(&reconstructed_eth_hash),
+			Ok(None),
+			"reconstructed hash must not be written when it disagrees with the digest"
+		);
+		assert!(
+			frontier_backend
+				.mapping()
+				.transaction_metadata(&reconstructed_tx_hash)
+				.expect("read transaction mapping")
+				.is_empty(),
+			"mismatched reconstructed block transactions must not be indexed"
+		);
+	}
+
+	#[test]
 	fn non_canonical_new_best_candidate_does_not_advance_pointer() {
 		let tmp = tempdir().expect("create temp dir");
 		let builder = TestClientBuilder::new();
@@ -931,6 +1141,10 @@ mod tests {
 			Some(canonical_reconciler::ReconcileStats {
 				scanned: 1,
 				updated: 0,
+				number_mapping_updates: 0,
+				block_hash_mapping_updates: 0,
+				transaction_mapping_updates: 0,
+				digest_mismatch_fallbacks: 0,
 				first_unresolved: Some(1),
 				highest_reconciled: None,
 				next_cursor: 1,
@@ -1164,7 +1378,11 @@ mod tests {
 			"mapping at sync_from must be reconciled",
 		);
 		assert_eq!(stats.scanned, 1);
-		assert_eq!(stats.updated, 1);
+		assert_eq!(stats.updated, 2);
+		assert_eq!(stats.number_mapping_updates, 1);
+		assert_eq!(stats.block_hash_mapping_updates, 1);
+		assert_eq!(stats.transaction_mapping_updates, 0);
+		assert_eq!(stats.digest_mismatch_fallbacks, 0);
 		assert_eq!(
 			stats.window,
 			canonical_reconciler::ReconcileWindow { start: 3, end: 3 },
@@ -1233,7 +1451,11 @@ mod tests {
 		)
 		.expect("first reconcile")
 		.expect("stats");
-		assert_eq!(first.updated, 1);
+		assert_eq!(first.updated, 2);
+		assert_eq!(first.number_mapping_updates, 1);
+		assert_eq!(first.block_hash_mapping_updates, 1);
+		assert_eq!(first.transaction_mapping_updates, 0);
+		assert_eq!(first.digest_mismatch_fallbacks, 0);
 		assert_eq!(
 			frontier_backend.mapping().block_hash_by_number(1),
 			Ok(Some(canonical_eth_hash))
@@ -1254,6 +1476,10 @@ mod tests {
 		.expect("second reconcile")
 		.expect("stats");
 		assert_eq!(second.updated, 0);
+		assert_eq!(second.number_mapping_updates, 0);
+		assert_eq!(second.block_hash_mapping_updates, 0);
+		assert_eq!(second.transaction_mapping_updates, 0);
+		assert_eq!(second.digest_mismatch_fallbacks, 0);
 		let pointer_after_second = frontier_backend
 			.mapping()
 			.latest_canonical_indexed_block_number()
@@ -1575,6 +1801,116 @@ mod tests {
 			"reconciler must repair BLOCK_MAPPING; got {block_mapping:?}"
 		);
 		assert_eq!(stats.updated, 1, "reconciler must report 1 update");
+		assert_eq!(stats.number_mapping_updates, 0);
+		assert_eq!(stats.block_hash_mapping_updates, 1);
+		assert_eq!(stats.transaction_mapping_updates, 0);
+		assert_eq!(stats.digest_mismatch_fallbacks, 0);
+	}
+
+	/// Reconciler Some branch: archive nodes can have BLOCK_NUMBER_MAPPING
+	/// already present (so by-number works) while BLOCK_MAPPING is missing
+	/// (so by-hash fails). The reconciler must repair BLOCK_MAPPING even when
+	/// the number mapping does not need an update.
+	#[test]
+	fn reconciler_repairs_missing_block_mapping_on_archive_blocks() {
+		let tmp = tempdir().expect("create temp dir");
+		let (client, _) = TestClientBuilder::new()
+			.build_with_native_executor::<substrate_test_runtime_client::runtime::RuntimeApi, _>(
+			None,
+		);
+		let client = Arc::new(client);
+
+		let frontier_backend = fc_db::kv::Backend::<OpaqueBlock, _>::new(
+			client.clone(),
+			&fc_db::kv::DatabaseSettings {
+				#[cfg(feature = "rocksdb")]
+				source: sc_client_db::DatabaseSource::RocksDb {
+					path: tmp.path().to_path_buf(),
+					cache_size: 0,
+				},
+				#[cfg(not(feature = "rocksdb"))]
+				source: sc_client_db::DatabaseSource::ParityDb {
+					path: tmp.path().to_path_buf(),
+				},
+			},
+		)
+		.expect("frontier backend");
+
+		let eth_block = make_ethereum_block(1);
+		let eth_hash = eth_block.header.hash();
+
+		let chain = client.chain_info();
+		let mut builder = BlockBuilderBuilder::new(client.as_ref())
+			.on_parent_block(chain.best_hash)
+			.with_parent_block_number(chain.best_number)
+			.build()
+			.expect("build block 1");
+		builder
+			.push_deposit_log_digest_item(ethereum_digest_item_for(&eth_block))
+			.expect("push ethereum digest");
+		let block = builder.build().expect("build block").block;
+		futures::executor::block_on(client.import_as_final(BlockOrigin::Own, block))
+			.expect("import block");
+
+		let canonical_hash = client
+			.hash(1)
+			.expect("query canonical hash")
+			.expect("canonical hash");
+
+		frontier_backend
+			.mapping()
+			.write_none(canonical_hash)
+			.expect("write synced marker");
+		frontier_backend
+			.mapping()
+			.set_block_hash_by_number(1, eth_hash)
+			.expect("set block hash by number");
+
+		assert_eq!(
+			frontier_backend.mapping().block_hash_by_number(1),
+			Ok(Some(eth_hash)),
+			"BLOCK_NUMBER_MAPPING must exist before reconciler runs"
+		);
+		assert_eq!(
+			frontier_backend.mapping().block_hash(&eth_hash),
+			Ok(None),
+			"BLOCK_MAPPING must be absent before reconciler runs"
+		);
+
+		let storage_override = SelectiveStorageOverride {
+			blocks: HashMap::from([(canonical_hash, eth_block)]),
+		};
+
+		let stats = canonical_reconciler::reconcile_from_cursor_batch(
+			client.as_ref(),
+			&storage_override,
+			&frontier_backend,
+			1,
+			1,
+		)
+		.expect("reconcile")
+		.expect("stats");
+
+		let block_mapping = frontier_backend
+			.mapping()
+			.block_hash(&eth_hash)
+			.expect("read BLOCK_MAPPING");
+		assert!(
+			block_mapping
+				.as_ref()
+				.is_some_and(|hashes| hashes.contains(&canonical_hash)),
+			"reconciler must repair BLOCK_MAPPING; got {block_mapping:?}"
+		);
+		assert_eq!(
+			frontier_backend.mapping().block_hash_by_number(1),
+			Ok(Some(eth_hash)),
+			"reconciler must leave correct BLOCK_NUMBER_MAPPING intact"
+		);
+		assert_eq!(stats.updated, 1, "only BLOCK_MAPPING should be repaired");
+		assert_eq!(stats.number_mapping_updates, 0);
+		assert_eq!(stats.block_hash_mapping_updates, 1);
+		assert_eq!(stats.transaction_mapping_updates, 0);
+		assert_eq!(stats.digest_mismatch_fallbacks, 0);
 	}
 
 	/// Reconciler None branch: when BLOCK_NUMBER_MAPPING holds a stale eth hash
@@ -1677,7 +2013,11 @@ mod tests {
 			"stale eth hash must not be mapped to canonical substrate hash; got {stale_mapping:?}"
 		);
 
-		assert!(stats.updated >= 1, "reconciler must report updates");
+		assert_eq!(stats.updated, 2, "reconciler must report both repairs");
+		assert_eq!(stats.number_mapping_updates, 1);
+		assert_eq!(stats.block_hash_mapping_updates, 1);
+		assert_eq!(stats.transaction_mapping_updates, 0);
+		assert_eq!(stats.digest_mismatch_fallbacks, 0);
 	}
 
 	/// When the reconciler encounters an unsynced block and state is available,
@@ -1776,7 +2116,11 @@ mod tests {
 			"block must be marked as synced after reconciliation"
 		);
 
-		assert_eq!(stats.updated, 1);
+		assert_eq!(stats.updated, 2);
+		assert_eq!(stats.number_mapping_updates, 1);
+		assert_eq!(stats.block_hash_mapping_updates, 1);
+		assert_eq!(stats.transaction_mapping_updates, 0);
+		assert_eq!(stats.digest_mismatch_fallbacks, 0);
 		assert!(stats.highest_reconciled.is_some());
 	}
 
@@ -1896,5 +2240,9 @@ mod tests {
 			stats.updated, 1,
 			"reconciler must report 1 update for tx repair"
 		);
+		assert_eq!(stats.number_mapping_updates, 0);
+		assert_eq!(stats.block_hash_mapping_updates, 0);
+		assert_eq!(stats.transaction_mapping_updates, 1);
+		assert_eq!(stats.digest_mismatch_fallbacks, 0);
 	}
 }

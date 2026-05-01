@@ -45,6 +45,10 @@ pub struct ReconcileWindow {
 pub struct ReconcileStats {
 	pub scanned: u64,
 	pub updated: u64,
+	pub number_mapping_updates: u64,
+	pub block_hash_mapping_updates: u64,
+	pub transaction_mapping_updates: u64,
+	pub digest_mismatch_fallbacks: u64,
 	pub first_unresolved: Option<u64>,
 	pub highest_reconciled: Option<u64>,
 	pub next_cursor: u64,
@@ -230,6 +234,10 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 		return Ok(ReconcileStats {
 			scanned: 0,
 			updated: 0,
+			number_mapping_updates: 0,
+			block_hash_mapping_updates: 0,
+			transaction_mapping_updates: 0,
+			digest_mismatch_fallbacks: 0,
 			first_unresolved: None,
 			highest_reconciled: None,
 			next_cursor: sync_from_number,
@@ -239,6 +247,10 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 	}
 
 	let mut updated = 0u64;
+	let mut number_mapping_updates = 0u64;
+	let mut block_hash_mapping_updates = 0u64;
+	let mut transaction_mapping_updates = 0u64;
+	let mut digest_mismatch_fallbacks = 0u64;
 	let mut first_unresolved = None;
 	let mut highest_reconciled: Option<u64> = None;
 	let mut scanned = 0u64;
@@ -255,7 +267,32 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 
 		match storage_override.current_block(canonical_hash) {
 			Some(ethereum_block) => {
-				let canonical_eth_hash = ethereum_block.header.hash();
+				let reconstructed_eth_hash = ethereum_block.header.hash();
+				let digest_eth_hash = client
+					.header(canonical_hash)
+					.map_err(|e| format!("{e:?}"))?
+					.and_then(|h| eth_hash_from_digest::<Block>(&h));
+				let (canonical_eth_hash, transaction_hashes) = match digest_eth_hash {
+					Some(digest_eth_hash) if digest_eth_hash != reconstructed_eth_hash => {
+						log::warn!(
+							target: "reconcile",
+							"Ethereum block hash mismatch while reconciling #{number}: \
+							frontier consensus digest ({digest_eth_hash:?}), \
+							db state ({reconstructed_eth_hash:?}); \
+							writing minimal digest mapping (no tx hashes)."
+						);
+						digest_mismatch_fallbacks = digest_mismatch_fallbacks.saturating_add(1);
+						(digest_eth_hash, vec![])
+					}
+					_ => (
+						reconstructed_eth_hash,
+						ethereum_block
+							.transactions
+							.iter()
+							.map(|tx| tx.hash())
+							.collect(),
+					),
+				};
 
 				let should_update = frontier_backend.mapping().block_hash_by_number(number)?
 					!= Some(canonical_eth_hash);
@@ -263,6 +300,7 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 					frontier_backend
 						.mapping()
 						.set_block_hash_by_number(number, canonical_eth_hash)?;
+					number_mapping_updates = number_mapping_updates.saturating_add(1);
 					updated = updated.saturating_add(1);
 				}
 
@@ -276,18 +314,16 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 					let commitment = fc_db::kv::MappingCommitment::<Block> {
 						block_hash: canonical_hash,
 						ethereum_block_hash: canonical_eth_hash,
-						ethereum_transaction_hashes: ethereum_block
-							.transactions
-							.iter()
-							.map(|tx| tx.hash())
-							.collect(),
+						ethereum_transaction_hashes: transaction_hashes,
 					};
 					frontier_backend.mapping().write_hashes(
 						commitment,
 						number,
 						fc_db::kv::NumberMappingWrite::Skip,
 					)?;
-				} else if !ethereum_block.transactions.is_empty() {
+					block_hash_mapping_updates = block_hash_mapping_updates.saturating_add(1);
+					updated = updated.saturating_add(1);
+				} else if !transaction_hashes.is_empty() {
 					// BLOCK_MAPPING exists but TRANSACTION_MAPPING may be incomplete
 					// (block was initially synced with pruned state via write_hashes
 					// with vec![]). If state is now readable, repair tx mappings.
@@ -295,10 +331,10 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 					// leave some mappings present while others are missing.
 					let needs_tx_repair = {
 						let mut needs = false;
-						for tx in &ethereum_block.transactions {
+						for tx_hash in &transaction_hashes {
 							let has_canonical = frontier_backend
 								.mapping()
-								.transaction_metadata(&tx.hash())?
+								.transaction_metadata(tx_hash)?
 								.iter()
 								.any(|m| m.substrate_block_hash == canonical_hash);
 							if !has_canonical {
@@ -312,17 +348,14 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 						let commitment = fc_db::kv::MappingCommitment::<Block> {
 							block_hash: canonical_hash,
 							ethereum_block_hash: canonical_eth_hash,
-							ethereum_transaction_hashes: ethereum_block
-								.transactions
-								.iter()
-								.map(|tx| tx.hash())
-								.collect(),
+							ethereum_transaction_hashes: transaction_hashes,
 						};
 						frontier_backend.mapping().write_hashes(
 							commitment,
 							number,
 							fc_db::kv::NumberMappingWrite::Skip,
 						)?;
+						transaction_mapping_updates = transaction_mapping_updates.saturating_add(1);
 						updated = updated.saturating_add(1);
 					}
 				}
@@ -351,6 +384,7 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 					frontier_backend
 						.mapping()
 						.set_block_hash_by_number(number, verified_eth_hash)?;
+					number_mapping_updates = number_mapping_updates.saturating_add(1);
 					updated = updated.saturating_add(1);
 				}
 
@@ -371,6 +405,7 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 						number,
 						fc_db::kv::NumberMappingWrite::Skip,
 					)?;
+					block_hash_mapping_updates = block_hash_mapping_updates.saturating_add(1);
 					updated = updated.saturating_add(1);
 				}
 
@@ -437,6 +472,10 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 	let stats = ReconcileStats {
 		scanned,
 		updated,
+		number_mapping_updates,
+		block_hash_mapping_updates,
+		transaction_mapping_updates,
+		digest_mismatch_fallbacks,
 		first_unresolved,
 		highest_reconciled,
 		next_cursor,
@@ -446,11 +485,15 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 
 	log::debug!(
 		target: "reconcile",
-		"reconcile range #{}..#{}, scanned {}, updated {}, first_unresolved {:?}, highest_reconciled {:?}, next_cursor #{}, frontier_reconcile_lag_blocks {}",
+		"reconcile range #{}..#{}, scanned {}, updated {}, number_mapping_updates {}, block_hash_mapping_updates {}, transaction_mapping_updates {}, digest_mismatch_fallbacks {}, first_unresolved {:?}, highest_reconciled {:?}, next_cursor #{}, frontier_reconcile_lag_blocks {}",
 		stats.window.start,
 		stats.window.end,
 		stats.scanned,
 		stats.updated,
+		stats.number_mapping_updates,
+		stats.block_hash_mapping_updates,
+		stats.transaction_mapping_updates,
+		stats.digest_mismatch_fallbacks,
 		stats.first_unresolved,
 		stats.highest_reconciled,
 		stats.next_cursor,
