@@ -1,0 +1,21 @@
+{
+  "name": "frontier-oom-harness",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run:master": "tsx src/main.ts --label=master",
+    "run:patched": "tsx src/main.ts --label=patched",
+    "report": "tsx src/report.ts"
+  },
+  "dependencies": {
+    "undici": "^6.19.0",
+    "viem": "^2.21.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}
