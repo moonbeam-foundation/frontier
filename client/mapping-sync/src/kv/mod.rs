@@ -132,12 +132,16 @@ pub fn sync_block<Block: BlockT, C: HeaderBackend<Block>>(
 										"Ethereum block hash mismatch: \
 										frontier consensus digest ({expect_eth_block_hash:?}), \
 										db state ({got_eth_block_hash:?}); \
-										writing minimal digest mapping (no tx hashes)."
+										writing digest block mapping with db state tx hashes."
 									);
 									let mapping_commitment = fc_db::kv::MappingCommitment::<Block> {
 										block_hash: substrate_block_hash,
 										ethereum_block_hash: expect_eth_block_hash,
-										ethereum_transaction_hashes: vec![],
+										ethereum_transaction_hashes: block
+											.transactions
+											.iter()
+											.map(|tx| tx.hash())
+											.collect(),
 									};
 									backend.mapping().write_hashes(
 										mapping_commitment,
@@ -938,14 +942,16 @@ mod tests {
 			Ok(None),
 			"reconstructed hash must not be written when it disagrees with the digest"
 		);
+		let tx_metadata = frontier_backend
+			.mapping()
+			.transaction_metadata(&reconstructed_tx_hash)
+			.expect("read transaction mapping");
 		assert!(
-			frontier_backend
-				.mapping()
-				.transaction_metadata(&reconstructed_tx_hash)
-				.expect("read transaction mapping")
-				.is_empty(),
-			"mismatched reconstructed block transactions must not be indexed"
-		);
+				tx_metadata.iter().any(|metadata| metadata.substrate_block_hash == substrate_hash
+					&& metadata.ethereum_block_hash == digest_eth_hash
+					&& metadata.ethereum_index == 0),
+				"mismatched reconstructed block transactions must be indexed under the digest hash; got {tx_metadata:?}"
+			);
 	}
 
 	#[test]
@@ -1045,14 +1051,16 @@ mod tests {
 			Ok(None),
 			"reconstructed hash must not be written when it disagrees with the digest"
 		);
+		let tx_metadata = frontier_backend
+			.mapping()
+			.transaction_metadata(&reconstructed_tx_hash)
+			.expect("read transaction mapping");
 		assert!(
-			frontier_backend
-				.mapping()
-				.transaction_metadata(&reconstructed_tx_hash)
-				.expect("read transaction mapping")
-				.is_empty(),
-			"mismatched reconstructed block transactions must not be indexed"
-		);
+				tx_metadata.iter().any(|metadata| metadata.substrate_block_hash == substrate_hash
+					&& metadata.ethereum_block_hash == digest_eth_hash
+					&& metadata.ethereum_index == 0),
+				"mismatched reconstructed block transactions must be indexed under the digest hash; got {tx_metadata:?}"
+			);
 	}
 
 	#[test]
