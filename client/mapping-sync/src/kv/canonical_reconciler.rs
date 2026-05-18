@@ -279,10 +279,17 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 							"Ethereum block hash mismatch while reconciling #{number}: \
 							frontier consensus digest ({digest_eth_hash:?}), \
 							db state ({reconstructed_eth_hash:?}); \
-							writing minimal digest mapping (no tx hashes)."
+							writing digest block mapping with db state tx hashes."
 						);
 						digest_mismatch_fallbacks = digest_mismatch_fallbacks.saturating_add(1);
-						(digest_eth_hash, vec![])
+						(
+							digest_eth_hash,
+							ethereum_block
+								.transactions
+								.iter()
+								.map(|tx| tx.hash())
+								.collect::<Vec<_>>(),
+						)
 					}
 					_ => (
 						reconstructed_eth_hash,
@@ -290,7 +297,7 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 							.transactions
 							.iter()
 							.map(|tx| tx.hash())
-							.collect(),
+							.collect::<Vec<_>>(),
 					),
 				};
 
@@ -314,7 +321,7 @@ fn reconcile_range_internal<Block: BlockT, C: HeaderBackend<Block>>(
 					let commitment = fc_db::kv::MappingCommitment::<Block> {
 						block_hash: canonical_hash,
 						ethereum_block_hash: canonical_eth_hash,
-						ethereum_transaction_hashes: transaction_hashes,
+						ethereum_transaction_hashes: transaction_hashes.clone(),
 					};
 					frontier_backend.mapping().write_hashes(
 						commitment,
